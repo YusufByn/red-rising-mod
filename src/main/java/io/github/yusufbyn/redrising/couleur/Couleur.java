@@ -1,7 +1,10 @@
 package io.github.yusufbyn.redrising.couleur;
 
 import com.mojang.serialization.Codec;
+import io.netty.buffer.ByteBuf;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.codec.ByteBufCodecs;
+import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.util.StringRepresentable;
 
 /**
@@ -29,6 +32,12 @@ public enum Couleur implements StringRepresentable {
 
     /** Codec (sérialisation) basé sur l'identifiant texte : "or", "rouge"... */
     public static final Codec<Couleur> CODEC = StringRepresentable.fromEnum(Couleur::values);
+
+    /**
+     * Encodage réseau compact (le numéro de la Couleur). Contrairement à la sauvegarde, la position dans l'enum suffit :
+     * le serveur et le client ont toujours la même version du mod.
+     */
+    public static final StreamCodec<ByteBuf, Couleur> STREAM_CODEC = ByteBufCodecs.idMapper(i -> values()[i], Couleur::ordinal);
 
     private final String id;
 

@@ -3,6 +3,7 @@ package io.github.yusufbyn.redrising.factions;
 import io.github.yusufbyn.redrising.RedRising;
 import io.github.yusufbyn.redrising.couleur.CouleurJoueur;
 import net.fabricmc.fabric.api.attachment.v1.AttachmentRegistry;
+import net.fabricmc.fabric.api.attachment.v1.AttachmentSyncPredicate;
 import net.fabricmc.fabric.api.attachment.v1.AttachmentType;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.player.Player;
@@ -12,6 +13,10 @@ import net.minecraft.world.entity.player.Player;
  *
  * <p>Les valeurs sont bornées à l'écriture et à la lecture : si la Couleur change (Sculpture, commande de debug),
  * une valeur devenue hors bornes est lue bornée sans attendre la prochaine écriture.</p>
+ *
+ * <p>Synchronisées avec le joueur concerné seulement (G2.3) : personne d'autre ne voit tes jauges.
+ * Le client lit avec les mêmes méthodes que le serveur ({@link #get}), donc avec le même bornage.
+ * Tant que rien n'a été écrit, serveur et client lisent tous deux {@link Jauges#DEPART}.</p>
  */
 public final class JaugesJoueur {
     public static final AttachmentType<Jauges> JAUGES = AttachmentRegistry.create(
@@ -19,7 +24,7 @@ public final class JaugesJoueur {
             builder -> builder
                     .persistent(Jauges.CODEC)
                     .copyOnDeath()
-                    .initializer(() -> Jauges.DEPART)
+                    .syncWith(Jauges.STREAM_CODEC, AttachmentSyncPredicate.targetOnly())
     );
 
     private JaugesJoueur() {
@@ -27,7 +32,7 @@ public final class JaugesJoueur {
 
     /** Les 3 jauges du joueur, bornées selon sa Couleur. */
     public static Jauges get(Player player) {
-        return player.getAttachedOrCreate(JAUGES).borner(CouleurJoueur.get(player));
+        return player.getAttachedOrElse(JAUGES, Jauges.DEPART).borner(CouleurJoueur.get(player));
     }
 
     public static int get(Player player, Jauge jauge) {

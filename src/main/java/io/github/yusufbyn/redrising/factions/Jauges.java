@@ -3,6 +3,9 @@ package io.github.yusufbyn.redrising.factions;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import io.github.yusufbyn.redrising.couleur.Couleur;
+import io.netty.buffer.ByteBuf;
+import net.minecraft.network.codec.ByteBufCodecs;
+import net.minecraft.network.codec.StreamCodec;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -10,7 +13,7 @@ import org.jspecify.annotations.Nullable;
  * (c'est ce que recommande la Data Attachment API).
  */
 public record Jauges(int loyaute, int soutien, int suspicion) {
-    // 🟡 Proposé (G2.2), à valider : on naît neutre envers la Société, inconnu du Rising, pas surveillé
+    // Décidé en G2.2 (GDD section 6) : on naît neutre envers la Société, inconnu du Rising, pas surveillé
     public static final Jauges DEPART = new Jauges(50, 0, 0);
 
     /** Sauvegarde sous la forme {loyaute: 50, soutien: 0, suspicion: 0}. */
@@ -19,6 +22,14 @@ public record Jauges(int loyaute, int soutien, int suspicion) {
             Codec.INT.fieldOf("soutien").forGetter(Jauges::soutien),
             Codec.INT.fieldOf("suspicion").forGetter(Jauges::suspicion)
     ).apply(instance, Jauges::new));
+
+    /** Encodage réseau : les 3 valeurs à la suite. */
+    public static final StreamCodec<ByteBuf, Jauges> STREAM_CODEC = StreamCodec.composite(
+            ByteBufCodecs.VAR_INT, Jauges::loyaute,
+            ByteBufCodecs.VAR_INT, Jauges::soutien,
+            ByteBufCodecs.VAR_INT, Jauges::suspicion,
+            Jauges::new
+    );
 
     public int valeur(Jauge jauge) {
         return switch (jauge) {

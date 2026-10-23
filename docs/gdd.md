@@ -207,7 +207,7 @@ Une partie des mécaniques de l'ancienne Couleur, pas toutes : un ou deux savoir
 
 Deux jauges séparées (pas une barre Société ↔ Rising) pour permettre **l'agent double**, cœur de Red Rising. La Suspicion fait le lien : plus tu joues double, plus elle monte.
 
-### Valeurs 🟡 (proposées en G2.2, à valider)
+### Valeurs ✅ (proposées en G2.2, validées le 23/10)
 - Échelle : entiers de **0 à 100** pour les trois jauges.
 - Départ : **Loyauté 50, Soutien 0, Suspicion 0** (neutre envers la Société, inconnu du Rising, pas surveillé).
 - Plafonds et planchers par Couleur : **Rouge, Loyauté plafonnée à 40**. Seule règle pour l'instant ; les autres (ex. Suspicion de base relevée après la Sculpture) s'ajouteront au même endroit (`Bornes.pour`).

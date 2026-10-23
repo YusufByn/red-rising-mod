@@ -16,7 +16,7 @@ public record Bornes(int min, int max) {
     /** Bornes de toute jauge sans règle particulière. */
     public static final Bornes PAR_DEFAUT = new Bornes(MIN, MAX);
 
-    // 🟡 Proposé (G2.2), à valider : la Loyauté d'un Rouge ne dépasse pas 40
+    // Décidé en G2.2 (GDD section 6) : la Loyauté d'un Rouge ne dépasse pas 40
     public static final int PLAFOND_LOYAUTE_ROUGE = 40;
 
     public Bornes {

@@ -2,6 +2,7 @@ package io.github.yusufbyn.redrising.couleur;
 
 import io.github.yusufbyn.redrising.RedRising;
 import net.fabricmc.fabric.api.attachment.v1.AttachmentRegistry;
+import net.fabricmc.fabric.api.attachment.v1.AttachmentSyncPredicate;
 import net.fabricmc.fabric.api.attachment.v1.AttachmentType;
 import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents;
 import net.fabricmc.fabric.api.event.Event;
@@ -15,6 +16,9 @@ import org.jspecify.annotations.Nullable;
  * <p>Un « attachment » est une donnée que Fabric colle sur une entité : il la sauvegarde avec le joueur
  * ({@code persistent}) et la recopie sur le nouveau corps après la mort ({@code copyOnDeath}).
  * Pas de valeur par défaut : tant que la naissance (G4) n'a pas eu lieu, le joueur n'a pas de Couleur.</p>
+ *
+ * <p>Synchronisée avec tous les clients (G2.3) : la Couleur d'un joueur se verra sur son modèle (G3.5).
+ * Fabric envoie la valeur à la connexion, quand un autre joueur arrive en vue, et à chaque {@link #set}.</p>
  */
 public final class CouleurJoueur {
     public static final AttachmentType<Couleur> COULEUR = AttachmentRegistry.create(
@@ -22,6 +26,7 @@ public final class CouleurJoueur {
             builder -> builder
                     .persistent(Couleur.CODEC)
                     .copyOnDeath()
+                    .syncWith(Couleur.STREAM_CODEC, AttachmentSyncPredicate.all())
     );
 
     private CouleurJoueur() {
