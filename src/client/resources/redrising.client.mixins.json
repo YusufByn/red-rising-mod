@@ -1,0 +1,12 @@
+{
+  "required": true,
+  "package": "io.github.yusufbyn.redrising.client.mixin",
+  "compatibilityLevel": "JAVA_25",
+  "client": [
+    "AvatarRendererMixin",
+    "SkinCustomizationScreenMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

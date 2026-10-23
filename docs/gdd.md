@@ -166,9 +166,15 @@ Format : force, exclusivités, faiblesse. La faiblesse est aussi importante que 
 - Cuivre et Marron sont les plus minces. Ils tiennent grâce aux factions, à vérifier en jeu.
 - Rose : aspect esclave sexuel du lore **retiré**. Couleur jouable orientée espionnage (archétype Théodora).
 
-### Apparence 🟡 (proposée en G3.5, à valider)
-- Repère visuel : **sigil 2×2 sur le dos de chaque main et bracelet d'un pixel au poignet**, teintés de la Couleur (lore : les sigils des Couleurs sur les mains). Indépendant du skin, visible par tous. Placeholder jusqu'aux textures finales (G17.3).
-- Teintes : Or `#D4AF37`, Argent `#C0C0C8`, Cuivre `#B87333`, Blanc `#F2F2F2`, Bleu `#2E6FD8`, Jaune `#E8D13A`, Vert `#2E9B44`, Violet `#7B3FA0`, Orange `#E8792B`, Gris `#808080`, Obsidian `#1C1C24`, Marron `#6B4423`, Rose `#E88AAE`, Rouge `#B22222`. Le nom de la Couleur dans le HUD prend la même teinte.
+### Apparence (G3.5)
+- ✅ **Trois repères**, tous teintés de la Couleur, visibles par tous les joueurs :
+  - **mains** : sigil 2×2 sur le dos de chaque main et bracelet d'un pixel au poignet (lore : les sigils sur les mains), aussi en vue première personne ;
+  - **yeux** : les deux iris, à l'emplacement standard des skins par défaut (ligne 12 du visage, x = 10 et 13) ;
+  - **cheveux** : couche posée par-dessus les cheveux du skin (couche extérieure de la tête : dessus, frange, tempes, nuque). Réglage client « Cheveux de Couleur » (Options > Personnalisation du skin) pour la désactiver.
+- ✅ Lisible avec un casque : les mèches teintées dépassent du casque, les yeux et les mains restent visibles.
+- 🟡 Teintes (réglées en G3.5 pour séparer Or/Jaune, Blanc/Argent/Gris et rendre l'Obsidian visible sur peau foncée, à valider) : Or `#E8A317`, Argent `#A9C1E0`, Cuivre `#C07038`, Blanc `#FFFFFF`, Bleu `#2F6BFF`, Jaune `#FFF35A`, Vert `#2FA84F`, Violet `#A050E8`, Orange `#F05A1A`, Gris `#8E8E8E`, Obsidian `#4A2D7A` (violet sombre plutôt que noir, sinon invisible sur peau foncée), Marron `#8A5530`, Rose `#FF7EB6`, Rouge `#C8201E`. Le nom de la Couleur dans le HUD prend la même teinte.
+- Planche de contrôle : `./gradlew runClientGameTest` puis `python3 outils/planche_couleurs.py` (14 Couleurs sur skin clair et foncé, avec et sans casque, sans cheveux).
+- Placeholder jusqu'aux textures finales (G17.3).
 
 ### PNJ Roses ✅
 - Fonctionnent comme une mécanique d'apprivoisement : un Or les possède, ils le suivent et le servent.

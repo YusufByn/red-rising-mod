@@ -15,20 +15,20 @@ import net.minecraft.util.StringRepresentable;
  * En revanche, un identifiant ne doit plus jamais changer une fois publié.</p>
  */
 public enum Couleur implements StringRepresentable {
-    OR("or", 0xD4AF37),
-    ARGENT("argent", 0xC0C0C8),
-    CUIVRE("cuivre", 0xB87333),
-    BLANC("blanc", 0xF2F2F2),
-    BLEU("bleu", 0x2E6FD8),
-    JAUNE("jaune", 0xE8D13A),
-    VERT("vert", 0x2E9B44),
-    VIOLET("violet", 0x7B3FA0),
-    ORANGE("orange", 0xE8792B),
-    GRIS("gris", 0x808080),
-    OBSIDIAN("obsidian", 0x1C1C24),
-    MARRON("marron", 0x6B4423),
-    ROSE("rose", 0xE88AAE),
-    ROUGE("rouge", 0xB22222);
+    OR("or", 0xE8A317),
+    ARGENT("argent", 0xA9C1E0),
+    CUIVRE("cuivre", 0xC07038),
+    BLANC("blanc", 0xFFFFFF),
+    BLEU("bleu", 0x2F6BFF),
+    JAUNE("jaune", 0xFFF35A),
+    VERT("vert", 0x2FA84F),
+    VIOLET("violet", 0xA050E8),
+    ORANGE("orange", 0xF05A1A),
+    GRIS("gris", 0x8E8E8E),
+    OBSIDIAN("obsidian", 0x4A2D7A),
+    MARRON("marron", 0x8A5530),
+    ROSE("rose", 0xFF7EB6),
+    ROUGE("rouge", 0xC8201E);
 
     /** Codec (sérialisation) basé sur l'identifiant texte : "or", "rouge"... */
     public static final Codec<Couleur> CODEC = StringRepresentable.fromEnum(Couleur::values);

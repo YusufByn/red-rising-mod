@@ -53,6 +53,8 @@ Mod Fabric fan-made, solo, gratuit et non commercial, dans l'univers Red Rising 
 - Mixins : dans le package `mixin`, déclarés dans `src/main/resources/redrising.mixins.json`. Seulement quand Fabric API n'a pas d'événement ; vérifier le bytecode de la méthode visée (`javap -c`) avant d'écrire l'injection.
 - Refus d'un clic (`UseBlockCallback`, `UseItemCallback`) : quand le client refuse, il n'envoie rien au serveur. Tout retour au joueur (message) doit donc être fait aussi côté client : `player.sendOverlayMessage` marche des deux côtés.
 - Rendu du joueur : la peau est dessinée en **translucide** (après tout le « cutout »). Une couche ajoutée par-dessus doit donc être translucide elle aussi, sinon la couche extérieure du skin (manches, veste) la recouvre.
+- Commandes : une coordonnée entière (`summon ... 7 -60 9`) est centrée sur le bloc (7,5). Écrire `7.0` pour une position exacte.
+- Mixins client : dans `src/client/.../client/mixin`, déclarés dans `src/client/resources/redrising.client.mixins.json` (environnement client).
 - Tests client : juste après l'entrée dans le monde, `/kill` n'a pas d'effet. Attendre une centaine de ticks avant.
 
 ## CI

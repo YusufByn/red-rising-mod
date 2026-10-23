@@ -14,7 +14,10 @@
     "main": ["io.github.yusufbyn.redrising.RedRising"],
     "client": ["io.github.yusufbyn.redrising.client.RedRisingClient"]
   },
-  "mixins": ["redrising.mixins.json"],
+  "mixins": [
+    "redrising.mixins.json",
+    {"config": "redrising.client.mixins.json", "environment": "client"}
+  ],
   "depends": {
     "fabricloader": ">=0.19.5",
     "minecraft": "~26.2",

@@ -49,5 +49,6 @@
   "hud.redrising.capacite.prete": "Ability: ready",
   "hud.redrising.capacite.recharge": "Ability: %s s",
   "key.category.redrising.general": "Red Rising",
-  "key.redrising.capacite": "Color ability"
+  "key.redrising.capacite": "Color ability",
+  "options.redrising.cheveux": "Color hair"
 }

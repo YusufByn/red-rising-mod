@@ -30,6 +30,7 @@ Code commun dans `src/main`, code client uniquement (HUD, écrans, rendu) dans `
 ## Contrôles
 
 - `R` (modifiable, catégorie « Red Rising ») : capacité active de sa Couleur.
+- Options > Personnalisation du skin > « Cheveux de Couleur » : affiche ou non les cheveux teintés (réglage client, `config/redrising-client.properties`).
 
 ## Commandes de debug
 
@@ -42,7 +43,9 @@ Réservées aux ops (ou à la triche activée en solo). `[joueur]` est optionnel
 
 ## Outils
 
-- `outils/marque_couleur.py` : régénère les textures de la marque de Couleur (`python3 outils/marque_couleur.py`, demande Pillow).
+- `outils/marque_couleur.py` : régénère les textures de l'apparence par Couleur (mains, yeux, cheveux).
+- `outils/planche_couleurs.py` : après `./gradlew runClientGameTest`, assemble les captures des 14 Couleurs en une planche (`build/captures-gametest/planche-couleurs.png`).
+- Les deux demandent Pillow (`pip3 install pillow`).
 
 ## Tests
 
