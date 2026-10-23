@@ -44,6 +44,7 @@ Document de référence du projet. Il regroupe tout ce qui a été décidé, les
 Option à la création du monde :
 - **Test** (par défaut) : test de personnalité caché, résultat en surprise.
 - **Choix libre** : le joueur choisit sa Couleur dans un menu. Sert aussi pendant le développement pour tester chaque Couleur.
+- ✅ Mise en place (G4.1) : bouton « Naissance » dans l'onglet Jeu de l'écran de création du monde. L'option est une règle de jeu (`redrising:mode_naissance`, valeurs `test` et `choix_libre`) enregistrée avec le monde ; elle reste modifiable par `/gamerule` ou `/rr etat naissance`, et ne vaut que pour les naissances suivantes.
 
 ### Règles du test ✅
 - Scène d'ouverture façon Dive to the Heart (Kingdom Hearts).

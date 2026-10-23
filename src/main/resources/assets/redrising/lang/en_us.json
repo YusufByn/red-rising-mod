@@ -29,7 +29,7 @@
   "commande.redrising.jalon.set": "Milestone %s: %s",
   "commande.redrising.jalon.clear": "Milestone %s cleared",
   "commande.redrising.jalon.absent": "No outcome recorded for milestone %s",
-  "commande.redrising.etat": "World state (schema v%s): era %s; milestones: %s; zones: %s",
+  "commande.redrising.etat": "World state (schema v%s): birth %s; era %s; milestones: %s; zones: %s",
   "commande.redrising.etat.epoque": "Era changed to %s",
   "commande.redrising.etat.zone.set": "Zone %s controlled by: %s",
   "commande.redrising.etat.zone.clear": "Zone %s released",
@@ -50,5 +50,10 @@
   "hud.redrising.capacite.recharge": "Ability: %s s",
   "key.category.redrising.general": "Red Rising",
   "key.redrising.capacite": "Color ability",
-  "options.redrising.cheveux": "Color hair"
+  "options.redrising.cheveux": "Color hair",
+  "gamerule.redrising.mode_naissance": "Birth",
+  "gamerule.redrising.mode_naissance.description": "How each player gets their Color: hidden personality test, or free choice from a menu.",
+  "gamerule.redrising.mode_naissance.test": "Test",
+  "gamerule.redrising.mode_naissance.choix_libre": "Free choice",
+  "commande.redrising.etat.naissance": "Birth mode changed to %s (for future births)"
 }

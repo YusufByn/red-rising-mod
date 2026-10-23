@@ -44,7 +44,7 @@ Un système générique pour déclarer force, exclusivités et faiblesse. Les 14
 
 ### G4 Naissance
 
-- [ ] **G4.1 Option de création du monde** : Test ou Choix libre. *Fini quand* : l'option est enregistrée dans le monde.
+- [x] **G4.1 Option de création du monde** : Test ou Choix libre. Fait le 23/10 : règle de jeu `redrising:mode_naissance` (Test par défaut), bouton « Naissance » dans l'onglet Jeu de l'écran de création, lisible et modifiable par `/rr etat`. Vérifié par `ModeNaissanceTest` (vrais clics à la création, fichier `game_rules.dat`, réouverture). *Fini quand* : l'option est enregistrée dans le monde.
 - [ ] **G4.2 Écran de choix libre**. *Fini quand* : on choisit une Couleur et on spawn avec.
 - [ ] **G4.3 Moteur du test** : 7 questions, 4 réponses, 2 points cachés par réponse, égalité au hasard. Le script Python du GDD devient un test unitaire Java. *Fini quand* : le test unitaire retrouve 6,8 % à 7,5 % par Couleur.
 - [ ] **G4.4 Interface du test** : questions à l'écran, barème invisible, une relance autorisée. *Fini quand* : un test complet donne une Couleur.

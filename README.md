@@ -27,6 +27,10 @@ Code commun dans `src/main`, code client uniquement (HUD, écrans, rendu) dans `
 | `commande` | Commandes de debug `/rr` |
 | `mixin` | Code injecté dans Minecraft quand Fabric API n'a pas d'événement |
 
+## Création du monde
+
+- Onglet Jeu > « Naissance » : Test (par défaut, test de personnalité caché) ou Choix libre (menu). Règle de jeu `redrising:mode_naissance`.
+
 ## Contrôles
 
 - `R` (modifiable, catégorie « Red Rising ») : capacité active de sa Couleur.
@@ -39,7 +43,7 @@ Réservées aux ops (ou à la triche activée en solo). `[joueur]` est optionnel
 - `/rr couleur get [joueur]`, `/rr couleur set <couleur> [joueur]`
 - `/rr jauge get [joueur]`, `/rr jauge set <jauge> <valeur> [joueur]`, `/rr jauge add <jauge> <delta> [joueur]`
 - `/rr jalon list`, `/rr jalon set <jalon> <issue>`, `/rr jalon clear <jalon>`
-- `/rr etat`, `/rr etat epoque <epoque>`, `/rr etat zone set <zone> <camp>`, `/rr etat zone clear <zone>`
+- `/rr etat`, `/rr etat naissance <test|choix_libre>`, `/rr etat epoque <epoque>`, `/rr etat zone set <zone> <camp>`, `/rr etat zone clear <zone>`
 
 ## Outils
 

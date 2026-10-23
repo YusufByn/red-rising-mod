@@ -29,7 +29,7 @@
   "commande.redrising.jalon.set": "Jalon %s : %s",
   "commande.redrising.jalon.clear": "Jalon %s effacé",
   "commande.redrising.jalon.absent": "Aucune issue enregistrée pour le jalon %s",
-  "commande.redrising.etat": "État du monde (schéma v%s) : époque %s ; jalons : %s ; zones : %s",
+  "commande.redrising.etat": "État du monde (schéma v%s) : naissance %s ; époque %s ; jalons : %s ; zones : %s",
   "commande.redrising.etat.epoque": "Époque changée en %s",
   "commande.redrising.etat.zone.set": "Zone %s contrôlée par : %s",
   "commande.redrising.etat.zone.clear": "Zone %s libérée",
@@ -50,5 +50,10 @@
   "hud.redrising.capacite.recharge": "Capacité : %s s",
   "key.category.redrising.general": "Red Rising",
   "key.redrising.capacite": "Capacité de Couleur",
-  "options.redrising.cheveux": "Cheveux de Couleur"
+  "options.redrising.cheveux": "Cheveux de Couleur",
+  "gamerule.redrising.mode_naissance": "Naissance",
+  "gamerule.redrising.mode_naissance.description": "Comment chaque joueur reçoit sa Couleur : test de personnalité caché, ou choix libre dans un menu.",
+  "gamerule.redrising.mode_naissance.test": "Test",
+  "gamerule.redrising.mode_naissance.choix_libre": "Choix libre",
+  "commande.redrising.etat.naissance": "Mode de naissance changé en %s (pour les prochaines naissances)"
 }

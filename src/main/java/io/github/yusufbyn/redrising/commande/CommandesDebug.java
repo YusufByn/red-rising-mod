@@ -10,6 +10,8 @@ import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.brigadier.exceptions.DynamicCommandExceptionType;
 import io.github.yusufbyn.redrising.couleur.Couleur;
 import io.github.yusufbyn.redrising.couleur.CouleurJoueur;
+import io.github.yusufbyn.redrising.couleur.ModeNaissance;
+import io.github.yusufbyn.redrising.couleur.Naissance;
 import io.github.yusufbyn.redrising.data.EtatMonde;
 import io.github.yusufbyn.redrising.data.EtatMondeServeur;
 import io.github.yusufbyn.redrising.factions.Camp;
@@ -93,6 +95,8 @@ public final class CommandesDebug {
                         .then(Commands.literal("clear")
                                 .then(Commands.argument("jalon", StringArgumentType.word()).executes(CommandesDebug::effacerJalon))))
                 .then(Commands.literal("etat").executes(CommandesDebug::lireEtat)
+                        .then(Commands.literal("naissance")
+                                .then(argEnum("mode", ModeNaissance.values()).executes(CommandesDebug::changerModeNaissance)))
                         .then(Commands.literal("epoque")
                                 .then(argEnum("epoque", Epoque.values()).executes(CommandesDebug::changerEpoque)))
                         .then(Commands.literal("zone")
@@ -174,12 +178,21 @@ public final class CommandesDebug {
 
     private static int lireEtat(CommandContext<CommandSourceStack> ctx) {
         EtatMonde etat = EtatMondeServeur.get(ctx.getSource().getServer());
+        ModeNaissance mode = Naissance.mode(ctx.getSource().getServer());
         ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.etat",
                 etat.schemaVersion(),
+                mode.getDisplayName(),
                 nom("epoque", etat.epoque()),
                 liste(etat.jalons(), "issue"),
                 liste(etat.zones(), "camp")), false);
         return etat.schemaVersion();
+    }
+
+    private static int changerModeNaissance(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        ModeNaissance mode = lireEnum(ctx, "mode", ModeNaissance.values());
+        Naissance.changerMode(ctx.getSource().getServer(), mode);
+        ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.etat.naissance", mode.getDisplayName()), true);
+        return Command.SINGLE_SUCCESS;
     }
 
     private static int changerEpoque(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {

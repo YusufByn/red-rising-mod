@@ -16,6 +16,7 @@
       "io.github.yusufbyn.redrising.gametest.RestrictionsCouleurTest",
       "io.github.yusufbyn.redrising.gametest.CapacitesActivesTest",
       "io.github.yusufbyn.redrising.gametest.FaiblessesTest",
+      "io.github.yusufbyn.redrising.gametest.ModeNaissanceTest",
       "io.github.yusufbyn.redrising.gametest.CapacitesPassivesTest"
     ]
   },

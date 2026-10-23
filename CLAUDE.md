@@ -55,6 +55,7 @@ Mod Fabric fan-made, solo, gratuit et non commercial, dans l'univers Red Rising 
 - Rendu du joueur : la peau est dessinée en **translucide** (après tout le « cutout »). Une couche ajoutée par-dessus doit donc être translucide elle aussi, sinon la couche extérieure du skin (manches, veste) la recouvre.
 - Commandes : une coordonnée entière (`summon ... 7 -60 9`) est centrée sur le bloc (7,5). Écrire `7.0` pour une position exacte.
 - Mixins client : dans `src/client/.../client/mixin`, déclarés dans `src/client/resources/redrising.client.mixins.json` (environnement client).
+- Tests client qui passent par les vrais écrans (création de monde, ouverture) : pour quitter un monde, refaire comme Fabric (`level.disconnect`, `mc.disconnect(GenericMessageScreen, false)`, attendre `getSingleplayerServer() == null`, puis écran titre). `disconnectWithSavingScreen` ne ramène pas à l'écran titre. Les listes déroulantes d'options ne sont pas parcourues par `clickScreenButton` : cliquer à la souris (voir `ApparenceCouleurTest`).
 - Tests client : juste après l'entrée dans le monde, `/kill` n'a pas d'effet. Attendre une centaine de ticks avant.
 
 ## CI
