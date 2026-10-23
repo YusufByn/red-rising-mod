@@ -313,6 +313,8 @@ PNJ qu'on peut **croiser et influencer**. Trois règles :
 - ✅ Méthode qualité : chaque ticket est compilé et lancé en jeu (`runClient`) avant d'être coché. Tests unitaires pour la logique pure (test de naissance, jauges, jalons).
 - ✅ Même en solo, Minecraft tourne en client-serveur : synchronisation réseau obligatoire pour toutes les données joueur.
 - ✅ **Format de sauvegarde versionné dès la v1** : enregistrer proprement l'état du monde (issue de chaque jalon, jauges, zones contrôlées, Couleur, Sculpture) pour permettre le passage v1 → v2 sans migrations douloureuses.
+  - ✅ Mis en place en G2.4 (schéma v1) : l'état du monde est un attachment global Fabric (`data/fabric/attachments.dat`, clé `redrising:etat_monde`) avec `schemaVersion`, `epoque` (`red_rising`, `golden_son`, `morning_star`), `jalons` (identifiant de jalon → `canon` ou `divergente`) et `zones` (identifiant de zone → `societe` ou `rising`). Couleur et jauges sont attachées au joueur, dans son fichier.
+  - Règle : toute modification du format incrémente `EtatMonde.VERSION_SCHEMA` et ajoute une étape de migration dans `EtatMonde.migrer`. Un monde au schéma plus récent que le mod est refusé.
 - Assets : Blockbench pour modèles et textures. Poste de temps le plus lourd avec les sons et l'équilibrage.
 
 ---

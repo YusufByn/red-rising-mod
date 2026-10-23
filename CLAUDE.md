@@ -33,7 +33,7 @@ Mod Fabric fan-made, solo, gratuit et non commercial, dans l'univers Red Rising 
 ## Pistes techniques pour G2
 
 - Données attachées au joueur (Couleur, jauges) : regarder **Fabric Data Attachment API** (`fabric-data-attachment-api-v1`), qui gère la persistance, la copie à la mort et la synchro client. Vérifier son API exacte en 26.2.
-- État du monde (G2.4) : données sauvegardées au niveau du serveur ou du monde, avec un champ `schemaVersion` dès le départ.
+- État du monde (G2.4, fait) : `data/EtatMonde`, attachment global Fabric avec `schemaVersion`. Toute modification du format sauvegardé incrémente `EtatMonde.VERSION_SCHEMA` et ajoute une migration dans `EtatMonde.migrer`.
 - Commandes (G2.5) : Fabric Command API v2, tout sous `/rr`.
 
 ## Pièges déjà rencontrés
