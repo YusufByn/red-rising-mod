@@ -8,5 +8,6 @@ public class RedRisingClient implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
         RedRising.LOGGER.info("Red Rising : initialisation client");
+        HudJauges.init();
     }
 }

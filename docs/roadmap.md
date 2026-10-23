@@ -30,7 +30,7 @@ Rien de visible pour le joueur ici, mais tout le reste se branche dessus.
 - [x] **G2.3 Sync réseau** : payloads serveur vers client pour Couleur et jauges. Fait le 23/10 : sync des attachments Fabric (Couleur vers tous les clients, jauges vers le joueur seul), vérifiée par le test en jeu `SyncClientTest`. *Fini quand* : le client affiche toujours la valeur du serveur.
 - [x] **G2.4 Sauvegarde versionnée** : état du monde (issue de chaque jalon, zones contrôlées, époque) avec un numéro de version de schéma. Fait le 23/10 : `EtatMonde` au schéma v1 en attachment global, tests unitaires `EtatMondeTest` et test en jeu `EtatMondePersistanceTest` (version lue dans le fichier du monde). *Fini quand* : un monde se recharge et le numéro de version est lu.
 - [x] **G2.5 Commandes debug** : `/rr couleur`, `/rr jauge`, `/rr jalon`, `/rr etat`. Fait le 23/10 : sous-commandes get/set/add/list/clear (liste dans le README), messages FR/EN, test en jeu `CommandesDebugTest`. *Fini quand* : tout l'état se lit et se modifie en jeu.
-- [ ] **G2.6 HUD des jauges** : affichage minimal, remplaçable plus tard. *Fini quand* : les 3 jauges sont visibles en jeu.
+- [x] **G2.6 HUD des jauges** : affichage minimal, remplaçable plus tard. Fait le 23/10 : `client/HudJauges` en haut à gauche (Couleur, 3 barres, zone hors plafond grisée), vérifié par capture d'écran du test en jeu `HudJaugesTest`. *Fini quand* : les 3 jauges sont visibles en jeu.
 
 ### G3 Framework des Couleurs
 
