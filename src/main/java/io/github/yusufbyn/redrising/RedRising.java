@@ -1,5 +1,6 @@
 package io.github.yusufbyn.redrising;
 
+import io.github.yusufbyn.redrising.commande.CommandesDebug;
 import io.github.yusufbyn.redrising.couleur.CouleurJoueur;
 import io.github.yusufbyn.redrising.data.EtatMondeServeur;
 import io.github.yusufbyn.redrising.factions.JaugesJoueur;
@@ -18,5 +19,6 @@ public class RedRising implements ModInitializer {
         CouleurJoueur.init();
         JaugesJoueur.init();
         EtatMondeServeur.init();
+        CommandesDebug.init();
     }
 }

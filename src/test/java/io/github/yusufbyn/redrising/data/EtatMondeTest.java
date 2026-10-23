@@ -69,4 +69,12 @@ class EtatMondeTest {
         assertEquals(Map.of(), avant.jalons());
         assertEquals(Map.of("pendaison_eo", Issue.CANON), apres.jalons());
     }
+
+    @Test
+    void effacerJalonEtZone() {
+        EtatMonde etat = EtatMonde.NOUVEAU.avecIssue("pendaison_eo", Issue.CANON).avecZone("lykos", Camp.RISING);
+        assertEquals(EtatMonde.NOUVEAU, etat.sansIssue("pendaison_eo").sansZone("lykos"));
+        // Effacer ce qui n'existe pas ne change rien
+        assertEquals(etat, etat.sansIssue("inconnu").sansZone("inconnue"));
+    }
 }

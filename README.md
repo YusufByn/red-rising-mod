@@ -24,6 +24,21 @@ Code commun dans `src/main`, code client uniquement (HUD, écrans, rendu) dans `
 | `jalons` | Horloge du monde, jalons canon ou divergents |
 | `net` | Payloads réseau serveur vers client |
 | `data` | Sauvegarde versionnée de l'état du monde |
+| `commande` | Commandes de debug `/rr` |
+
+## Commandes de debug
+
+Réservées aux ops (ou à la triche activée en solo). `[joueur]` est optionnel : sans lui, la commande vise celui qui la tape.
+
+- `/rr couleur get [joueur]`, `/rr couleur set <couleur> [joueur]`
+- `/rr jauge get [joueur]`, `/rr jauge set <jauge> <valeur> [joueur]`, `/rr jauge add <jauge> <delta> [joueur]`
+- `/rr jalon list`, `/rr jalon set <jalon> <issue>`, `/rr jalon clear <jalon>`
+- `/rr etat`, `/rr etat epoque <epoque>`, `/rr etat zone set <zone> <camp>`, `/rr etat zone clear <zone>`
+
+## Tests
+
+- `./gradlew build` : compile et lance les tests unitaires (`src/test`).
+- `./gradlew runClientGameTest` : ouvre un vrai client et joue les tests en jeu (`src/gametest`), puis se ferme.
 
 ## Conventions
 

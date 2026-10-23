@@ -15,7 +15,7 @@ Mod Fabric fan-made, solo, gratuit et non commercial, dans l'univers Red Rising 
 - **Fabric pur, pas d'Origins.** Le système des Couleurs est écrit dans le mod (G3).
 - Versions gelées jusqu'à la v1.
 - Mod id `redrising`, package `io.github.yusufbyn.redrising`. Code commun dans `src/main`, code client (HUD, écrans, rendu) dans `src/client`.
-- Packages : `couleur`, `factions`, `monde`, `pnj`, `jalons`, `net`, `data` (rôles dans le README).
+- Packages : `couleur`, `factions`, `monde`, `pnj`, `jalons`, `net`, `data`, `commande` (rôles dans le README).
 
 ## Méthode de travail
 
@@ -34,7 +34,7 @@ Mod Fabric fan-made, solo, gratuit et non commercial, dans l'univers Red Rising 
 
 - Données attachées au joueur (Couleur, jauges) : regarder **Fabric Data Attachment API** (`fabric-data-attachment-api-v1`), qui gère la persistance, la copie à la mort et la synchro client. Vérifier son API exacte en 26.2.
 - État du monde (G2.4, fait) : `data/EtatMonde`, attachment global Fabric avec `schemaVersion`. Toute modification du format sauvegardé incrémente `EtatMonde.VERSION_SCHEMA` et ajoute une migration dans `EtatMonde.migrer`.
-- Commandes (G2.5) : Fabric Command API v2, tout sous `/rr`.
+- Commandes (G2.5, fait) : Fabric Command API v2, tout sous `/rr` dans `commande/CommandesDebug`. Tout nouvel état du mod doit y être lisible et modifiable.
 
 ## Pièges déjà rencontrés
 

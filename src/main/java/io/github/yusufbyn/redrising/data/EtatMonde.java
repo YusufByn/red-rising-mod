@@ -74,4 +74,18 @@ public record EtatMonde(int schemaVersion, Epoque epoque, Map<String, Issue> jal
         copie.put(zone, camp);
         return new EtatMonde(schemaVersion, epoque, jalons, copie);
     }
+
+    /** Copie sans l'issue de ce jalon (comme s'il n'était pas encore passé). */
+    public EtatMonde sansIssue(String jalon) {
+        Map<String, Issue> copie = new HashMap<>(jalons);
+        copie.remove(jalon);
+        return new EtatMonde(schemaVersion, epoque, copie, zones);
+    }
+
+    /** Copie où cette zone n'est contrôlée par aucun camp. */
+    public EtatMonde sansZone(String zone) {
+        Map<String, Camp> copie = new HashMap<>(zones);
+        copie.remove(zone);
+        return new EtatMonde(schemaVersion, epoque, jalons, copie);
+    }
 }
