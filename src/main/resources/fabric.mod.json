@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "redrising",
+  "version": "${version}",
+  "name": "Red Rising",
+  "description": "RPG sandbox fan-made dans l'univers Red Rising de Pierce Brown. Non commercial.",
+  "authors": ["YusufByn"],
+  "contact": {
+    "sources": "https://github.com/YusufByn"
+  },
+  "license": "All-Rights-Reserved",
+  "environment": "*",
+  "entrypoints": {
+    "main": ["io.github.yusufbyn.redrising.RedRising"],
+    "client": ["io.github.yusufbyn.redrising.client.RedRisingClient"]
+  },
+  "depends": {
+    "fabricloader": ">=0.19.5",
+    "minecraft": "~26.2",
+    "java": ">=25",
+    "fabric-api": "*"
+  }
+}
