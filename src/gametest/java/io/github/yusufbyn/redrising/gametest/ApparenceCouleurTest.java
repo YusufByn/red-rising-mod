@@ -8,8 +8,12 @@ import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestSingleplayerContext;
 import net.minecraft.client.CameraType;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.components.OptionsList;
+import net.minecraft.client.gui.screens.options.SkinCustomizationScreen;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityTypes;
+import org.lwjgl.glfw.GLFW;
 
 import java.util.Comparator;
 import java.util.List;
@@ -93,6 +97,16 @@ public class ApparenceCouleurTest implements FabricClientGameTest {
             context.getInput().lookAt(0, 0);
             context.waitTicks(5);
             OutilsTest.garderCapture(context.takeScreenshot("premiere-personne"));
+
+            // --- Le réglage « Cheveux de Couleur » dans Options > Personnalisation du skin ---
+            context.setScreen(() -> new SkinCustomizationScreen(null, Minecraft.getInstance().options));
+            context.waitForScreen(SkinCustomizationScreen.class);
+            OutilsTest.garderCapture(context.takeScreenshot("reglage-cheveux"));
+            cliquerReglageCheveux(context);
+            verifierReglage(context, false);
+            cliquerReglageCheveux(context);
+            verifierReglage(context, true);
+            context.setScreen(() -> null);
         }
         RedRising.LOGGER.info("[G3.5] OK : captures de l'apparence prises (à vérifier à l'œil)");
     }
@@ -119,6 +133,32 @@ public class ApparenceCouleurTest implements FabricClientGameTest {
             throw new AssertionError("Mannequins posés : " + poses + " au lieu de " + couleurs.length);
         }
         monde.getConnection().waitForChunksRender();
+    }
+
+    /**
+     * Vrai clic de souris sur le bouton « Cheveux de Couleur ». Il est dans une liste déroulante d'options,
+     * que {@code clickScreenButton} ne parcourt pas : on retrouve le bouton dans la liste pour viser son centre.
+     */
+    private static void cliquerReglageCheveux(ClientGameTestContext context) {
+        double[] centre = context.computeOnClient(mc -> {
+            var liste = Objects.requireNonNull(mc.gui.screen()).children().stream()
+                    .filter(enfant -> enfant instanceof OptionsList)
+                    .map(enfant -> (OptionsList) enfant)
+                    .findFirst().orElseThrow(() -> new AssertionError("Liste d'options absente"));
+            var bouton = Objects.requireNonNull(liste.findOption(ReglagesClient.OPTION_CHEVEUX), "Bouton « Cheveux de Couleur » absent");
+            int echelle = mc.getWindow().getGuiScale();
+            return new double[]{(bouton.getX() + bouton.getWidth() / 2.0) * echelle, (bouton.getY() + bouton.getHeight() / 2.0) * echelle};
+        });
+        context.getInput().setCursorPos(centre[0], centre[1]);
+        context.getInput().pressMouse(GLFW.GLFW_MOUSE_BUTTON_LEFT);
+    }
+
+    private static void verifierReglage(ClientGameTestContext context, boolean attendu) {
+        boolean obtenu = context.computeOnClient(mc -> ReglagesClient.cheveuxCouleur());
+        if (obtenu != attendu) {
+            throw new AssertionError("Réglage « Cheveux de Couleur » : attendu " + attendu + ", obtenu " + obtenu);
+        }
+        RedRising.LOGGER.info("[G3.5] Réglage « Cheveux de Couleur » après clic : {}", obtenu);
     }
 
     /** Retire les mannequins sans les tuer (un mort reste visible le temps de son animation). */
