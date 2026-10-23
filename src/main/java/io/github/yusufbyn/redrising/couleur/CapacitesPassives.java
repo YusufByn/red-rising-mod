@@ -14,19 +14,19 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Applique au joueur les capacités passives de sa Couleur (G3.1).
+ * Applique au joueur les capacités passives (G3.1) et les faiblesses (G3.4) de sa Couleur.
  *
  * <p>Les bonus d'attributs sont des modificateurs « permanents », sauvegardés avec le joueur : ainsi un bonus de vie
  * est déjà là quand la vie est relue au chargement (sinon elle serait rognée au maximum sans bonus).
  * Ils sont tous retirés puis remis à chaque application, donc changer de Couleur ne laisse rien derrière.</p>
  *
- * <p>Les effets sont de durée infinie, sans particules. Ils sont remis chaque seconde s'ils ont disparu
- * (lait, {@code /effect clear}).</p>
+ * <p>Deux fois par seconde, l'entretien réévalue les conditions (bonus et malus conditionnels mis ou retirés)
+ * et remet les effets disparus (lait, {@code /effect clear}). Les effets sont de durée infinie, sans particules.</p>
  */
 public final class CapacitesPassives {
     /** Préfixe des identifiants de nos modificateurs d'attributs : {@code redrising:couleur/...}. */
     private static final String PREFIXE = "couleur/";
-    private static final int PERIODE_ENTRETIEN = 20;
+    private static final int PERIODE_ENTRETIEN = 10;
 
     private CapacitesPassives() {
     }
@@ -46,7 +46,7 @@ public final class CapacitesPassives {
 
         ServerTickEvents.END_SERVER_TICK.register(server -> {
             if (server.getTickCount() % PERIODE_ENTRETIEN == 0) {
-                server.getPlayerList().getPlayers().forEach(CapacitesPassives::entretenirEffets);
+                server.getPlayerList().getPlayers().forEach(CapacitesPassives::entretenir);
             }
         });
     }
@@ -56,18 +56,59 @@ public final class CapacitesPassives {
         ProfilCouleur profil = ProfilsCouleurs.de(CouleurJoueur.get(joueur));
         retirerAttributs(joueur);
         for (ProfilCouleur.BonusAttribut bonus : profil.attributs()) {
-            AttributeInstance instance = joueur.getAttribute(bonus.attribut());
-            if (instance == null) {
-                RedRising.LOGGER.warn("Attribut {} absent du joueur, bonus ignoré", bonus.attribut().getRegisteredName());
-                continue;
-            }
-            instance.addOrReplacePermanentModifier(new AttributeModifier(idModificateur(bonus), bonus.valeur(), bonus.operation()));
+            mettre(joueur, bonus, idModificateur("", bonus));
         }
-        retirerEffetsEnTrop(joueur, profil);
-        entretenirEffets(joueur);
-        // Un bonus de vie retiré ne doit pas laisser plus de vie que le nouveau maximum
+        entretenir(joueur);
+    }
+
+    /** Conditions réévaluées, effets remis ou retirés, vie ramenée sous le maximum. */
+    private static void entretenir(ServerPlayer joueur) {
+        ProfilCouleur profil = ProfilsCouleurs.de(CouleurJoueur.get(joueur));
+        List<ProfilCouleur.EffetPermanent> effetsVoulus = new ArrayList<>(profil.effets());
+
+        for (int i = 0; i < profil.conditionnels().size(); i++) {
+            ProfilCouleur.BonusConditionnel bloc = profil.conditionnels().get(i);
+            boolean actif = bloc.condition().test(joueur);
+            for (ProfilCouleur.BonusAttribut bonus : bloc.attributs()) {
+                Identifier id = idModificateur("si" + i + "/", bonus);
+                if (actif) {
+                    mettre(joueur, bonus, id);
+                } else {
+                    AttributeInstance instance = joueur.getAttribute(bonus.attribut());
+                    if (instance != null) {
+                        instance.removeModifier(id);
+                    }
+                }
+            }
+            if (actif) {
+                effetsVoulus.addAll(bloc.effets());
+            }
+        }
+
+        retirerEffetsEnTrop(joueur, effetsVoulus);
+        for (ProfilCouleur.EffetPermanent effet : effetsVoulus) {
+            if (!joueur.hasEffect(effet.effet())) {
+                // ambient = true, particules = false, icône = true : c'est ce qui marque nos effets
+                joueur.addEffect(new MobEffectInstance(effet.effet(), MobEffectInstance.INFINITE_DURATION, effet.niveau(), true, false, true));
+            }
+        }
+
+        // Un bonus de vie retiré (ou un malus ajouté) ne doit pas laisser plus de vie que le maximum
         if (joueur.getHealth() > joueur.getMaxHealth()) {
             joueur.setHealth(joueur.getMaxHealth());
+        }
+    }
+
+    /** Met le modificateur s'il manque ; ne touche à rien s'il est déjà là (évite de le renvoyer au client pour rien). */
+    private static void mettre(ServerPlayer joueur, ProfilCouleur.BonusAttribut bonus, Identifier id) {
+        AttributeInstance instance = joueur.getAttribute(bonus.attribut());
+        if (instance == null) {
+            RedRising.LOGGER.warn("Attribut {} absent du joueur, bonus ignoré", bonus.attribut().getRegisteredName());
+            return;
+        }
+        AttributeModifier existant = instance.getModifier(id);
+        if (existant == null || existant.amount() != bonus.valeur()) {
+            instance.addOrReplacePermanentModifier(new AttributeModifier(id, bonus.valeur(), bonus.operation()));
         }
     }
 
@@ -87,22 +128,12 @@ public final class CapacitesPassives {
         });
     }
 
-    /** Remet les effets permanents de la Couleur qui ont disparu. */
-    private static void entretenirEffets(ServerPlayer joueur) {
-        for (ProfilCouleur.EffetPermanent effet : ProfilsCouleurs.de(CouleurJoueur.get(joueur)).effets()) {
-            if (!joueur.hasEffect(effet.effet())) {
-                // ambient = true, particules = false, icône = true : c'est ce qui marque nos effets
-                joueur.addEffect(new MobEffectInstance(effet.effet(), MobEffectInstance.INFINITE_DURATION, effet.niveau(), true, false, true));
-            }
-        }
-    }
-
-    /** Retire nos effets permanents qui ne font pas partie du profil (après un changement de Couleur). */
-    private static void retirerEffetsEnTrop(ServerPlayer joueur, ProfilCouleur profil) {
+    /** Retire nos effets permanents qui ne sont plus voulus (changement de Couleur, condition devenue fausse). */
+    private static void retirerEffetsEnTrop(ServerPlayer joueur, List<ProfilCouleur.EffetPermanent> voulus) {
         List<MobEffectInstance> enTrop = new ArrayList<>();
         for (MobEffectInstance instance : joueur.getActiveEffects()) {
             boolean notre = instance.isInfiniteDuration() && instance.isAmbient() && !instance.isVisible();
-            boolean prevu = profil.effets().stream().anyMatch(effet -> effet.effet().equals(instance.getEffect()) && effet.niveau() == instance.getAmplifier());
+            boolean prevu = voulus.stream().anyMatch(effet -> effet.effet().equals(instance.getEffect()) && effet.niveau() == instance.getAmplifier());
             if (notre && !prevu) {
                 enTrop.add(instance);
             }
@@ -110,10 +141,11 @@ public final class CapacitesPassives {
         enTrop.forEach(instance -> joueur.removeEffect(instance.getEffect()));
     }
 
-    private static Identifier idModificateur(ProfilCouleur.BonusAttribut bonus) {
+    /** Ex. {@code redrising:couleur/minecraft/max_health/add_value}, ou {@code redrising:couleur/si0/...} pour un bonus conditionnel. */
+    private static Identifier idModificateur(String sousDossier, ProfilCouleur.BonusAttribut bonus) {
         Identifier attribut = bonus.attribut().unwrapKey().orElseThrow().identifier();
         return Identifier.fromNamespaceAndPath(RedRising.MOD_ID,
-                PREFIXE + attribut.getNamespace() + "/" + attribut.getPath() + "/" + bonus.operation().getSerializedName());
+                PREFIXE + sousDossier + attribut.getNamespace() + "/" + attribut.getPath() + "/" + bonus.operation().getSerializedName());
     }
 
     private static boolean estANous(Identifier id) {
