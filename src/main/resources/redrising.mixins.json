@@ -1,0 +1,11 @@
+{
+  "required": true,
+  "package": "io.github.yusufbyn.redrising.mixin",
+  "compatibilityLevel": "JAVA_25",
+  "mixins": [
+    "CraftingMenuMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

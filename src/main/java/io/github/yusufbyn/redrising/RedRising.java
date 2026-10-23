@@ -3,6 +3,7 @@ package io.github.yusufbyn.redrising;
 import io.github.yusufbyn.redrising.commande.CommandesDebug;
 import io.github.yusufbyn.redrising.couleur.CapacitesPassives;
 import io.github.yusufbyn.redrising.couleur.CouleurJoueur;
+import io.github.yusufbyn.redrising.couleur.RestrictionsCouleur;
 import io.github.yusufbyn.redrising.data.EtatMondeServeur;
 import io.github.yusufbyn.redrising.factions.JaugesJoueur;
 import net.fabricmc.api.ModInitializer;
@@ -19,6 +20,7 @@ public class RedRising implements ModInitializer {
         LOGGER.info("Red Rising : initialisation");
         CouleurJoueur.init();
         CapacitesPassives.init();
+        RestrictionsCouleur.init();
         JaugesJoueur.init();
         EtatMondeServeur.init();
         CommandesDebug.init();

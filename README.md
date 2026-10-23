@@ -25,6 +25,7 @@ Code commun dans `src/main`, code client uniquement (HUD, écrans, rendu) dans `
 | `net` | Payloads réseau serveur vers client |
 | `data` | Sauvegarde versionnée de l'état du monde |
 | `commande` | Commandes de debug `/rr` |
+| `mixin` | Code injecté dans Minecraft quand Fabric API n'a pas d'événement |
 
 ## Commandes de debug
 

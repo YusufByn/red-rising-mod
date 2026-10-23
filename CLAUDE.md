@@ -47,6 +47,8 @@ Mod Fabric fan-made, solo, gratuit et non commercial, dans l'univers Red Rising 
 - Nouvelle dépendance hors Minecraft/Fabric (ex. JUnit) : la déclarer dans le bloc `exclusiveContent` de `build.gradle` (Maven Central), sinon Gradle interroge d'abord `libraries.minecraft.net`, bloqué à l'école.
 - Bonus d'attributs : modificateurs **permanents** (`addOrReplacePermanentModifier`), pas transitoires. Un modificateur transitoire n'est pas sauvegardé : au rechargement, la vie est relue avant qu'il soit remis, et un bonus de vie est perdu.
 - Capacités d'une Couleur : se déclarent avec `ProfilsCouleurs.declarer(Couleur, ProfilCouleur.builder()...build())`, au même endroit pour chaque Couleur, dans son ticket.
+- Mixins : dans le package `mixin`, déclarés dans `src/main/resources/redrising.mixins.json`. Seulement quand Fabric API n'a pas d'événement ; vérifier le bytecode de la méthode visée (`javap -c`) avant d'écrire l'injection.
+- Refus d'un clic (`UseBlockCallback`, `UseItemCallback`) : quand le client refuse, il n'envoie rien au serveur. Tout retour au joueur (message) doit donc être fait aussi côté client : `player.sendOverlayMessage` marche des deux côtés.
 - Tests client : juste après l'entrée dans le monde, `/kill` n'a pas d'effet. Attendre une centaine de ticks avant.
 
 ## CI

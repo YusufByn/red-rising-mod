@@ -40,5 +40,8 @@
   "issue.redrising.canon": "canon",
   "issue.redrising.divergente": "divergent",
   "camp.redrising.societe": "Society",
-  "camp.redrising.rising": "Rising"
+  "camp.redrising.rising": "Rising",
+  "restriction.redrising.bloc": "Your Color does not allow you to use: %s",
+  "restriction.redrising.objet": "Your Color does not allow you to use: %s",
+  "restriction.redrising.craft": "Your Color does not allow you to craft: %s"
 }
