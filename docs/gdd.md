@@ -166,6 +166,10 @@ Format : force, exclusivités, faiblesse. La faiblesse est aussi importante que 
 - Cuivre et Marron sont les plus minces. Ils tiennent grâce aux factions, à vérifier en jeu.
 - Rose : aspect esclave sexuel du lore **retiré**. Couleur jouable orientée espionnage (archétype Théodora).
 
+### Apparence 🟡 (proposée en G3.5, à valider)
+- Repère visuel : **sigil 2×2 sur le dos de chaque main et bracelet d'un pixel au poignet**, teintés de la Couleur (lore : les sigils des Couleurs sur les mains). Indépendant du skin, visible par tous. Placeholder jusqu'aux textures finales (G17.3).
+- Teintes : Or `#D4AF37`, Argent `#C0C0C8`, Cuivre `#B87333`, Blanc `#F2F2F2`, Bleu `#2E6FD8`, Jaune `#E8D13A`, Vert `#2E9B44`, Violet `#7B3FA0`, Orange `#E8792B`, Gris `#808080`, Obsidian `#1C1C24`, Marron `#6B4423`, Rose `#E88AAE`, Rouge `#B22222`. Le nom de la Couleur dans le HUD prend la même teinte.
+
 ### PNJ Roses ✅
 - Fonctionnent comme une mécanique d'apprivoisement : un Or les possède, ils le suivent et le servent.
 - Ils peuvent être **raisonnés / retournés** par un joueur Rose ou un joueur du Rising, et deviennent alors informateurs dans les réseaux d'espions.

@@ -64,7 +64,7 @@ public final class HudJauges implements HudElement {
 
         int y = MARGE;
         if (couleur != null) {
-            graphics.text(font, couleur.getDisplayName(), MARGE, y, TEXTE, true);
+            graphics.text(font, couleur.getDisplayName(), MARGE, y, 0xFF000000 | couleur.getTeinte(), true);
             y += font.lineHeight + 2;
         }
 

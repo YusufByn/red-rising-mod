@@ -40,6 +40,10 @@ Réservées aux ops (ou à la triche activée en solo). `[joueur]` est optionnel
 - `/rr jalon list`, `/rr jalon set <jalon> <issue>`, `/rr jalon clear <jalon>`
 - `/rr etat`, `/rr etat epoque <epoque>`, `/rr etat zone set <zone> <camp>`, `/rr etat zone clear <zone>`
 
+## Outils
+
+- `outils/marque_couleur.py` : régénère les textures de la marque de Couleur (`python3 outils/marque_couleur.py`, demande Pillow).
+
 ## Tests
 
 - `./gradlew build` : compile et lance les tests unitaires (`src/test`).
