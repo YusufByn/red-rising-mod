@@ -9,5 +9,6 @@ public class RedRisingClient implements ClientModInitializer {
     public void onInitializeClient() {
         RedRising.LOGGER.info("Red Rising : initialisation client");
         HudJauges.init();
+        ToucheCapacite.init();
     }
 }

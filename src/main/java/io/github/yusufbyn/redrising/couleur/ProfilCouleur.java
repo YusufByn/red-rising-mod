@@ -6,6 +6,7 @@ import net.minecraft.world.entity.ai.attributes.Attribute;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.level.block.Block;
+import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -13,7 +14,7 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Ce qu'une Couleur a de propre : capacités passives (G3.1) et restrictions d'accès (G3.2).
+ * Ce qu'une Couleur a de propre : capacités passives (G3.1), restrictions d'accès (G3.2) et capacité active (G3.3).
  * Se déclare en quelques lignes, puis s'enregistre avec {@link ProfilsCouleurs#declarer} :
  *
  * <pre>{@code
@@ -24,6 +25,7 @@ import java.util.Set;
  *         .interditBloc(Blocks.ENCHANTING_TABLE)  // ne peut pas enchanter
  *         .interditObjet(Items.WRITTEN_BOOK)      // ne peut pas lire un livre
  *         .interditCraft(Items.BOOK)              // ne peut pas fabriquer de livre
+ *         .capacite(20 * 30, joueur -> { ...; return true; }) // touche d'action, recharge 30 s
  *         .build();
  * }</pre>
  *
@@ -37,11 +39,13 @@ import java.util.Set;
  * @param blocsInterdits  blocs que la Couleur ne peut pas utiliser
  * @param objetsInterdits objets que la Couleur ne peut pas utiliser
  * @param craftsInterdits objets que la Couleur ne peut pas fabriquer
+ * @param capacite        capacité de la touche d'action, ou {@code null} si la Couleur n'en a pas
  */
 public record ProfilCouleur(List<BonusAttribut> attributs, List<EffetPermanent> effets,
-                            Set<Block> blocsInterdits, Set<Item> objetsInterdits, Set<Item> craftsInterdits) {
+                            Set<Block> blocsInterdits, Set<Item> objetsInterdits, Set<Item> craftsInterdits,
+                            @Nullable CapaciteActive capacite) {
     /** Profil sans capacité ni restriction : Couleur pas encore écrite, ou joueur pas encore né. */
-    public static final ProfilCouleur VIDE = new ProfilCouleur(List.of(), List.of(), Set.of(), Set.of(), Set.of());
+    public static final ProfilCouleur VIDE = new ProfilCouleur(List.of(), List.of(), Set.of(), Set.of(), Set.of(), null);
 
     public ProfilCouleur {
         attributs = List.copyOf(attributs);
@@ -68,6 +72,7 @@ public record ProfilCouleur(List<BonusAttribut> attributs, List<EffetPermanent> 
         private final Set<Block> blocsInterdits = new HashSet<>();
         private final Set<Item> objetsInterdits = new HashSet<>();
         private final Set<Item> craftsInterdits = new HashSet<>();
+        private @Nullable CapaciteActive capacite;
 
         private Builder() {
         }
@@ -106,8 +111,17 @@ public record ProfilCouleur(List<BonusAttribut> attributs, List<EffetPermanent> 
             return this;
         }
 
+        /** Capacité de la touche d'action ; {@code recharge} en ticks (20 = 1 seconde). Une seule par Couleur. */
+        public Builder capacite(int recharge, CapaciteActive.Action action) {
+            if (capacite != null) {
+                throw new IllegalStateException("Capacité active déjà déclarée");
+            }
+            capacite = new CapaciteActive(recharge, action);
+            return this;
+        }
+
         public ProfilCouleur build() {
-            return new ProfilCouleur(attributs, effets, blocsInterdits, objetsInterdits, craftsInterdits);
+            return new ProfilCouleur(attributs, effets, blocsInterdits, objetsInterdits, craftsInterdits, capacite);
         }
     }
 }

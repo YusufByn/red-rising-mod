@@ -1,6 +1,7 @@
 package io.github.yusufbyn.redrising;
 
 import io.github.yusufbyn.redrising.commande.CommandesDebug;
+import io.github.yusufbyn.redrising.couleur.CapacitesActives;
 import io.github.yusufbyn.redrising.couleur.CapacitesPassives;
 import io.github.yusufbyn.redrising.couleur.CouleurJoueur;
 import io.github.yusufbyn.redrising.couleur.RestrictionsCouleur;
@@ -21,6 +22,7 @@ public class RedRising implements ModInitializer {
         CouleurJoueur.init();
         CapacitesPassives.init();
         RestrictionsCouleur.init();
+        CapacitesActives.init();
         JaugesJoueur.init();
         EtatMondeServeur.init();
         CommandesDebug.init();

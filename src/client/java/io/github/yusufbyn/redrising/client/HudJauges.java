@@ -1,8 +1,10 @@
 package io.github.yusufbyn.redrising.client;
 
 import io.github.yusufbyn.redrising.RedRising;
+import io.github.yusufbyn.redrising.couleur.CapacitesActives;
 import io.github.yusufbyn.redrising.couleur.Couleur;
 import io.github.yusufbyn.redrising.couleur.CouleurJoueur;
+import io.github.yusufbyn.redrising.couleur.ProfilsCouleurs;
 import io.github.yusufbyn.redrising.factions.Bornes;
 import io.github.yusufbyn.redrising.factions.Jauge;
 import io.github.yusufbyn.redrising.factions.Jauges;
@@ -19,7 +21,8 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 
 /**
- * HUD minimal des jauges (G2.6), en haut à gauche : la Couleur, puis une barre par jauge.
+ * HUD minimal des jauges (G2.6), en haut à gauche : la Couleur, une barre par jauge,
+ * puis l'état de la capacité active si la Couleur en a une (G3.3).
  * Provisoire, prévu pour être remplacé (textures finales en G17).
  *
  * <p>Lit les valeurs synchronisées par le serveur (G2.3) avec les mêmes méthodes que lui.
@@ -40,6 +43,7 @@ public final class HudJauges implements HudElement {
     private static final int SOCIETE = 0xFFD4AF37;
     private static final int RISING = 0xFFC0392B;
     private static final int SUSPICION = 0xFFA0A0B0;
+    private static final int CAPACITE_PRETE = 0xFF80FF80;
 
     /** Appelé depuis {@link RedRisingClient#onInitializeClient()}. */
     public static void init() {
@@ -78,6 +82,14 @@ public final class HudJauges implements HudElement {
             barre(graphics, xBarre, yBarre, valeur, Bornes.pour(couleur, jauge), teinte(jauge));
             graphics.text(font, String.valueOf(valeur), xBarre + LARGEUR_BARRE + ESPACE, y, TEXTE, true);
             y += font.lineHeight + 1;
+        }
+
+        if (ProfilsCouleurs.de(couleur).capacite() != null) {
+            long restants = CapacitesActives.ticksRestants(joueur);
+            Component etat = restants == 0
+                    ? Component.translatable("hud.redrising.capacite.prete")
+                    : Component.translatable("hud.redrising.capacite.recharge", CapacitesActives.secondes(restants));
+            graphics.text(font, etat, MARGE, y + 2, restants == 0 ? CAPACITE_PRETE : TEXTE, true);
         }
     }
 

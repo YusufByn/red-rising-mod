@@ -27,6 +27,10 @@ Code commun dans `src/main`, code client uniquement (HUD, écrans, rendu) dans `
 | `commande` | Commandes de debug `/rr` |
 | `mixin` | Code injecté dans Minecraft quand Fabric API n'a pas d'événement |
 
+## Contrôles
+
+- `R` (modifiable, catégorie « Red Rising ») : capacité active de sa Couleur.
+
 ## Commandes de debug
 
 Réservées aux ops (ou à la triche activée en solo). `[joueur]` est optionnel : sans lui, la commande vise celui qui la tape.

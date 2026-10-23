@@ -13,6 +13,7 @@
       "io.github.yusufbyn.redrising.gametest.CommandesDebugTest",
       "io.github.yusufbyn.redrising.gametest.HudJaugesTest",
       "io.github.yusufbyn.redrising.gametest.RestrictionsCouleurTest",
+      "io.github.yusufbyn.redrising.gametest.CapacitesActivesTest",
       "io.github.yusufbyn.redrising.gametest.CapacitesPassivesTest"
     ]
   },

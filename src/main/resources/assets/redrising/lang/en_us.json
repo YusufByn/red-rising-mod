@@ -43,5 +43,11 @@
   "camp.redrising.rising": "Rising",
   "restriction.redrising.bloc": "Your Color does not allow you to use: %s",
   "restriction.redrising.objet": "Your Color does not allow you to use: %s",
-  "restriction.redrising.craft": "Your Color does not allow you to craft: %s"
+  "restriction.redrising.craft": "Your Color does not allow you to craft: %s",
+  "capacite.redrising.aucune": "Your Color has no active ability",
+  "capacite.redrising.recharge": "Ability recharging: %s s",
+  "hud.redrising.capacite.prete": "Ability: ready",
+  "hud.redrising.capacite.recharge": "Ability: %s s",
+  "key.category.redrising.general": "Red Rising",
+  "key.redrising.capacite": "Color ability"
 }
