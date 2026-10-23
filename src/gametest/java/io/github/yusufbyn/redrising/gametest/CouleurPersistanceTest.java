@@ -7,7 +7,6 @@ import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestSingleplayerContext;
 import net.fabricmc.fabric.api.client.gametest.v1.world.TestWorldSave;
-import net.minecraft.client.gui.screens.DeathScreen;
 
 /**
  * G2.1 : la Couleur survit à la mort et au rechargement du monde.
@@ -27,14 +26,8 @@ public class CouleurPersistanceTest implements FabricClientGameTest {
                 throw new AssertionError("Le joueur n'a pas de Couleur en arrivant dans le monde");
             }
 
-            // Juste après la connexion, le /kill n'a pas d'effet : on laisse le joueur finir d'arriver
-            context.waitTicks(100);
-            monde.getServer().runCommand("kill @a");
-            context.waitForScreen(DeathScreen.class);
-            // Le bouton « Réapparaître » n'est actif qu'après un court délai
-            context.waitTicks(40);
-            context.clickScreenButton("deathScreen.respawn");
-            context.waitForScreen(null);
+            OutilsTest.attendreArrivee(context);
+            OutilsTest.mourirEtReapparaitre(context, monde);
             verifier("après la mort", depart, couleurDuJoueur(monde));
 
             sauvegarde = monde.getWorldSave();
@@ -48,7 +41,7 @@ public class CouleurPersistanceTest implements FabricClientGameTest {
     }
 
     private static Couleur couleurDuJoueur(TestSingleplayerContext monde) {
-        return monde.getServer().computeOnServer(server -> CouleurJoueur.get(server.getPlayerList().getPlayers().getFirst()));
+        return monde.getServer().computeOnServer(server -> CouleurJoueur.get(OutilsTest.joueur(server)));
     }
 
     private static void verifier(String moment, Couleur attendue, Couleur obtenue) {

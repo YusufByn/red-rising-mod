@@ -5,7 +5,10 @@
   "name": "Red Rising (tests en jeu)",
   "environment": "*",
   "entrypoints": {
-    "fabric-client-gametest": ["io.github.yusufbyn.redrising.gametest.CouleurPersistanceTest"]
+    "fabric-client-gametest": [
+      "io.github.yusufbyn.redrising.gametest.CouleurPersistanceTest",
+      "io.github.yusufbyn.redrising.gametest.JaugesPersistanceTest"
+    ]
   },
   "depends": {
     "redrising": "*"

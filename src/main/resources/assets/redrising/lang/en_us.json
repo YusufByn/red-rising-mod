@@ -13,5 +13,8 @@
   "couleur.redrising.obsidian": "Obsidian",
   "couleur.redrising.marron": "Brown",
   "couleur.redrising.rose": "Pink",
-  "couleur.redrising.rouge": "Red"
+  "couleur.redrising.rouge": "Red",
+  "jauge.redrising.loyaute": "Society Loyalty",
+  "jauge.redrising.soutien": "Rising Support",
+  "jauge.redrising.suspicion": "Suspicion"
 }

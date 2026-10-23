@@ -26,7 +26,7 @@ Rien de visible pour le joueur ici, mais tout le reste se branche dessus.
 ### G2 Socle données
 
 - [x] **G2.1 Couleur du joueur** : les 14 Couleurs, attachées au joueur, persistantes. Fait le 23/10 : attachment Fabric persistant et copié à la mort, vérifié par le test en jeu `CouleurPersistanceTest` (Couleur provisoire au hasard en attendant G4). *Fini quand* : la Couleur survit à la mort et au reload.
-- [ ] **G2.2 Les 3 jauges** : Loyauté Société, Soutien Rising, Suspicion, avec bornes et plafonds par Couleur (ex. Loyauté plafonnée pour le Rouge). *Fini quand* : valeurs persistantes et bornées.
+- [x] **G2.2 Les 3 jauges** : Loyauté Société, Soutien Rising, Suspicion, avec bornes et plafonds par Couleur (ex. Loyauté plafonnée pour le Rouge). Fait le 23/10 : jauges 0 à 100 attachées au joueur, plafond Rouge à 40 (valeurs 🟡 dans le GDD), tests unitaires `JaugesTest` et test en jeu `JaugesPersistanceTest`. *Fini quand* : valeurs persistantes et bornées.
 - [ ] **G2.3 Sync réseau** : payloads serveur vers client pour Couleur et jauges. *Fini quand* : le client affiche toujours la valeur du serveur.
 - [ ] **G2.4 Sauvegarde versionnée** : état du monde (issue de chaque jalon, zones contrôlées, époque) avec un numéro de version de schéma. *Fini quand* : un monde se recharge et le numéro de version est lu.
 - [ ] **G2.5 Commandes debug** : `/rr couleur`, `/rr jauge`, `/rr jalon`, `/rr etat`. *Fini quand* : tout l'état se lit et se modifie en jeu.

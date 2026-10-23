@@ -10,6 +10,14 @@ base {
 }
 
 repositories {
+    // JUnit seulement depuis Maven Central : Gradle n'interroge pas les serveurs Mojang pour ces groupes
+    // (bloqués sur le réseau de l'école, et inutiles ici)
+    exclusiveContent {
+        forRepository { mavenCentral() }
+        filter {
+            includeGroupByRegex "org\\.(junit|opentest4j|apiguardian)(\\..*)?"
+        }
+    }
 }
 
 loom {
@@ -38,6 +46,15 @@ dependencies {
     minecraft "com.mojang:minecraft:${project.minecraft_version}"
     implementation "net.fabricmc:fabric-loader:${project.loader_version}"
     implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+
+    // Tests unitaires de la logique pure (./gradlew test, lancés aussi par build)
+    testImplementation platform("org.junit:junit-bom:5.14.2")
+    testImplementation "org.junit.jupiter:junit-jupiter"
+    testRuntimeOnly "org.junit.platform:junit-platform-launcher"
+}
+
+test {
+    useJUnitPlatform()
 }
 
 processResources {

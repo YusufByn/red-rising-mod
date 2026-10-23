@@ -27,7 +27,7 @@ Mod Fabric fan-made, solo, gratuit et non commercial, dans l'univers Red Rising 
    - le critère « fini quand » est vérifié en jeu : de préférence par un test client automatisé dans `src/gametest` (`./gradlew runClientGameTest`, un vrai client s'ouvre, joue le scénario et se ferme ; non lancé par `build` ni par la CI), sinon `./gradlew runClient` puis lecture de `run/logs/latest.log` ;
    - la case est cochée dans `docs/roadmap.md` avec la date ;
    - un commit est fait : `G2.1 : <résumé court>`.
-5. Tests unitaires (JUnit) pour la logique pure : moteur du test de naissance, bornes des jauges, choix d'issue des jalons.
+5. Tests unitaires (JUnit 5, `src/test`, lancés par `./gradlew build`) pour la logique pure : moteur du test de naissance, bornes des jauges, choix d'issue des jalons.
 6. Commentaires et textes en français. Toute clé de traduction existe en `fr_fr` et `en_us`.
 
 ## Pistes techniques pour G2
@@ -44,6 +44,7 @@ Mod Fabric fan-made, solo, gratuit et non commercial, dans l'univers Red Rising 
 - Les erreurs `401` et `Realms` dans les logs de `runClient` sont normales (compte hors ligne en dev).
 - `Minecraft.screen` n'existe plus en 26.2 : l'écran courant est `minecraft.gui.screen()`.
 - Fabric recopie les attachments du joueur dans sa propre écoute de `ServerPlayerEvents.AFTER_RESPAWN` : pour lire une donnée du joueur à la réapparition, s'enregistrer dans une phase ordonnée après `Event.DEFAULT_PHASE` (voir `CouleurJoueur`).
+- Nouvelle dépendance hors Minecraft/Fabric (ex. JUnit) : la déclarer dans le bloc `exclusiveContent` de `build.gradle` (Maven Central), sinon Gradle interroge d'abord `libraries.minecraft.net`, bloqué à l'école.
 - Tests client : juste après l'entrée dans le monde, `/kill` n'a pas d'effet. Attendre une centaine de ticks avant.
 
 ## CI
