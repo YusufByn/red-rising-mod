@@ -15,9 +15,9 @@ import net.minecraft.util.StringRepresentable;
  * En revanche, un identifiant ne doit plus jamais changer une fois publié.</p>
  */
 public enum Couleur implements StringRepresentable {
-    OR("or", 0xE8A317),
+    OR("or", 0xFFBA14),
     ARGENT("argent", 0xA9C1E0),
-    CUIVRE("cuivre", 0xC07038),
+    CUIVRE("cuivre", 0xDD8240),
     BLANC("blanc", 0xFFFFFF),
     BLEU("bleu", 0x2F6BFF),
     JAUNE("jaune", 0xFFF35A),
