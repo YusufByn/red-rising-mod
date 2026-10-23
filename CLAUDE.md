@@ -45,6 +45,8 @@ Mod Fabric fan-made, solo, gratuit et non commercial, dans l'univers Red Rising 
 - `Minecraft.screen` n'existe plus en 26.2 : l'écran courant est `minecraft.gui.screen()`.
 - Fabric recopie les attachments du joueur dans sa propre écoute de `ServerPlayerEvents.AFTER_RESPAWN` : pour lire une donnée du joueur à la réapparition, s'enregistrer dans une phase ordonnée après `Event.DEFAULT_PHASE` (voir `CouleurJoueur`).
 - Nouvelle dépendance hors Minecraft/Fabric (ex. JUnit) : la déclarer dans le bloc `exclusiveContent` de `build.gradle` (Maven Central), sinon Gradle interroge d'abord `libraries.minecraft.net`, bloqué à l'école.
+- Bonus d'attributs : modificateurs **permanents** (`addOrReplacePermanentModifier`), pas transitoires. Un modificateur transitoire n'est pas sauvegardé : au rechargement, la vie est relue avant qu'il soit remis, et un bonus de vie est perdu.
+- Capacités d'une Couleur : se déclarent avec `ProfilsCouleurs.declarer(Couleur, ProfilCouleur.builder()...build())`, au même endroit pour chaque Couleur, dans son ticket.
 - Tests client : juste après l'entrée dans le monde, `/kill` n'a pas d'effet. Attendre une centaine de ticks avant.
 
 ## CI

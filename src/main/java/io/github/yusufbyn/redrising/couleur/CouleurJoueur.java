@@ -7,6 +7,7 @@ import net.fabricmc.fabric.api.attachment.v1.AttachmentType;
 import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents;
 import net.fabricmc.fabric.api.event.Event;
 import net.minecraft.resources.Identifier;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Player;
 import org.jspecify.annotations.Nullable;
 
@@ -29,6 +30,12 @@ public final class CouleurJoueur {
                     .syncWith(Couleur.STREAM_CODEC, AttachmentSyncPredicate.all())
     );
 
+    /**
+     * Phase de {@code AFTER_RESPAWN} placée après celle où Fabric recopie les attachments sur le nouveau corps.
+     * Toute écoute de la réapparition qui lit la Couleur ou les jauges doit s'y enregistrer.
+     */
+    public static final Identifier PHASE_APRES_COPIE = Identifier.fromNamespaceAndPath(RedRising.MOD_ID, "apres_copie");
+
     private CouleurJoueur() {
     }
 
@@ -37,8 +44,12 @@ public final class CouleurJoueur {
         return player.getAttached(COULEUR);
     }
 
+    /** Change la Couleur ; côté serveur, les capacités passives suivent aussitôt. */
     public static void set(Player player, Couleur couleur) {
         player.setAttached(COULEUR, couleur);
+        if (player instanceof ServerPlayer joueur) {
+            CapacitesPassives.appliquer(joueur);
+        }
     }
 
     /** Appelé depuis {@link RedRising#onInitialize()} : charge la classe (donc enregistre l'attachment) et branche les événements. */
@@ -58,9 +69,8 @@ public final class CouleurJoueur {
 
         // Fabric recopie les attachments dans sa propre écoute d'AFTER_RESPAWN (phase par défaut) :
         // on se place dans une phase après la sienne, sinon on risque de lire le nouveau corps encore vide.
-        Identifier apresCopie = Identifier.fromNamespaceAndPath(RedRising.MOD_ID, "apres_copie");
-        ServerPlayerEvents.AFTER_RESPAWN.addPhaseOrdering(Event.DEFAULT_PHASE, apresCopie);
-        ServerPlayerEvents.AFTER_RESPAWN.register(apresCopie, (oldPlayer, newPlayer, alive) -> {
+        ServerPlayerEvents.AFTER_RESPAWN.addPhaseOrdering(Event.DEFAULT_PHASE, PHASE_APRES_COPIE);
+        ServerPlayerEvents.AFTER_RESPAWN.register(PHASE_APRES_COPIE, (oldPlayer, newPlayer, alive) -> {
             Couleur couleur = get(newPlayer);
             RedRising.LOGGER.info("Couleur de {} après réapparition : {}", newPlayer.getPlainTextName(),
                     couleur == null ? "aucune" : couleur.getSerializedName());

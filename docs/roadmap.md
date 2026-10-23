@@ -36,7 +36,7 @@ Rien de visible pour le joueur ici, mais tout le reste se branche dessus.
 
 Un système générique pour déclarer force, exclusivités et faiblesse. Les 14 Couleurs s'écriront ensuite avec, sans recoder la mécanique.
 
-- [ ] **G3.1 Capacités passives** : attributs (vitesse, dégâts, vie, minage), effets permanents. *Fini quand* : une Couleur de test déclarée en quelques lignes applique ses bonus.
+- [x] **G3.1 Capacités passives** : attributs (vitesse, dégâts, vie, minage), effets permanents. Fait le 23/10 : `ProfilCouleur` (builder) déclaré avec `ProfilsCouleurs.declarer`, appliqué par `CapacitesPassives` (connexion, réapparition, changement de Couleur, effets entretenus). Vérifié par `CapacitesPassivesTest` avec une Couleur de test déclarée dans le mod de test. *Fini quand* : une Couleur de test déclarée en quelques lignes applique ses bonus.
 - [ ] **G3.2 Restrictions d'accès** : objets, crafts, enchantement, blocs utilisables par Couleur. *Fini quand* : une Couleur de test ne peut pas enchanter ni lire un livre.
 - [ ] **G3.3 Capacités actives** : touche d'action, cooldown, sync client. *Fini quand* : une capacité de test se déclenche avec cooldown.
 - [ ] **G3.4 Faiblesses** : malus déclaratifs (fragilité, lenteur, malus selon l'environnement). *Fini quand* : un malus conditionnel fonctionne (ex. malus en surface).
