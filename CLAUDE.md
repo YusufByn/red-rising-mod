@@ -24,7 +24,7 @@ Mod Fabric fan-made, solo, gratuit et non commercial, dans l'univers Red Rising 
 3. Avant d'écrire du code qui touche une API Minecraft ou Fabric, vérifie la signature dans les sources réelles (sources générées par Loom, ou les jars dans le cache Gradle). 26.2 est récent : ne te fie pas à la mémoire d'anciennes versions (1.20, 1.21), beaucoup de noms ont changé.
 4. Un sous-ticket est fini seulement quand :
    - `./gradlew build` passe sans erreur ;
-   - le critère « fini quand » est vérifié en jeu (`./gradlew runClient`, puis lecture de `run/logs/latest.log`) ;
+   - le critère « fini quand » est vérifié en jeu : de préférence par un test client automatisé dans `src/gametest` (`./gradlew runClientGameTest`, un vrai client s'ouvre, joue le scénario et se ferme ; non lancé par `build` ni par la CI), sinon `./gradlew runClient` puis lecture de `run/logs/latest.log` ;
    - la case est cochée dans `docs/roadmap.md` avec la date ;
    - un commit est fait : `G2.1 : <résumé court>`.
 5. Tests unitaires (JUnit) pour la logique pure : moteur du test de naissance, bornes des jauges, choix d'issue des jalons.
@@ -42,6 +42,9 @@ Mod Fabric fan-made, solo, gratuit et non commercial, dans l'univers Red Rising 
 - **Configuration cache Gradle activé** : dans `build.gradle`, ne pas lire `inputs` ou `project` à l'intérieur des closures exécutées au moment des tâches. Passer par une variable locale (voir `processResources`).
 - Toujours passer par `./gradlew` (wrapper Gradle 9.8.2 committé), jamais un `gradle` système.
 - Les erreurs `401` et `Realms` dans les logs de `runClient` sont normales (compte hors ligne en dev).
+- `Minecraft.screen` n'existe plus en 26.2 : l'écran courant est `minecraft.gui.screen()`.
+- Fabric recopie les attachments du joueur dans sa propre écoute de `ServerPlayerEvents.AFTER_RESPAWN` : pour lire une donnée du joueur à la réapparition, s'enregistrer dans une phase ordonnée après `Event.DEFAULT_PHASE` (voir `CouleurJoueur`).
+- Tests client : juste après l'entrée dans le monde, `/kill` n'a pas d'effet. Attendre une centaine de ticks avant.
 
 ## CI
 

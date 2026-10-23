@@ -23,6 +23,16 @@ loom {
     }
 }
 
+fabricApi {
+    // Tests en jeu automatisés (source set src/gametest, tâche runClientGameTest)
+    configureTests {
+        createSourceSet = true
+        modId = "redrising-gametest"
+        enableGameTests = false
+        enableClientGameTests = true
+    }
+}
+
 dependencies {
     // 26.x n'est plus obfusqué : pas de ligne mappings, pas de modImplementation
     minecraft "com.mojang:minecraft:${project.minecraft_version}"

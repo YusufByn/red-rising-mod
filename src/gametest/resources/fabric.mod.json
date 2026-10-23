@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "id": "redrising-gametest",
+  "version": "${version}",
+  "name": "Red Rising (tests en jeu)",
+  "environment": "*",
+  "entrypoints": {
+    "fabric-client-gametest": ["io.github.yusufbyn.redrising.gametest.CouleurPersistanceTest"]
+  },
+  "depends": {
+    "redrising": "*"
+  }
+}

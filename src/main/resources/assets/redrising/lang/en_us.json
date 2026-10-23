@@ -1,3 +1,17 @@
 {
-  "modmenu.nameTranslation.redrising": "Red Rising"
+  "modmenu.nameTranslation.redrising": "Red Rising",
+  "couleur.redrising.or": "Gold",
+  "couleur.redrising.argent": "Silver",
+  "couleur.redrising.cuivre": "Copper",
+  "couleur.redrising.blanc": "White",
+  "couleur.redrising.bleu": "Blue",
+  "couleur.redrising.jaune": "Yellow",
+  "couleur.redrising.vert": "Green",
+  "couleur.redrising.violet": "Violet",
+  "couleur.redrising.orange": "Orange",
+  "couleur.redrising.gris": "Gray",
+  "couleur.redrising.obsidian": "Obsidian",
+  "couleur.redrising.marron": "Brown",
+  "couleur.redrising.rose": "Pink",
+  "couleur.redrising.rouge": "Red"
 }
