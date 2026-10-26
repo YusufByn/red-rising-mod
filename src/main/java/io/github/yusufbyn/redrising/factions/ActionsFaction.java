@@ -8,6 +8,7 @@ import net.fabricmc.fabric.api.attachment.v1.AttachmentRegistry;
 import net.fabricmc.fabric.api.attachment.v1.AttachmentType;
 import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
+import net.fabricmc.fabric.api.event.player.PlayerBlockBreakEvents;
 import net.fabricmc.fabric.api.event.player.UseEntityCallback;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.core.component.DataComponents;
@@ -37,7 +38,8 @@ import java.util.UUID;
  *     <li><b>Tuer</b> un PNJ de Couleur.</li>
  *     <li><b>Aider</b> : accroupi, clic droit sur un PNJ de Couleur avec de la nourriture en main ; elle lui est donnée.
  *     Une fois par PNJ et par jour de jeu.</li>
- *     <li><b>Voler</b> : prendre des objets dans un coffre (ou un tonneau) d'un camp ; compté une fois par ouverture.</li>
+ *     <li><b>Voler</b> : prendre des objets dans un coffre (ou un tonneau) d'un camp ; compté une fois par ouverture.
+ *     Casser un coffre d'un camp compte aussi comme un vol (sinon on viderait un poste en perçant un mur).</li>
  *     <li><b>Dénoncer</b> : accroupi, clic droit à mains vides sur un PNJ Gris ; le PNJ du Rising le plus proche
  *     (à moins de {@value EffetsActions#PORTEE_DENONCIATION} blocs) est arrêté.</li>
  *     <li>Chaque jour de jeu, la Suspicion retombe un peu.</li>
@@ -95,6 +97,13 @@ public final class ActionsFaction {
                 return InteractionResult.SUCCESS;
             }
             return InteractionResult.PASS;
+        });
+
+        PlayerBlockBreakEvents.AFTER.register((monde, joueur, pos, etat, bloc) -> {
+            Camp camp = bloc == null ? null : bloc.getAttached(CAMP);
+            if (camp != null && joueur instanceof ServerPlayer serveur) {
+                agir(serveur, "casse un coffre " + camp.getSerializedName(), EffetsActions.voler(camp));
+            }
         });
 
         ServerTickEvents.END_SERVER_TICK.register(server -> {

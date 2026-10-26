@@ -66,6 +66,9 @@ Mod Fabric fan-made, solo, gratuit et non commercial, dans l'univers Red Rising 
 - Rendu d'une entité dont l'état de rendu ne garde pas l'entité (villageois...) : recopier la donnée voulue dans l'état avec un `RenderStateDataKey` de Fabric (`setData`), depuis un mixin sur `extractRenderState` (voir `VillagerRendererMixin`).
 - Tests client : le serveur avance au même pas que le client, `/tick sprint` n'accélère rien. Pour sauter du temps, avancer l'horloge du monde (`((ServerLevelData) level.getLevelData()).setGameTime(...)`, voir `ActionsFactionTest`).
 - Actions sur les jauges (G5.2) : toutes les valeurs dans `factions/EffetsActions` (logique pure, testée), les déclencheurs dans `factions/ActionsFaction`. Nouvelle action = une méthode dans l'un, un événement dans l'autre.
+- Seuils d'accès aux structures : tous dans `factions/Acces` (un seul endroit, valeurs en 🟡 dans le GDD).
+- Refuser l'ouverture d'une porte côté serveur (`UseBlockCallback` → `FAIL`) : le client l'a déjà ouverte de son côté, lui renvoyer l'état des deux moitiés (`ClientboundBlockUpdatePacket`, voir `PosteSociete`).
+- Construire une structure par le code : poser les blocs avec `Block.UPDATE_CLIENTS | Block.UPDATE_KNOWN_SHAPE`, sinon une porte posée moitié par moitié se casse.
 - Commandes `/rr ... [joueur]` : l'argument vise un seul joueur. Depuis la console ou un test, `@a` est refusé : écrire `@a[limit=1]` ou le nom.
 
 ## CI

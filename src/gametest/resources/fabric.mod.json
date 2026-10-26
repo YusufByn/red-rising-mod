@@ -21,6 +21,7 @@
       "io.github.yusufbyn.redrising.gametest.TestNaissanceEnJeuTest",
       "io.github.yusufbyn.redrising.gametest.PnjCouleurTest",
       "io.github.yusufbyn.redrising.gametest.ActionsFactionTest",
+      "io.github.yusufbyn.redrising.gametest.PosteSocieteTest",
       "io.github.yusufbyn.redrising.gametest.CapacitesPassivesTest"
     ]
   },

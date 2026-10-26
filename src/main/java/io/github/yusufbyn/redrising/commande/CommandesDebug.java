@@ -16,6 +16,7 @@ import io.github.yusufbyn.redrising.couleur.Naissance;
 import io.github.yusufbyn.redrising.couleur.TestEnCours;
 import io.github.yusufbyn.redrising.data.EtatMonde;
 import io.github.yusufbyn.redrising.data.EtatMondeServeur;
+import io.github.yusufbyn.redrising.factions.Acces;
 import io.github.yusufbyn.redrising.factions.ActionsFaction;
 import io.github.yusufbyn.redrising.factions.Camp;
 import io.github.yusufbyn.redrising.factions.Jauge;
@@ -23,6 +24,7 @@ import io.github.yusufbyn.redrising.factions.Jauges;
 import io.github.yusufbyn.redrising.factions.JaugesJoueur;
 import io.github.yusufbyn.redrising.jalons.Epoque;
 import io.github.yusufbyn.redrising.jalons.Issue;
+import io.github.yusufbyn.redrising.monde.PosteSociete;
 import io.github.yusufbyn.redrising.pnj.PnjCouleur;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.minecraft.commands.CommandSourceStack;
@@ -44,9 +46,11 @@ import net.minecraft.world.level.block.entity.ChestBlockEntity;
 import org.jspecify.annotations.Nullable;
 
 import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * Commandes de debug {@code /rr} (G2.5), réservées aux joueurs avec la triche activée.
@@ -64,6 +68,8 @@ public final class CommandesDebug {
             entite -> Component.translatable("commande.redrising.pnj.pas_villageois", entite));
     private static final DynamicCommandExceptionType PAS_UN_COFFRE = new DynamicCommandExceptionType(
             pos -> Component.translatable("commande.redrising.coffre.absent", pos));
+    private static final DynamicCommandExceptionType PAS_DE_POSTE = new DynamicCommandExceptionType(
+            pos -> Component.translatable("commande.redrising.structure.absente", pos));
     private static final SimpleCommandExceptionType PNJ_REFUSE = new SimpleCommandExceptionType(
             Component.translatable("commande.redrising.pnj.refuse"));
     private static final DynamicCommandExceptionType ZONE_ABSENTE = new DynamicCommandExceptionType(
@@ -109,6 +115,12 @@ public final class CommandesDebug {
                                 .then(Commands.argument("pnj", EntityArgument.entity())
                                         .then(argEnum("camp", Camp.values()).executes(ctx -> changerCampPnj(ctx, lireEnum(ctx, "camp", Camp.values()))))
                                         .then(Commands.literal("aucun").executes(ctx -> changerCampPnj(ctx, null))))))
+                .then(Commands.literal("structure")
+                        .then(Commands.literal("list").executes(CommandesDebug::listerPostes))
+                        .then(Commands.literal("poste")
+                                .then(Commands.argument("pos", BlockPosArgument.blockPos()).executes(CommandesDebug::construirePoste)))
+                        .then(Commands.literal("oublier")
+                                .then(Commands.argument("pos", BlockPosArgument.blockPos()).executes(CommandesDebug::oublierPoste))))
                 .then(Commands.literal("coffre")
                         .then(Commands.literal("get")
                                 .then(Commands.argument("pos", BlockPosArgument.blockPos()).executes(CommandesDebug::lireCoffre)))
@@ -238,6 +250,33 @@ public final class CommandesDebug {
             pnj.setAttached(ActionsFaction.CAMP, camp);
         }
         ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.pnj.camp", pnj.getDisplayName(), nomCamp(camp)), true);
+        return Command.SINGLE_SUCCESS;
+    }
+
+    // --- Structures (G5.3) ---
+
+    private static int listerPostes(CommandContext<CommandSourceStack> ctx) {
+        List<PosteSociete.Poste> postes = PosteSociete.postes(ctx.getSource().getServer());
+        String liste = postes.stream().map(poste -> poste.porte().toShortString()).collect(Collectors.joining(" ; "));
+        ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.structure.list", postes.size(),
+                Acces.SEUIL_LOYAUTE_SOCIETE, postes.isEmpty() ? Component.translatable("commande.redrising.aucun") : Component.literal(liste)), false);
+        return postes.size();
+    }
+
+    /** Construit un poste de la Société, coin nord-ouest du sol à la position donnée (la porte est au nord). */
+    private static int construirePoste(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        BlockPos pos = BlockPosArgument.getLoadedBlockPos(ctx, ctx.getSource().getServer().overworld(), "pos");
+        PosteSociete.Poste poste = PosteSociete.construire(ctx.getSource().getServer().overworld(), pos);
+        ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.structure.poste", poste.porte().toShortString()), true);
+        return Command.SINGLE_SUCCESS;
+    }
+
+    private static int oublierPoste(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        BlockPos pos = BlockPosArgument.getLoadedBlockPos(ctx, ctx.getSource().getServer().overworld(), "pos");
+        if (!PosteSociete.oublier(ctx.getSource().getServer(), pos)) {
+            throw PAS_DE_POSTE.create(pos.toShortString());
+        }
+        ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.structure.oublier", pos.toShortString()), true);
         return Command.SINGLE_SUCCESS;
     }
 

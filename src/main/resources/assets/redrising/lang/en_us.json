@@ -122,5 +122,10 @@
   "faction.redrising.aide": "The %s NPC accepts your food",
   "faction.redrising.aide.deja": "You already helped this NPC today",
   "faction.redrising.denonce": "The Grays take %s away",
-  "faction.redrising.denonce.personne": "No one to denounce here"
+  "faction.redrising.denonce.personne": "No one to denounce here",
+  "structure.redrising.poste.refuse": "The Society refuses you entry (Loyalty too low)",
+  "commande.redrising.structure.list": "%s Society post(s) (entry from %s Loyalty); doors: %s",
+  "commande.redrising.structure.poste": "Society post built, door at %s",
+  "commande.redrising.structure.oublier": "Post forgotten at %s (blocks remain)",
+  "commande.redrising.structure.absente": "No post at %s"
 }

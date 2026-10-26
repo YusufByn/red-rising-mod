@@ -242,7 +242,7 @@ Deux jauges séparées (pas une barre Société ↔ Rising) pour permettre **l'a
 - ✅ Actions et gestes :
   - **Tuer** un PNJ de Couleur.
   - **Aider** : accroupi, clic droit sur un PNJ de Couleur avec de la **nourriture** en main (pour l'instant) ; elle lui est donnée. Une fois par PNJ et par jour de jeu.
-  - **Voler** : prendre des objets dans un coffre (ou tonneau) d'un camp ; compté une fois par ouverture. Les coffres doubles ne sont pas encore pris en compte.
+  - **Voler** : prendre des objets dans un coffre (ou tonneau) d'un camp ; compté une fois par ouverture. **Casser** un coffre d'un camp compte aussi comme un vol (G5.3 : sinon on vide un poste en perçant un mur). Les coffres doubles ne sont pas encore pris en compte.
   - **Dénoncer** : accroupi, clic droit **à mains vides** sur un PNJ Gris (aider = avec un objet, dénoncer = sans, pas d'ambiguïté) ; le PNJ du Rising le plus proche, à moins de 16 blocs, est arrêté (il disparaît).
   - La **Suspicion retombe d'elle-même** chaque jour de jeu (sinon tout joueur du Rising finit traqué).
 - 🟡 Valeurs (Loyauté / Soutien / Suspicion), à régler en jeu, toutes dans `factions/EffetsActions` :
@@ -256,6 +256,11 @@ Deux jauges séparées (pas une barre Société ↔ Rising) pour permettre **l'a
   - Dénoncer : +5 / −10 / −5.
   - Déclin : Suspicion −2 par jour de jeu (24 000 ticks).
 - Pour l'instant, la Suspicion monte même sans témoin ; les témoins arriveront avec les patrouilles de Gris (G5.5). Les camps des PNJ et des coffres seront posés par les structures (G5.3, G5.4) ; en attendant, `/rr pnj camp` et `/rr coffre`.
+
+### Poste de la Société (G5.3)
+- ✅ Structure générique : une salle en quartz (7×7) avec un comptoir, un PNJ Cuivre (camp Société) et un coffre de la Société. Construite par `/rr structure poste` en attendant la génération (G7.1).
+- 🟡 **Seuil d'entrée : Loyauté 40 ou plus** (à régler en jeu, dans `factions/Acces`). Égal au plafond du Rouge : un Rouge irréprochable entre tout juste, la moindre faute (un vol de la Société) le refoule jusqu'à ce qu'il se rattrape. Un nouveau joueur (50) entre ; tuer un PNJ de l'élite (−15) suffit à être refoulé.
+- ✅ Refoulement : la porte ne s'ouvre pas, avec le message « La Société te refuse l'entrée » ; l'intérieur est surveillé (toutes les demi-secondes) : un joueur refusé qui s'y trouve quand même (mur percé, fenêtre, Loyauté tombée une fois dedans) est reconduit devant l'entrée. Pas d'effet sur les jauges pour une tentative (la Suspicion d'une effraction viendra avec les patrouilles, G5.5).
 
 ### Conséquences
 - Loyauté haute : accès aux domaines, commerces, équipement de la Société (razor réservé aux Or).
