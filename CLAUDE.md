@@ -39,6 +39,7 @@ Mod Fabric fan-made, solo, gratuit et non commercial, dans l'univers Red Rising 
 ## Pièges déjà rencontrés
 
 - **Réseau de l'école** : il bloque les serveurs Mojang et Fabric (minecraft.net, piston-meta.mojang.com, fabricmc.net). Symptôme : `Failed to setup Minecraft ... Failed download after 3 attempts`. Solution : partage de connexion, puis tout reste en cache.
+  Loom rafraîchit le manifeste des versions (`~/.gradle/caches/fabric-loom/mojang_versions_manifest.json`) une fois par jour, et l'efface si le téléchargement échoue : même symptôme, alors que tout le reste est en cache. Sans partage de connexion : `./gradlew ... --offline` (Loom garde alors son cache, quel que soit son âge) ; si le fichier a déjà été effacé, le recréer avec l'entrée de la version 26.2 (sha1 de `~/.gradle/caches/fabric-loom/26.2/mojang_minecraft_info.json`).
 - **Configuration cache Gradle activé** : dans `build.gradle`, ne pas lire `inputs` ou `project` à l'intérieur des closures exécutées au moment des tâches. Passer par une variable locale (voir `processResources`).
 - Toujours passer par `./gradlew` (wrapper Gradle 9.8.2 committé), jamais un `gradle` système.
 - Les erreurs `401` et `Realms` dans les logs de `runClient` sont normales (compte hors ligne en dev).

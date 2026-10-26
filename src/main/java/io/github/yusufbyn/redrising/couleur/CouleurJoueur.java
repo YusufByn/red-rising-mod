@@ -16,7 +16,7 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>Un « attachment » est une donnée que Fabric colle sur une entité : il la sauvegarde avec le joueur
  * ({@code persistent}) et la recopie sur le nouveau corps après la mort ({@code copyOnDeath}).
- * Pas de valeur par défaut : tant que la naissance (G4) n'a pas eu lieu, le joueur n'a pas de Couleur.</p>
+ * Pas de valeur par défaut : tant que la naissance ({@link Naissance}) n'a pas eu lieu, le joueur n'a pas de Couleur.</p>
  *
  * <p>Synchronisée avec tous les clients (G2.3) : la Couleur d'un joueur se verra sur son modèle (G3.5).
  * Fabric envoie la valeur à la connexion, quand un autre joueur arrive en vue, et à chaque {@link #set}.</p>
@@ -54,15 +54,10 @@ public final class CouleurJoueur {
 
     /** Appelé depuis {@link RedRising#onInitialize()} : charge la classe (donc enregistre l'attachment) et branche les événements. */
     public static void init() {
+        // Un joueur sans Couleur à l'arrivée est pris en charge par la naissance (Naissance)
         ServerPlayerEvents.JOIN.register(player -> {
             Couleur couleur = get(player);
-            if (couleur == null) {
-                // PROVISOIRE : en attendant la naissance (G4), une Couleur au hasard pour pouvoir tester la persistance
-                Couleur[] toutes = Couleur.values();
-                couleur = toutes[player.getRandom().nextInt(toutes.length)];
-                set(player, couleur);
-                RedRising.LOGGER.info("Couleur de {} : {} (nouvelle, attribuée au hasard)", player.getPlainTextName(), couleur.getSerializedName());
-            } else {
+            if (couleur != null) {
                 RedRising.LOGGER.info("Couleur de {} : {} (chargée)", player.getPlainTextName(), couleur.getSerializedName());
             }
         });

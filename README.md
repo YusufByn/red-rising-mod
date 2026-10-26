@@ -30,6 +30,8 @@ Code commun dans `src/main`, code client uniquement (HUD, écrans, rendu) dans `
 ## Création du monde
 
 - Onglet Jeu > « Naissance » : Test (par défaut, test de personnalité caché) ou Choix libre (menu). Règle de jeu `redrising:mode_naissance`.
+- En choix libre, un joueur sans Couleur choisit la sienne à son arrivée dans le monde (écran impossible à fermer sans choisir). Le choix est définitif ; seul `/rr couleur` peut la changer ensuite.
+- En mode Test, en attendant le test de naissance (G4.3, G4.4), la Couleur est tirée au hasard.
 
 ## Contrôles
 

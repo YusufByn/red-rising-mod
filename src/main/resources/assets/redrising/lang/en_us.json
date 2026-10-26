@@ -55,5 +55,8 @@
   "gamerule.redrising.mode_naissance.description": "How each player gets their Color: hidden personality test, or free choice from a menu.",
   "gamerule.redrising.mode_naissance.test": "Test",
   "gamerule.redrising.mode_naissance.choix_libre": "Free choice",
-  "commande.redrising.etat.naissance": "Birth mode changed to %s (for future births)"
+  "commande.redrising.etat.naissance": "Birth mode changed to %s (for future births)",
+  "naissance.redrising.choix.titre": "Choose your Color",
+  "naissance.redrising.choix.explication": "This choice is final.",
+  "naissance.redrising.nee": "Your Color: %s"
 }

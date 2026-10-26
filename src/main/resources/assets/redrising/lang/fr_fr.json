@@ -55,5 +55,8 @@
   "gamerule.redrising.mode_naissance.description": "Comment chaque joueur reçoit sa Couleur : test de personnalité caché, ou choix libre dans un menu.",
   "gamerule.redrising.mode_naissance.test": "Test",
   "gamerule.redrising.mode_naissance.choix_libre": "Choix libre",
-  "commande.redrising.etat.naissance": "Mode de naissance changé en %s (pour les prochaines naissances)"
+  "commande.redrising.etat.naissance": "Mode de naissance changé en %s (pour les prochaines naissances)",
+  "naissance.redrising.choix.titre": "Choisis ta Couleur",
+  "naissance.redrising.choix.explication": "Ce choix est définitif.",
+  "naissance.redrising.nee": "Ta Couleur : %s"
 }

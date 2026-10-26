@@ -1,6 +1,9 @@
 package io.github.yusufbyn.redrising.gametest;
 
 import io.github.yusufbyn.redrising.RedRising;
+import io.github.yusufbyn.redrising.client.EcranChoixCouleur;
+import io.github.yusufbyn.redrising.couleur.Couleur;
+import io.github.yusufbyn.redrising.couleur.CouleurJoueur;
 import io.github.yusufbyn.redrising.couleur.ModeNaissance;
 import io.github.yusufbyn.redrising.couleur.Naissance;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
@@ -39,9 +42,9 @@ public class ModeNaissanceTest implements FabricClientGameTest {
         verifier("après un clic sur le bouton", ModeNaissance.CHOIX_LIBRE, choisi);
         OutilsTest.garderCapture(context.takeScreenshot("creation-monde-naissance"));
 
-        // Créer le monde et y entrer
+        // Créer le monde et y entrer : en choix libre, l'écran de choix de la Couleur s'ouvre (G4.2)
         context.clickScreenButton("selectWorld.create");
-        context.waitFor(mc -> mc.player != null && mc.gui.screen() == null, 20 * 60);
+        context.waitFor(mc -> mc.player != null && mc.gui.screen() instanceof EcranChoixCouleur, 20 * 60);
         verifier("dans le monde créé", ModeNaissance.CHOIX_LIBRE,
                 context.computeOnClient(mc -> Naissance.mode(Objects.requireNonNull(mc.getSingleplayerServer()))));
         Path dossier = context.computeOnClient(mc -> Objects.requireNonNull(mc.getSingleplayerServer()).getWorldPath(LevelResource.ROOT));
@@ -51,11 +54,15 @@ public class ModeNaissanceTest implements FabricClientGameTest {
         quitterMonde(context);
         verifierFichier(dossier.resolve("data/minecraft/game_rules.dat"));
 
-        // Rouvrir le monde : l'option est relue
+        // Rouvrir le monde : l'option est relue, et le joueur parti sans choisir retrouve l'écran de choix, toujours sans Couleur
         context.runOnClient(mc -> mc.createWorldOpenFlows().openWorld(nomDossier, () -> mc.gui.setScreen(new TitleScreen())));
-        context.waitFor(mc -> mc.player != null && mc.gui.screen() == null, 20 * 60);
+        context.waitFor(mc -> mc.player != null && mc.gui.screen() instanceof EcranChoixCouleur, 20 * 60);
         verifier("après réouverture", ModeNaissance.CHOIX_LIBRE,
                 context.computeOnClient(mc -> Naissance.mode(Objects.requireNonNull(mc.getSingleplayerServer()))));
+        Couleur couleur = context.computeOnClient(mc -> CouleurJoueur.get(Objects.requireNonNull(mc.getSingleplayerServer()).getPlayerList().getPlayers().getFirst()));
+        if (couleur != null) {
+            throw new AssertionError("Couleur reçue sans avoir choisi : " + couleur);
+        }
         quitterMonde(context);
 
         RedRising.LOGGER.info("[G4.1] OK : mode de naissance choisi à la création, enregistré dans le monde et relu");
