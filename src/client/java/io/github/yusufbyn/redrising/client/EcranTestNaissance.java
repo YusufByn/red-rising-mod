@@ -22,7 +22,8 @@ import java.util.List;
 public final class EcranTestNaissance extends EcranNaissance {
     public static final String CLE_TITRE = "naissance.redrising.test.titre";
 
-    private static final int LARGEUR_MAX = 320;
+    /** Largeur des boutons de réponse (moins sur un petit écran). */
+    public static final int LARGEUR_MAX = 320;
     private static final int MARGE = 12;
 
     private final List<Integer> choix = new ArrayList<>();

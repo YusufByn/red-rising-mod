@@ -49,7 +49,7 @@ Un système générique pour déclarer force, exclusivités et faiblesse. Les 14
 - [x] **G4.3 Moteur du test** : 7 questions, 4 réponses, 2 points cachés par réponse, égalité au hasard. Le script Python du GDD devient un test unitaire Java. Fait le 26/10 : `couleur/TestPersonnalite` (paires du GDD, points, ex aequo, tirage), test unitaire `TestPersonnaliteTest` sur les 16 384 façons de répondre : de 6,82 % (Rouge) à 7,46 % (Or). *Fini quand* : le test unitaire retrouve 6,8 % à 7,5 % par Couleur.
 - [x] **G4.4 Interface du test** : questions à l'écran, barème invisible, une relance autorisée. Fait le 26/10 : en mode Test, le joueur sans Couleur passe les 7 questions (textes du GDD, en attendant G4.6), le serveur compte les points et montre le résultat, à accepter ou à refaire une fois (tout le test). Résultat en attente et relance gardés sur le joueur (se déconnecter ne rend pas la relance). `/rr naissance get|reset`. Vérifié par `TestNaissanceEnJeuTest` (vrais clics, relance unique, rechargement, acceptation). *Fini quand* : un test complet donne une Couleur.
 - [x] **G4.5 Scène Dive to the Heart** : décor d'ouverture autour du test. Fait le 26/10 : dimension `redrising:scene_naissance` (vide noir, brouillard), vitrail rond aux 14 Couleurs sur un pilier, caméra derrière le joueur et interface cachée pendant le test ; retour au point d'apparition une fois né (aussi par `/rr couleur set`). Vérifié par `TestNaissanceEnJeuTest` (joueur dans la scène pendant tout le test, dans l'Overworld après acceptation). *Fini quand* : le test se déroule dans la scène.
-- [ ] **G4.6 Reformulation des 7 questions** : ton à retravailler, paires intouchables. *Fini quand* : textes validés, script relancé si une paire a bougé.
+- [x] **G4.6 Reformulation des 7 questions** : ton à retravailler, paires intouchables. Fait le 26/10 : textes validés par Yusuf (voix de la scène, tutoiement, neutres en genre), en français et en anglais ; aucune paire n'a bougé, `TestPersonnaliteTest` inchangé et vert. *Fini quand* : textes validés, script relancé si une paire a bougé.
 
 La question Or (promotion) et le spawn par région arrivent avec leurs régions (G7 à G13).
 
@@ -220,6 +220,7 @@ Une fois les 14 Couleurs jouables, on construit ce qui les relie : l'Institut, l
 - [ ] **G17.3 Textures et modèles finaux** (Blockbench). *Fini quand* : plus aucun placeholder.
 - [ ] **G17.4 Traduction EN** complète. *Fini quand* : aucune clé de traduction manquante.
 - [ ] **G17.5 Performance** : génération de monde et PNJ. *Fini quand* : pas de lag notable sur une machine moyenne.
+- [ ] **G17.6 Finitions de la naissance** (relevé en G4.5) : sur le vitrail, certaines Couleurs partagent un verre (Or et Jaune en jaune, Cuivre et Orange en orange, faute de teintures) ; sur l'écran des questions, les 4 boutons cachent le bas du joueur. *Fini quand* : chaque Couleur a sa teinte propre sur le vitrail et le joueur reste visible en entier pendant les questions.
 
 ### G18 Publication v1
 

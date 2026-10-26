@@ -1,5 +1,7 @@
 package io.github.yusufbyn.redrising.gametest;
 
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import io.github.yusufbyn.redrising.RedRising;
 import io.github.yusufbyn.redrising.client.EcranResultatNaissance;
 import io.github.yusufbyn.redrising.client.EcranTestNaissance;
@@ -18,6 +20,11 @@ import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import org.jspecify.annotations.Nullable;
 import org.lwjgl.glfw.GLFW;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
 import java.util.Objects;
 
 /**
@@ -36,6 +43,8 @@ public class TestNaissanceEnJeuTest implements FabricClientGameTest {
     @Override
     public void runTest(ClientGameTestContext context) {
         TestWorldSave sauvegarde;
+
+        verifierLargeurDesTextes(context);
 
         // Monde par défaut : mode Test
         try (TestSingleplayerContext monde = context.worldBuilder().create()) {
@@ -101,6 +110,34 @@ public class TestNaissanceEnJeuTest implements FabricClientGameTest {
         }
         RedRising.LOGGER.info("[G4.4] OK : test complet passé par les écrans, relance unique, Couleur Jaune acceptée");
         RedRising.LOGGER.info("[G4.5] OK : test passé dans la scène de naissance, retour au point d'apparition une fois né");
+    }
+
+    /**
+     * Chaque réponse tient sur son bouton, en français comme en anglais (G4.6). Le client de test est en anglais :
+     * on lit les deux fichiers de langue et on mesure chaque texte avec la police du jeu.
+     */
+    private static void verifierLargeurDesTextes(ClientGameTestContext context) {
+        int largeurUtile = EcranTestNaissance.LARGEUR_MAX - 8; // marge du texte dans le bouton
+        for (String langue : new String[]{"fr_fr", "en_us"}) {
+            JsonObject textes;
+            try (InputStream fichier = TestNaissanceEnJeuTest.class.getResourceAsStream("/assets/redrising/lang/" + langue + ".json")) {
+                textes = JsonParser.parseReader(new InputStreamReader(Objects.requireNonNull(fichier, langue), StandardCharsets.UTF_8)).getAsJsonObject();
+            } catch (IOException e) {
+                throw new UncheckedIOException(e);
+            }
+            int plusLarge = 0;
+            for (int question = 0; question < TestPersonnalite.QUESTIONS.size(); question++) {
+                for (int reponse = 0; reponse < TestPersonnalite.NB_REPONSES; reponse++) {
+                    String texte = textes.get(TestPersonnalite.cleReponse(question, reponse)).getAsString();
+                    int largeur = context.computeOnClient(mc -> mc.font.width(texte));
+                    if (largeur > largeurUtile) {
+                        throw new AssertionError(langue + " : réponse trop longue pour son bouton (" + largeur + " > " + largeurUtile + ") : " + texte);
+                    }
+                    plusLarge = Math.max(plusLarge, largeur);
+                }
+            }
+            RedRising.LOGGER.info("[G4.6] {} : réponse la plus large {} px sur {}", langue, plusLarge, largeurUtile);
+        }
     }
 
     /** Clique, question après question, sur la réponse voulue (par son texte). */

@@ -60,49 +60,51 @@ Option à la création du monde :
 
 ⚠️ **Les formulations peuvent changer librement. Les paires de Couleurs, non : toute modification d'une paire impose de relancer le script** (depuis G4.3 : `./gradlew build`, qui lance `TestPersonnaliteTest`).
 
-### Questions ✅ (formulations à retravailler pour le ton)
+### Questions ✅ (formulations validées le 26/10, G4.6)
 
-**1. Une tempête approche. Que fais-tu ?**
-- Je renforce l'abri → Orange, Rouge
-- Je donne les ordres → Or, Gris
-- Je soigne ceux qui sont déjà blessés → Jaune, Marron
-- J'étudie d'où elle vient → Vert, Bleu
+La voix de la scène s'adresse au joueur, au tutoiement. Textes neutres en genre (la question 5 est une épitaphe au passé simple). Version anglaise dans `en_us.json`.
 
-**2. On te donne un seul outil pour toute ta vie.**
-- Une lame → Obsidian, Or
-- Une clé à molette → Orange, Vert
-- Un pinceau → Violet, Blanc
-- Une bourse pleine → Argent, Cuivre
+**1. Une tempête de poussière fond sur la colonie. Il te reste une heure.**
+- J'étaie les murs et je cloue les volets. → Orange, Rouge
+- Je dis à chacun où se tenir. → Or, Gris
+- Je m'occupe de ceux qui sont déjà blessés. → Jaune, Marron
+- Je cherche à comprendre d'où elle vient. → Vert, Bleu
 
-**3. Quelqu'un t'a trahi.**
-- Je le frappe, maintenant → Obsidian, Rouge
-- Je le fais juger → Blanc, Cuivre
-- Je le ruine sans qu'il sache d'où ça vient → Argent, Rose
-- Je pars, loin → Bleu, Violet
+**2. Tu ne garderas qu'un seul objet, toute ta vie. Lequel ?**
+- Une lame. → Obsidian, Or
+- Une clé à molette. → Orange, Vert
+- Un pinceau. → Violet, Blanc
+- Une bourse pleine. → Argent, Cuivre
 
-**4. Où te sens-tu le mieux ?**
-- Sous terre, dans la chaleur → Rouge, Orange
-- Dans le ciel → Bleu, Or
-- Dans la foule d'une cité → Rose, Argent
-- Dans le silence d'un temple ou d'un labo → Jaune, Blanc
+**3. Quelqu'un en qui tu avais confiance te trahit.**
+- Je frappe. Tout de suite. → Obsidian, Rouge
+- J'exige un jugement. → Blanc, Cuivre
+- Je le ruine, sans qu'on remonte jusqu'à moi. → Argent, Rose
+- Je pars, loin, sans me retourner. → Bleu, Violet
 
-**5. Que dira-t-on de toi à ta mort ?**
-- Il n'a jamais reculé → Obsidian, Gris
-- Il a sauvé des vies → Jaune, Marron
-- Il a construit quelque chose qui dure → Vert, Violet
-- Il a changé le monde → Or, Rose
+**4. Ferme les yeux. Où te sens-tu chez toi ?**
+- Sous terre, dans la chaleur de la roche. → Rouge, Orange
+- Dans le ciel, au-dessus de tout. → Bleu, Or
+- Au cœur d'une cité, dans la foule. → Rose, Argent
+- Dans le silence d'un temple ou d'un laboratoire. → Jaune, Blanc
 
-**6. On te donne un ordre injuste.**
-- J'obéis, c'est la règle → Gris, Cuivre
-- J'obéis en apparence et je fais autre chose → Rose, Vert
-- Je refuse en face → Obsidian, Rouge
-- Je négocie → Argent, Marron
+**5. Que gravera-t-on sur ta tombe ?**
+- « Ne recula jamais. » → Obsidian, Gris
+- « Sauva bien des vies. » → Jaune, Marron
+- « Bâtit ce qui dure encore. » → Vert, Violet
+- « Changea le monde. » → Or, Rose
 
-**7. Une nuit sans sommeil. Que fais-tu ?**
-- Je répare ce qui est cassé → Orange, Marron
-- Je fais ma ronde, tout doit être en ordre → Cuivre, Gris
-- Je regarde les étoiles → Bleu, Violet
-- Je veille un malade ou je prie → Jaune, Blanc
+**6. Un supérieur te donne un ordre injuste.**
+- J'obéis. Sans ordre, tout s'écroule. → Gris, Cuivre
+- Je fais mine d'obéir, et je fais autre chose. → Rose, Vert
+- Je refuse, en face. → Obsidian, Rouge
+- Je négocie un arrangement. → Argent, Marron
+
+**7. Le sommeil ne vient pas. Que fais-tu de ta nuit ?**
+- Je répare ce qui est cassé. → Orange, Marron
+- Je fais ma ronde : tout doit être en ordre. → Cuivre, Gris
+- Je regarde les étoiles. → Bleu, Violet
+- Je veille un malade, ou je prie. → Jaune, Blanc
 
 ### Question supplémentaire pour les Or ✅
 Choix (pas de hasard) : **promotion précédente** ou **promotion de Darrow** (voir section 7).

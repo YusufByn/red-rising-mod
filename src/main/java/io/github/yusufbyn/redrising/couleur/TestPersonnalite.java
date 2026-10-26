@@ -33,19 +33,19 @@ public final class TestPersonnalite {
 
     /** Dans l'ordre du GDD ; les réponses aussi (le joueur ne voit pas les Couleurs). */
     public static final List<Question> QUESTIONS = List.of(
-            // 1. Une tempête approche : renforcer l'abri, donner les ordres, soigner, étudier d'où elle vient
+            // 1. Tempête de poussière sur la colonie : étayer les murs, dire à chacun où se tenir, s'occuper des blessés, comprendre d'où elle vient
             question(r(ORANGE, ROUGE), r(OR, GRIS), r(JAUNE, MARRON), r(VERT, BLEU)),
-            // 2. Un seul outil pour toute ta vie : lame, clé à molette, pinceau, bourse pleine
+            // 2. Un seul objet pour toute ta vie : lame, clé à molette, pinceau, bourse pleine
             question(r(OBSIDIAN, OR), r(ORANGE, VERT), r(VIOLET, BLANC), r(ARGENT, CUIVRE)),
-            // 3. Quelqu'un t'a trahi : frapper, faire juger, ruiner en secret, partir
+            // 3. Trahison : frapper tout de suite, exiger un jugement, ruiner sans laisser de trace, partir loin
             question(r(OBSIDIAN, ROUGE), r(BLANC, CUIVRE), r(ARGENT, ROSE), r(BLEU, VIOLET)),
-            // 4. Où te sens-tu le mieux : sous terre, dans le ciel, dans la foule, dans le silence
+            // 4. Où te sens-tu chez toi : sous terre, dans le ciel, dans la foule d'une cité, dans le silence d'un temple
             question(r(ROUGE, ORANGE), r(BLEU, OR), r(ROSE, ARGENT), r(JAUNE, BLANC)),
-            // 5. Que dira-t-on de toi à ta mort : jamais reculé, sauvé des vies, construit, changé le monde
+            // 5. Épitaphe : ne recula jamais, sauva bien des vies, bâtit ce qui dure, changea le monde
             question(r(OBSIDIAN, GRIS), r(JAUNE, MARRON), r(VERT, VIOLET), r(OR, ROSE)),
-            // 6. Un ordre injuste : obéir, obéir en apparence, refuser en face, négocier
+            // 6. Ordre injuste d'un supérieur : obéir, faire mine d'obéir, refuser en face, négocier
             question(r(GRIS, CUIVRE), r(ROSE, VERT), r(OBSIDIAN, ROUGE), r(ARGENT, MARRON)),
-            // 7. Une nuit sans sommeil : réparer, faire sa ronde, regarder les étoiles, veiller ou prier
+            // 7. Nuit sans sommeil : réparer, faire sa ronde, regarder les étoiles, veiller un malade ou prier
             question(r(ORANGE, MARRON), r(CUIVRE, GRIS), r(BLEU, VIOLET), r(JAUNE, BLANC))
     );
 
