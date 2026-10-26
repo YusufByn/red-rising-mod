@@ -9,9 +9,15 @@ import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestSingleplayerContext;
 import net.fabricmc.fabric.api.client.gametest.v1.world.TestWorldSave;
 import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.core.BlockPos;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.EntitySpawnReason;
+import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.npc.villager.Villager;
+import net.minecraft.world.entity.npc.villager.VillagerProfession;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.Nullable;
 
@@ -85,8 +91,60 @@ public class PnjCouleurTest implements FabricClientGameTest {
         try (TestSingleplayerContext monde = sauvegarde.open()) {
             monde.getServer().waitFor(server -> pnjColores(server).size() == 16, 200);
             verifierServeur(monde, "après rechargement", 16);
+            postesDeTravail(monde);
         }
         RedRising.LOGGER.info("[G5.1] OK : un PNJ de chaque Couleur, métier gardé, sauvegardé");
+    }
+
+    /**
+     * Les Couleurs sans métier (Or, Rose) ne prennent pas celui d'un poste de travail posé à côté d'elles.
+     * Témoin : un villageois ordinaire sans métier, avec le même poste à côté, doit le prendre (sinon le test ne prouve rien).
+     */
+    private static void postesDeTravail(TestSingleplayerContext monde) {
+        Couleur[] sansMetier = {Couleur.OR, Couleur.ROSE};
+        int[] temoin = monde.getServer().computeOnServer(server -> {
+            ServerLevel niveau = server.overworld();
+            for (int i = 0; i <= sansMetier.length; i++) {
+                BlockPos poste = new BlockPos(-20 - 6 * i, -60, -12);
+                niveau.setBlockAndUpdate(poste, Blocks.LECTERN.defaultBlockState());
+                // Juste à côté : Minecraft donne le métier à moins de 2 blocs du centre du poste
+                Vec3 position = Vec3.atBottomCenterOf(poste.south());
+                if (i < sansMetier.length) {
+                    Objects.requireNonNull(PnjCouleur.creer(niveau, position, 180, sansMetier[i]));
+                } else {
+                    Villager ordinaire = Objects.requireNonNull(EntityTypes.VILLAGER.create(niveau, EntitySpawnReason.COMMAND));
+                    ordinaire.snapTo(position.x, position.y, position.z, 180, 0);
+                    ordinaire.setVillagerData(ordinaire.getVillagerData().withProfession(niveau.registryAccess(), VillagerProfession.NONE));
+                    niveau.addFreshEntity(ordinaire);
+                    return new int[]{ordinaire.getId()};
+                }
+            }
+            throw new IllegalStateException();
+        });
+        // Le témoin prend son poste (il lui faut le repérer et y aller : jusqu'à une minute)
+        try {
+            monde.getServer().waitFor(server -> {
+                var entite = server.overworld().getEntity(temoin[0]);
+                return entite instanceof Villager v && v.getVillagerData().profession().is(VillagerProfession.LIBRARIAN);
+            }, 20 * 60);
+        } catch (AssertionError e) {
+            String etat = monde.getServer().computeOnServer(server -> {
+                StringBuilder texte = new StringBuilder();
+                for (Villager v : server.overworld().getEntities(EntityTypes.VILLAGER, v -> v.getZ() < -5 && v.getX() < -10)) {
+                    texte.append("\n  ").append(v.getId() == temoin[0] ? "témoin" : PnjCouleur.couleur(v))
+                            .append(" en ").append(v.blockPosition().toShortString())
+                            .append(" : ").append(v.getVillagerData().profession().getRegisteredName())
+                            .append(", job ").append(v.getBrain().getMemoryInternal(MemoryModuleType.JOB_SITE))
+                            .append(", potentiel ").append(v.getBrain().getMemoryInternal(MemoryModuleType.POTENTIAL_JOB_SITE))
+                            .append(", IA ").append(!v.isNoAi());
+                }
+                return texte.toString();
+            });
+            throw new AssertionError("Le témoin n'a pas pris de poste de travail en une minute :" + etat, e);
+        }
+        RedRising.LOGGER.info("[G5.1] Témoin : un villageois ordinaire sans métier a pris le poste de travail posé à côté");
+        // Les PNJ de Couleur ont eu le même temps, avec chacun son poste à côté : ils n'ont pas dû changer
+        verifierServeur(monde, "avec des postes de travail à côté", 18);
     }
 
     /** Chaque PNJ de Couleur a le métier de sa Couleur ; chaque Couleur a au moins un PNJ. */

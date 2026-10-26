@@ -62,7 +62,7 @@ Mod Fabric fan-made, solo, gratuit et non commercial, dans l'univers Red Rising 
 - Dimensions en 26.2 : le format JSON de `dimension_type` a changé (`attributes` pour le ciel, le brouillard, les lits..., `skybox`, `timelines`). Partir des fichiers vanilla du jar (`data/minecraft/dimension_type/*.json`), voir `data/redrising/dimension_type/scene_naissance.json`.
 - Tests client : pendant le test de naissance le jeu est en pause, et `waitForChunksRender` peut ne jamais aboutir. Attendre quelques ticks à la place.
 - Donner une Couleur sans passer par la naissance (debug, tests) : `Naissance.donnerCouleur`, qui abandonne le test en cours et sort le joueur de la scène. `CouleurJoueur.set` seul le laisserait dans la scène.
-- PNJ de Couleur (G5.1) : villageois vanilla + `CouleurJoueur.COULEUR` (l'attachment marche sur toute entité). Passer par `PnjCouleur.donnerCouleur` : il pose aussi le métier et le verrouille (un peu d'expérience), sinon le villageois le perd faute de poste de travail.
+- PNJ de Couleur (G5.1) : villageois vanilla + `CouleurJoueur.COULEUR` (l'attachment marche sur toute entité). Passer par `PnjCouleur.donnerCouleur` : il pose aussi le métier et le verrouille (un peu d'expérience), sinon le villageois le perd faute de poste de travail. « Sans métier » = `NITWIT` : un villageois `NONE` prend le métier du premier poste de travail à moins de 2 blocs.
 - Rendu d'une entité dont l'état de rendu ne garde pas l'entité (villageois...) : recopier la donnée voulue dans l'état avec un `RenderStateDataKey` de Fabric (`setData`), depuis un mixin sur `extractRenderState` (voir `VillagerRendererMixin`).
 - Commandes `/rr ... [joueur]` : l'argument vise un seul joueur. Depuis la console ou un test, `@a` est refusé : écrire `@a[limit=1]` ou le nom.
 

@@ -57,7 +57,7 @@ La question Or (promotion) et le spawn par région arrivent avec leurs régions 
 
 La version minimale du GDD : 3 jauges, 2 types de structures, 1 événement de traque.
 
-- [x] **G5.1 PNJ par Couleur** : villageois réutilisés, textures teintées, métiers adaptés. Fait le 26/10 : villageois de Minecraft avec la Couleur en attachment (sauvegardée, synchronisée), repères teintés comme le joueur (iris, cheveux, sigils sur les mains croisées), métier par Couleur verrouillé ; `/rr pnj spawn|get|set`. Vérifié par `PnjCouleurTest` (14 PNJ, métier gardé sans poste de travail, rechargement). *Fini quand* : un PNJ de chaque Couleur existe.
+- [x] **G5.1 PNJ par Couleur** : villageois réutilisés, textures teintées, métiers adaptés. Fait le 26/10 : villageois de Minecraft avec la Couleur en attachment (sauvegardée, synchronisée), repères teintés comme le joueur (iris, cheveux, sigils sur les mains croisées), métier par Couleur verrouillé ; `/rr pnj spawn|get|set`. Vérifié par `PnjCouleurTest` (14 PNJ, métier gardé sans poste de travail, rechargement ; Or et Rose sans métier ne prennent pas celui d'un poste posé à côté, contrairement à un villageois ordinaire). Métiers validés le 26/10. *Fini quand* : un PNJ de chaque Couleur existe.
 - [ ] **G5.2 Actions qui bougent les jauges** : liste des actions (aider, voler, dénoncer, tuer un PNJ de telle Couleur) et leur effet. *Fini quand* : chaque action modifie les bonnes jauges.
 - [ ] **G5.3 Structure Société générique** : poste de la Société avec accès selon la Loyauté. *Fini quand* : un joueur à Loyauté basse est refoulé.
 - [ ] **G5.4 Structure Rising générique** : cellule cachée, accès selon le Soutien. *Fini quand* : la cellule n'est accessible qu'avec assez de Soutien.

@@ -25,9 +25,13 @@ import java.util.Map;
  * et un PNJ de Couleur n'en a pas. Lui donner un peu d'expérience suffit à le garder, comme après un premier échange.</p>
  */
 public final class PnjCouleur {
-    /** Métier de chaque Couleur. Les métiers de Minecraft ne couvrent pas tout : Argent et Blanc, Cuivre et Bleu partagent le leur. */
+    /**
+     * Métier de chaque Couleur (validé en G5.1). Les métiers de Minecraft ne couvrent pas tout : Argent et Blanc,
+     * Cuivre et Bleu partagent le leur. « Sans métier » = {@code NITWIT}, le seul état sans métier qui tienne :
+     * un villageois {@code NONE} prend le métier du premier poste de travail libre à côté de lui (vérifié par {@code PnjCouleurTest}).
+     */
     public static final Map<Couleur, ResourceKey<VillagerProfession>> METIERS = new EnumMap<>(Map.ofEntries(
-            Map.entry(Couleur.OR, VillagerProfession.WEAPONSMITH),      // combat, razor
+            Map.entry(Couleur.OR, VillagerProfession.NITWIT),           // sans métier : l'Or dépend des autres pour crafter
             Map.entry(Couleur.ARGENT, VillagerProfession.LIBRARIAN),    // registres et comptes
             Map.entry(Couleur.CUIVRE, VillagerProfession.CARTOGRAPHER), // cadastre, titres de propriété
             Map.entry(Couleur.BLANC, VillagerProfession.LIBRARIAN),     // justice, enchantement avancé
@@ -39,7 +43,7 @@ public final class PnjCouleur {
             Map.entry(Couleur.GRIS, VillagerProfession.FLETCHER),       // soldat, combat à distance
             Map.entry(Couleur.OBSIDIAN, VillagerProfession.LEATHERWORKER), // tribus des pôles, fourrures
             Map.entry(Couleur.MARRON, VillagerProfession.FARMER),       // service, agriculture
-            Map.entry(Couleur.ROSE, VillagerProfession.NITWIT),         // espionnage : pas de commerce
+            Map.entry(Couleur.ROSE, VillagerProfession.NITWIT),         // sans métier ni commerce : espionnage
             Map.entry(Couleur.ROUGE, VillagerProfession.MASON)          // mine, pierre
     ));
 
