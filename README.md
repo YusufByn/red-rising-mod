@@ -45,12 +45,13 @@ Réservées aux ops (ou à la triche activée en solo). `[joueur]` est optionnel
 - `/rr couleur get [joueur]`, `/rr couleur set <couleur> [joueur]`
 - `/rr jauge get [joueur]`, `/rr jauge set <jauge> <valeur> [joueur]`, `/rr jauge add <jauge> <delta> [joueur]`
 - `/rr jalon list`, `/rr jalon set <jalon> <issue>`, `/rr jalon clear <jalon>`
+- `/rr pnj spawn <couleur>` (un PNJ de cette Couleur à ta position), `/rr pnj get <pnj>`, `/rr pnj set <pnj> <couleur>`
 - `/rr naissance get [joueur]` (Couleur, ou test en cours : résultat en attente, relance), `/rr naissance reset [joueur]` (efface Couleur et test, et relance la naissance)
 - `/rr etat`, `/rr etat naissance <test|choix_libre>`, `/rr etat epoque <epoque>`, `/rr etat zone set <zone> <camp>`, `/rr etat zone clear <zone>`
 
 ## Outils
 
-- `outils/marque_couleur.py` : régénère les textures de l'apparence par Couleur (mains, yeux, cheveux).
+- `outils/marque_couleur.py` : régénère les textures de l'apparence par Couleur (mains, yeux, cheveux), pour les joueurs et les PNJ.
 - `outils/planche_couleurs.py` : après `./gradlew runClientGameTest`, assemble les captures des 14 Couleurs en une planche (`build/captures-gametest/planche-couleurs.png`).
 - Les deux demandent Pillow (`pip3 install pillow`).
 

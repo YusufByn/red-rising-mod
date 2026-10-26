@@ -1,0 +1,138 @@
+package io.github.yusufbyn.redrising.gametest;
+
+import io.github.yusufbyn.redrising.RedRising;
+import io.github.yusufbyn.redrising.couleur.Couleur;
+import io.github.yusufbyn.redrising.couleur.CouleurJoueur;
+import io.github.yusufbyn.redrising.pnj.PnjCouleur;
+import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
+import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
+import net.fabricmc.fabric.api.client.gametest.v1.context.TestSingleplayerContext;
+import net.fabricmc.fabric.api.client.gametest.v1.world.TestWorldSave;
+import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.world.entity.EntityTypes;
+import net.minecraft.world.entity.npc.villager.Villager;
+import net.minecraft.world.phys.Vec3;
+import org.jspecify.annotations.Nullable;
+
+import java.util.EnumMap;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Objects;
+
+/**
+ * G5.1 : un PNJ de chaque Couleur existe, avec son métier et ses repères teintés.
+ * Prend une capture des 14 PNJ côte à côte, copiée dans {@code build/captures-gametest/}.
+ */
+public class PnjCouleurTest implements FabricClientGameTest {
+    /** Rangée face au joueur, comme les mannequins de G3.5 : l'Or à gauche de l'écran (x = 7), le Rouge à droite. */
+    private static final double Z_RANGEE = 9.5;
+    /** Tournés vers le nord, donc vers le joueur. */
+    private static final float VERS_LE_JOUEUR = 180;
+    /** PNJ laissé libre (avec son IA), derrière le joueur, pour vérifier qu'il garde son métier. */
+    private static final Couleur LIBRE = Couleur.ROUGE;
+
+    @Override
+    public void runTest(ClientGameTestContext context) {
+        TestWorldSave sauvegarde;
+
+        try (TestSingleplayerContext monde = OutilsTest.nouveauMonde(context)) {
+            OutilsTest.attendreArrivee(context);
+            monde.getServer().runCommand("tp @a 0.5 -60 0.5 0 10");
+
+            monde.getServer().runOnServer(server -> {
+                Couleur[] couleurs = Couleur.values();
+                for (int i = 0; i < couleurs.length; i++) {
+                    Villager pnj = Objects.requireNonNull(PnjCouleur.creer(server.overworld(), new Vec3(7.0 - i, -60, Z_RANGEE), VERS_LE_JOUEUR, couleurs[i]));
+                    pnj.setNoAi(true); // immobiles et tournés vers le joueur pour la capture
+                }
+                Objects.requireNonNull(PnjCouleur.creer(server.overworld(), new Vec3(0.5, -60, -6.5), 0, LIBRE));
+            });
+            verifierServeur(monde, "à la création", 15);
+
+            // Les clients reçoivent la Couleur de chaque PNJ (synchronisée avec tous)
+            context.waitFor(mc -> villageoisColoresClient(mc.level) == 15, 100);
+            RedRising.LOGGER.info("[G5.1] Couleur des 15 PNJ reçue par le client");
+
+            context.getInput().resizeWindow(1920, 1080);
+            context.runOnClient(mc -> {
+                mc.options.fov().set(50);
+                if (!mc.gui.hud.isHidden()) {
+                    mc.gui.hud.toggle();
+                }
+            });
+            monde.getConnection().waitForChunksRender();
+            context.waitTicks(10);
+            OutilsTest.garderCapture(context.takeScreenshot("pnj-couleurs"));
+            context.runOnClient(mc -> {
+                mc.options.fov().set(70);
+                mc.gui.hud.toggle();
+            });
+            context.getInput().resizeWindow(854, 480);
+
+            // Le PNJ libre n'a pas de poste de travail : son métier doit tenir quand même
+            context.waitTicks(200);
+            verifierServeur(monde, "après 200 ticks", 15);
+
+            // Commande de debug : un PNJ Vert devant le joueur
+            monde.getServer().runCommand("execute positioned 0.5 -60 3.5 rotated 0 0 run rr pnj spawn vert");
+            verifierServeur(monde, "après /rr pnj spawn", 16);
+
+            sauvegarde = monde.getWorldSave();
+        }
+
+        // Rechargement : Couleurs et métiers sont sauvegardés avec les PNJ
+        try (TestSingleplayerContext monde = sauvegarde.open()) {
+            monde.getServer().waitFor(server -> pnjColores(server).size() == 16, 200);
+            verifierServeur(monde, "après rechargement", 16);
+        }
+        RedRising.LOGGER.info("[G5.1] OK : un PNJ de chaque Couleur, métier gardé, sauvegardé");
+    }
+
+    /** Chaque PNJ de Couleur a le métier de sa Couleur ; chaque Couleur a au moins un PNJ. */
+    private static void verifierServeur(TestSingleplayerContext monde, String moment, int attendus) {
+        String erreur = monde.getServer().computeOnServer(server -> {
+            Map<Villager, Couleur> pnj = pnjColores(server);
+            if (pnj.size() != attendus) {
+                return pnj.size() + " PNJ de Couleur au lieu de " + attendus;
+            }
+            Map<Couleur, Integer> parCouleur = new EnumMap<>(Couleur.class);
+            for (Map.Entry<Villager, Couleur> entree : pnj.entrySet()) {
+                var metier = entree.getKey().getVillagerData().profession();
+                if (!metier.is(PnjCouleur.METIERS.get(entree.getValue()))) {
+                    return "PNJ " + entree.getValue() + " avec le métier " + metier.getRegisteredName();
+                }
+                parCouleur.merge(entree.getValue(), 1, Integer::sum);
+            }
+            return parCouleur.size() == Couleur.values().length ? null : "Couleurs présentes : " + parCouleur.keySet();
+        });
+        if (erreur != null) {
+            throw new AssertionError("PNJ " + moment + " : " + erreur);
+        }
+        RedRising.LOGGER.info("[G5.1] PNJ {} : {} PNJ, chaque Couleur présente avec son métier", moment, attendus);
+    }
+
+    private static Map<Villager, Couleur> pnjColores(MinecraftServer server) {
+        Map<Villager, Couleur> pnj = new HashMap<>();
+        for (Villager villageois : server.overworld().getEntities(EntityTypes.VILLAGER, v -> true)) {
+            Couleur couleur = PnjCouleur.couleur(villageois);
+            if (couleur != null) {
+                pnj.put(villageois, couleur);
+            }
+        }
+        return pnj;
+    }
+
+    private static int villageoisColoresClient(@Nullable ClientLevel monde) {
+        if (monde == null) {
+            return 0;
+        }
+        int total = 0;
+        for (var entite : monde.entitiesForRendering()) {
+            if (entite instanceof Villager && entite.getAttached(CouleurJoueur.COULEUR) != null) {
+                total++;
+            }
+        }
+        return total;
+    }
+}

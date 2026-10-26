@@ -8,6 +8,7 @@ import com.mojang.brigadier.builder.RequiredArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.brigadier.exceptions.DynamicCommandExceptionType;
+import com.mojang.brigadier.exceptions.SimpleCommandExceptionType;
 import io.github.yusufbyn.redrising.couleur.Couleur;
 import io.github.yusufbyn.redrising.couleur.CouleurJoueur;
 import io.github.yusufbyn.redrising.couleur.ModeNaissance;
@@ -21,6 +22,7 @@ import io.github.yusufbyn.redrising.factions.Jauges;
 import io.github.yusufbyn.redrising.factions.JaugesJoueur;
 import io.github.yusufbyn.redrising.jalons.Epoque;
 import io.github.yusufbyn.redrising.jalons.Issue;
+import io.github.yusufbyn.redrising.pnj.PnjCouleur;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
@@ -31,6 +33,8 @@ import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.StringRepresentable;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.npc.villager.Villager;
 
 import java.util.Arrays;
 import java.util.Map;
@@ -49,6 +53,10 @@ public final class CommandesDebug {
             valeur -> Component.translatable("commande.redrising.inconnu", valeur));
     private static final DynamicCommandExceptionType JALON_ABSENT = new DynamicCommandExceptionType(
             jalon -> Component.translatable("commande.redrising.jalon.absent", jalon));
+    private static final DynamicCommandExceptionType PAS_UN_VILLAGEOIS = new DynamicCommandExceptionType(
+            entite -> Component.translatable("commande.redrising.pnj.pas_villageois", entite));
+    private static final SimpleCommandExceptionType PNJ_REFUSE = new SimpleCommandExceptionType(
+            Component.translatable("commande.redrising.pnj.refuse"));
     private static final DynamicCommandExceptionType ZONE_ABSENTE = new DynamicCommandExceptionType(
             zone -> Component.translatable("commande.redrising.etat.zone.absente", zone));
 
@@ -80,6 +88,14 @@ public final class CommandesDebug {
                                 .then(argJoueur(CommandesDebug::lireNaissance)))
                         .then(Commands.literal("reset").executes(ctx -> relancerNaissance(ctx, ctx.getSource().getPlayerOrException()))
                                 .then(argJoueur(CommandesDebug::relancerNaissance))))
+                .then(Commands.literal("pnj")
+                        .then(Commands.literal("spawn")
+                                .then(argEnum("couleur", Couleur.values()).executes(CommandesDebug::creerPnj)))
+                        .then(Commands.literal("get")
+                                .then(Commands.argument("pnj", EntityArgument.entity()).executes(CommandesDebug::lirePnj)))
+                        .then(Commands.literal("set")
+                                .then(Commands.argument("pnj", EntityArgument.entity())
+                                        .then(argEnum("couleur", Couleur.values()).executes(CommandesDebug::changerPnj)))))
                 .then(Commands.literal("jauge")
                         .then(Commands.literal("get").executes(ctx -> lireJauges(ctx, ctx.getSource().getPlayerOrException()))
                                 .then(argJoueur(CommandesDebug::lireJauges)))
@@ -159,6 +175,48 @@ public final class CommandesDebug {
         Naissance.renaitre(joueur);
         ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.naissance.reset", joueur.getDisplayName()), true);
         return Command.SINGLE_SUCCESS;
+    }
+
+    // --- PNJ ---
+
+    /** Un PNJ de la Couleur demandée, là où se tient celui qui tape la commande, tourné vers lui. */
+    private static int creerPnj(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        Couleur couleur = lireEnum(ctx, "couleur", Couleur.values());
+        CommandSourceStack source = ctx.getSource();
+        Villager pnj = PnjCouleur.creer(source.getLevel(), source.getPosition(), source.getRotation().y + 180, couleur);
+        if (pnj == null) {
+            throw PNJ_REFUSE.create();
+        }
+        source.sendSuccess(() -> Component.translatable("commande.redrising.pnj.spawn", couleur.getDisplayName(), metier(pnj)), true);
+        return Command.SINGLE_SUCCESS;
+    }
+
+    private static int lirePnj(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        Villager pnj = villageois(ctx);
+        Couleur couleur = PnjCouleur.couleur(pnj);
+        Component nomCouleur = couleur == null ? Component.translatable("commande.redrising.aucun") : couleur.getDisplayName();
+        ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.pnj.get", pnj.getDisplayName(), nomCouleur, metier(pnj)), false);
+        return couleur == null ? 0 : couleur.ordinal() + 1;
+    }
+
+    private static int changerPnj(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        Villager pnj = villageois(ctx);
+        Couleur couleur = lireEnum(ctx, "couleur", Couleur.values());
+        PnjCouleur.donnerCouleur(pnj, couleur);
+        ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.pnj.set", pnj.getDisplayName(), couleur.getDisplayName(), metier(pnj)), true);
+        return Command.SINGLE_SUCCESS;
+    }
+
+    private static Villager villageois(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        Entity entite = EntityArgument.getEntity(ctx, "pnj");
+        if (entite instanceof Villager pnj) {
+            return pnj;
+        }
+        throw PAS_UN_VILLAGEOIS.create(entite.getDisplayName());
+    }
+
+    private static Component metier(Villager pnj) {
+        return pnj.getVillagerData().profession().value().name();
     }
 
     // --- Jauges ---

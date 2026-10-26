@@ -6,6 +6,8 @@ Textures 64x64 calées sur le patron des skins ; seuls les pixels utiles sont op
   - yeux : les deux iris, à l'emplacement standard des skins par défaut (ligne 12, x = 10 et 13).
 - cheveux.png : couche posée sur la couche extérieure de la tête (dessus, frange, côtés, nuque),
   avec un léger relief pour garder un aspect de cheveux. Désactivable côté client.
+- marque_villageois.png (PNJ de Couleur, G5.1), calée sur le patron du villageois : les mêmes trois repères,
+  iris, cheveux sur le crâne et sigils sur les mains croisées.
 
 Usage : python3 outils/marque_couleur.py (demande Pillow)
 Placeholder en attendant les textures finales (G17.3, Blockbench).
@@ -85,9 +87,47 @@ def cheveux():
     image.save(DOSSIER / "cheveux.png")
 
 
+def villageois():
+    """Patron du villageois : tête 8x10x8 en (0, 0) (dessus 8..15 x 0..7 ; côté droit 0..7, avant 8..15,
+    côté gauche 16..23, arrière 24..31 sur les lignes 8..17) ; bras croisés en (40, 38), face avant 44..51 x 42..45."""
+    pixels = set()
+    # Cheveux : tout le crâne, frange et tempes, côtés, nuque
+    for x in range(8, 16):
+        for y in range(0, 8):
+            pixels.add((x, y))
+    for x in range(8, 16):
+        pixels.add((x, 8))
+    for y in range(9, 11):
+        pixels.update({(8, y), (15, y)})
+    for y in range(8, 11):
+        for x in list(range(0, 8)) + list(range(16, 24)):
+            pixels.add((x, y))
+    for y in range(11, 13):
+        for x in list(range(0, 4)) + list(range(20, 24)):
+            pixels.add((x, y))
+    for y in range(8, 13):
+        for x in range(24, 32):
+            pixels.add((x, y))
+    # Iris (verts sur la texture vanilla)
+    pixels.update({(10, 14), (13, 14)})
+    # Sigil 2x2 sur chaque main, aux deux bouts des bras croisés
+    for x in (44, 45, 50, 51):
+        for y in (43, 44):
+            pixels.add((x, y))
+    image = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
+    for x, y in pixels:
+        # Même relief que les cheveux du joueur, sur les cheveux seulement
+        cheveu = y < 13 and not (40 <= x)
+        meche = cheveu and ((x + y) % 3 == 0 if y < 8 else x % 3 == 0)
+        gris = 210 if meche else 255
+        image.putpixel((x, y), (gris, gris, gris, 255))
+    image.save(DOSSIER / "marque_villageois.png")
+
+
 if __name__ == "__main__":
     DOSSIER.mkdir(parents=True, exist_ok=True)
     marque(4, "marque_large.png")
     marque(3, "marque_fine.png")
     cheveux()
+    villageois()
     print("Textures écrites dans", DOSSIER)

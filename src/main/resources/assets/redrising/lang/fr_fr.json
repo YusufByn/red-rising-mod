@@ -109,5 +109,10 @@
   "commande.redrising.naissance.resultat": "test en cours, résultat %s en attente, relance %s",
   "commande.redrising.naissance.relance_utilisee": "utilisée",
   "commande.redrising.naissance.relance_disponible": "disponible",
-  "commande.redrising.naissance.reset": "Naissance de %s relancée (Couleur et test effacés)"
+  "commande.redrising.naissance.reset": "Naissance de %s relancée (Couleur et test effacés)",
+  "commande.redrising.pnj.spawn": "PNJ %s créé (%s)",
+  "commande.redrising.pnj.get": "%s : Couleur %s, métier %s",
+  "commande.redrising.pnj.set": "%s : Couleur changée en %s (%s)",
+  "commande.redrising.pnj.pas_villageois": "%s n'est pas un villageois",
+  "commande.redrising.pnj.refuse": "Le PNJ n'a pas pu apparaître ici"
 }

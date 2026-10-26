@@ -109,5 +109,10 @@
   "commande.redrising.naissance.resultat": "test in progress, result %s pending, retake %s",
   "commande.redrising.naissance.relance_utilisee": "used",
   "commande.redrising.naissance.relance_disponible": "available",
-  "commande.redrising.naissance.reset": "Birth of %s restarted (Color and test cleared)"
+  "commande.redrising.naissance.reset": "Birth of %s restarted (Color and test cleared)",
+  "commande.redrising.pnj.spawn": "%s NPC created (%s)",
+  "commande.redrising.pnj.get": "%s: Color %s, profession %s",
+  "commande.redrising.pnj.set": "%s: Color changed to %s (%s)",
+  "commande.redrising.pnj.pas_villageois": "%s is not a villager",
+  "commande.redrising.pnj.refuse": "The NPC could not spawn here"
 }
