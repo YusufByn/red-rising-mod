@@ -15,11 +15,15 @@ import java.util.List;
  * Questions du test de naissance (G4.4), une par une, avec leurs 4 réponses.
  * Le barème reste invisible : le joueur ne voit que les textes, et c'est le serveur qui compte les points
  * une fois les 7 réponses envoyées. Pas de retour en arrière, comme dans un vrai test.
+ *
+ * <p>La question en haut, les réponses en bas : le centre de l'écran reste libre pour le joueur, que la caméra
+ * montre de dos sur le vitrail de la scène (G4.5).</p>
  */
 public final class EcranTestNaissance extends EcranNaissance {
     public static final String CLE_TITRE = "naissance.redrising.test.titre";
 
     private static final int LARGEUR_MAX = 320;
+    private static final int MARGE = 12;
 
     private final List<Integer> choix = new ArrayList<>();
 
@@ -39,8 +43,7 @@ public final class EcranTestNaissance extends EcranNaissance {
         int largeur = Math.min(LARGEUR_MAX, width - 40);
         int x = (width - largeur) / 2;
         int hauteurBoutons = TestPersonnalite.NB_REPONSES * (Button.DEFAULT_HEIGHT + ESPACE) - ESPACE;
-        // Les boutons dans la moitié basse, le texte de la question au-dessus
-        int y0 = Math.max(height / 2 - 10, height - hauteurBoutons - 20);
+        int y0 = height - hauteurBoutons - MARGE;
         for (int reponse = 0; reponse < TestPersonnalite.NB_REPONSES; reponse++) {
             int numero = reponse;
             bouton(Component.translatable(TestPersonnalite.cleReponse(question(), reponse)),
@@ -66,11 +69,11 @@ public final class EcranTestNaissance extends EcranNaissance {
             graphics.centeredText(font, Component.translatable("naissance.redrising.test.attente"), width / 2, height / 2, TEXTE_DISCRET);
             return;
         }
-        // Texte de la question, sur plusieurs lignes si besoin, juste au-dessus des réponses
-        List<FormattedCharSequence> lignes = font.split(Component.translatable(TestPersonnalite.cleQuestion(question())), Math.min(LARGEUR_MAX, width - 40));
-        int y = hautDesBoutons() - 12 - lignes.size() * (font.lineHeight + 2);
+        // Numéro et texte de la question en haut, sur plusieurs lignes si besoin
         graphics.centeredText(font, Component.translatable("naissance.redrising.test.progression", question() + 1, total),
-                width / 2, y - font.lineHeight - 8, TEXTE_DISCRET);
+                width / 2, MARGE, TEXTE_DISCRET);
+        List<FormattedCharSequence> lignes = font.split(Component.translatable(TestPersonnalite.cleQuestion(question())), Math.min(LARGEUR_MAX, width - 40));
+        int y = MARGE + font.lineHeight + 8;
         for (FormattedCharSequence ligne : lignes) {
             graphics.centeredText(font, ligne, width / 2, y, TEXTE);
             y += font.lineHeight + 2;

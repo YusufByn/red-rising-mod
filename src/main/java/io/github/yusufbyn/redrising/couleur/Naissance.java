@@ -1,6 +1,7 @@
 package io.github.yusufbyn.redrising.couleur;
 
 import io.github.yusufbyn.redrising.RedRising;
+import io.github.yusufbyn.redrising.monde.SceneNaissance;
 import io.github.yusufbyn.redrising.net.ChoisirCouleurPayload;
 import io.github.yusufbyn.redrising.net.ConclureTestPayload;
 import io.github.yusufbyn.redrising.net.OuvrirChoixCouleurPayload;
@@ -37,7 +38,8 @@ import java.util.List;
  * <ul>
  *     <li>Choix libre (G4.2) : un écran des 14 Couleurs.</li>
  *     <li>Test (G4.4) : les 7 questions ({@link TestPersonnalite}), puis le résultat, à accepter ou à relancer une fois
- *     (on refait alors tout le test). Le serveur compte les points ; le client ne voit que la Couleur obtenue.</li>
+ *     (on refait alors tout le test). Le serveur compte les points ; le client ne voit que la Couleur obtenue.
+ *     Le test se passe dans sa scène ({@link SceneNaissance}, G4.5), d'où le joueur sort à sa naissance.</li>
  * </ul>
  */
 public final class Naissance {
@@ -93,6 +95,12 @@ public final class Naissance {
                 naitre(joueur);
             }
         });
+        // Mort avant d'être né (multijoueur, /kill) : on réapparaît au point d'apparition, la naissance reprend
+        ServerPlayerEvents.AFTER_RESPAWN.register(CouleurJoueur.PHASE_APRES_COPIE, (ancien, joueur, vivant) -> {
+            if (CouleurJoueur.get(joueur) == null) {
+                naitre(joueur);
+            }
+        });
     }
 
     /** Lance (ou reprend) la naissance d'un joueur sans Couleur, selon le mode du monde. */
@@ -103,6 +111,7 @@ public final class Naissance {
                 ServerPlayNetworking.send(joueur, OuvrirChoixCouleurPayload.INSTANCE);
             }
             case TEST -> {
+                SceneNaissance.entrer(joueur);
                 TestEnCours test = testEnCours(joueur);
                 if (test != null && test.resultat() != null) {
                     // Revenu après s'être déconnecté devant son résultat : on le lui remontre, sans relance offerte en plus
@@ -117,6 +126,16 @@ public final class Naissance {
                 }
             }
         }
+    }
+
+    /**
+     * Donne directement une Couleur au joueur, comme s'il était né avec (commande {@code /rr couleur set}, tests) :
+     * le test en cours est abandonné et le joueur quitte la scène de naissance s'il y était.
+     */
+    public static void donnerCouleur(ServerPlayer joueur, Couleur couleur) {
+        joueur.removeAttached(TEST_EN_COURS);
+        CouleurJoueur.set(joueur, couleur);
+        SceneNaissance.sortir(joueur);
     }
 
     /** Remet le joueur « pas encore né » (Couleur et test effacés) et relance sa naissance. Pour le debug. */
@@ -203,6 +222,7 @@ public final class Naissance {
 
     private static void devenir(ServerPlayer joueur, Couleur couleur) {
         CouleurJoueur.set(joueur, couleur);
+        SceneNaissance.sortir(joueur);
         joueur.sendOverlayMessage(Component.translatable("naissance.redrising.nee", couleur.getDisplayName().copy().withColor(couleur.getTeinte())));
     }
 }

@@ -55,7 +55,8 @@ public final class HudJauges implements HudElement {
     public void extractRenderState(GuiGraphicsExtractor graphics, DeltaTracker deltaTracker) {
         Minecraft mc = Minecraft.getInstance();
         LocalPlayer joueur = mc.player;
-        if (joueur == null || mc.getDebugOverlay().showDebugScreen()) {
+        // Rien pendant la naissance, dans sa scène : le joueur n'a pas encore de Couleur ni de place dans la Société
+        if (joueur == null || mc.getDebugOverlay().showDebugScreen() || EcranNaissance.dansLaScene(mc)) {
             return;
         }
         Font font = mc.font;

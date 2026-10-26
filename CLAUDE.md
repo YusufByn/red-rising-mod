@@ -59,6 +59,9 @@ Mod Fabric fan-made, solo, gratuit et non commercial, dans l'univers Red Rising 
 - Tests client qui passent par les vrais écrans (création de monde, ouverture) : pour quitter un monde, refaire comme Fabric (`level.disconnect`, `mc.disconnect(GenericMessageScreen, false)`, attendre `getSingleplayerServer() == null`, puis écran titre). `disconnectWithSavingScreen` ne ramène pas à l'écran titre. Les listes déroulantes d'options ne sont pas parcourues par `clickScreenButton` : cliquer à la souris (voir `ApparenceCouleurTest`).
 - Tests client : juste après l'entrée dans le monde, `/kill` n'a pas d'effet. Attendre une centaine de ticks avant.
 - Tests client : créer le monde avec `OutilsTest.nouveauMonde(context)` (joueur déjà né, Couleur Or). Avec `context.worldBuilder().create()`, l'écran du test de naissance s'ouvre et met le jeu en pause : à réserver aux tests de la naissance.
+- Dimensions en 26.2 : le format JSON de `dimension_type` a changé (`attributes` pour le ciel, le brouillard, les lits..., `skybox`, `timelines`). Partir des fichiers vanilla du jar (`data/minecraft/dimension_type/*.json`), voir `data/redrising/dimension_type/scene_naissance.json`.
+- Tests client : pendant le test de naissance le jeu est en pause, et `waitForChunksRender` peut ne jamais aboutir. Attendre quelques ticks à la place.
+- Donner une Couleur sans passer par la naissance (debug, tests) : `Naissance.donnerCouleur`, qui abandonne le test en cours et sort le joueur de la scène. `CouleurJoueur.set` seul le laisserait dans la scène.
 - Commandes `/rr ... [joueur]` : l'argument vise un seul joueur. Depuis la console ou un test, `@a` est refusé : écrire `@a[limit=1]` ou le nom.
 
 ## CI

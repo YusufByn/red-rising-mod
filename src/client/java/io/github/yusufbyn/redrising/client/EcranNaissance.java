@@ -1,6 +1,9 @@
 package io.github.yusufbyn.redrising.client;
 
 import io.github.yusufbyn.redrising.couleur.CouleurJoueur;
+import io.github.yusufbyn.redrising.monde.SceneNaissance;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.network.chat.Component;
 import net.minecraft.client.gui.screens.Screen;
@@ -15,6 +18,7 @@ import java.util.List;
  * <ul>
  *     <li>On ne peut pas les fermer sans être né : Échap ne fait rien, et {@link NaissanceClient} rouvre l'écran
  *     s'il disparaît (mort, autre écran).</li>
+ *     <li>Dans la scène de naissance (G4.5), pas de flou ni de voile : on voit le vitrail derrière les questions.</li>
  *     <li>Un clic qui envoie une demande au serveur désactive les boutons : le serveur répond en donnant la Couleur
  *     (l'écran se ferme) ou en demandant l'écran suivant (il remplace celui-ci).</li>
  * </ul>
@@ -60,6 +64,21 @@ public abstract class EcranNaissance extends Screen {
         if (minecraft.player != null && CouleurJoueur.get(minecraft.player) != null) {
             onClose();
         }
+    }
+
+    @Override
+    public void extractBackground(GuiGraphicsExtractor graphics, int sourisX, int sourisY, float partialTick) {
+        if (dansLaScene(minecraft)) {
+            // Juste une ombre légère derrière le texte, en haut de l'écran
+            graphics.fillGradient(0, 0, width, height / 2, 0x80000000, 0x00000000);
+        } else {
+            super.extractBackground(graphics, sourisX, sourisY, partialTick);
+        }
+    }
+
+    /** Le joueur est dans la scène de naissance (dimension lue côté client). */
+    public static boolean dansLaScene(Minecraft mc) {
+        return mc.level != null && mc.level.dimension().equals(SceneNaissance.DIMENSION);
     }
 
     @Override

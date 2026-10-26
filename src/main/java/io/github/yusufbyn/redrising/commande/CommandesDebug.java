@@ -127,7 +127,8 @@ public final class CommandesDebug {
 
     private static int changerCouleur(CommandContext<CommandSourceStack> ctx, ServerPlayer joueur) throws CommandSyntaxException {
         Couleur couleur = lireEnum(ctx, "couleur", Couleur.values());
-        CouleurJoueur.set(joueur, couleur);
+        // Pendant la naissance, la commande fait naître le joueur avec cette Couleur
+        Naissance.donnerCouleur(joueur, couleur);
         ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.couleur.set", joueur.getDisplayName(), couleur.getDisplayName()), true);
         return Command.SINGLE_SUCCESS;
     }

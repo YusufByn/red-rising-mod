@@ -7,6 +7,7 @@ import io.github.yusufbyn.redrising.net.ResultatTestPayload;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
+import net.minecraft.client.CameraType;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
 import org.jspecify.annotations.Nullable;
@@ -27,6 +28,9 @@ public final class NaissanceClient {
     private static @Nullable Supplier<Screen> ecranDemande;
     /** La demande est nouvelle : pas encore ouverte. */
     private static boolean nouvelleDemande;
+    /** Réglages du joueur à remettre en sortant de la scène ; {@code null} hors de la scène. */
+    private static @Nullable CameraType cameraAvantScene;
+    private static boolean interfaceCacheeAvantScene;
 
     private NaissanceClient() {
     }
@@ -39,8 +43,38 @@ public final class NaissanceClient {
         ClientPlayNetworking.registerGlobalReceiver(ResultatTestPayload.TYPE, (payload, contexte) ->
                 demander(() -> new EcranResultatNaissance(payload.couleur(), payload.relancePossible())));
         // Une demande ne survit pas au changement de monde
-        ClientPlayConnectionEvents.DISCONNECT.register((connexion, client) -> ecranDemande = null);
-        ClientTickEvents.END_CLIENT_TICK.register(NaissanceClient::ouvrirSiDemande);
+        ClientPlayConnectionEvents.DISCONNECT.register((connexion, client) -> {
+            ecranDemande = null;
+            mettreEnScene(client, false);
+        });
+        ClientTickEvents.END_CLIENT_TICK.register(client -> {
+            mettreEnScene(client, EcranNaissance.dansLaScene(client));
+            ouvrirSiDemande(client);
+        });
+    }
+
+    /**
+     * Dans la scène de naissance (G4.5), la caméra passe derrière le joueur, qui se voit au centre du vitrail,
+     * et l'interface (barre d'objets, vie) disparaît. Tout est rendu tel quel en sortant de la scène.
+     */
+    private static void mettreEnScene(Minecraft client, boolean dansLaScene) {
+        if (dansLaScene == (cameraAvantScene != null)) {
+            return; // rien à changer
+        }
+        if (dansLaScene) {
+            cameraAvantScene = client.options.getCameraType();
+            interfaceCacheeAvantScene = client.gui.hud.isHidden();
+            client.options.setCameraType(CameraType.THIRD_PERSON_BACK);
+            if (!interfaceCacheeAvantScene) {
+                client.gui.hud.toggle();
+            }
+        } else {
+            client.options.setCameraType(cameraAvantScene);
+            if (client.gui.hud.isHidden() != interfaceCacheeAvantScene) {
+                client.gui.hud.toggle();
+            }
+            cameraAvantScene = null;
+        }
     }
 
     private static void demander(Supplier<Screen> ecran) {

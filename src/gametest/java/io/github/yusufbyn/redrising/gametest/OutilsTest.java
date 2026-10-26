@@ -10,6 +10,7 @@ import net.fabricmc.fabric.api.client.gametest.v1.world.TestWorldBuilder;
 import net.minecraft.client.gui.screens.DeathScreen;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.level.Level;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -41,12 +42,11 @@ final class OutilsTest {
      */
     static TestSingleplayerContext nouveauMonde(ClientGameTestContext context, TestWorldBuilder monde) {
         TestSingleplayerContext ouvert = monde.create();
-        ouvert.getServer().runOnServer(server -> {
-            ServerPlayer joueur = joueur(server);
-            joueur.removeAttached(Naissance.TEST_EN_COURS);
-            CouleurJoueur.set(joueur, COULEUR_DE_DEPART);
-        });
-        context.waitFor(mc -> mc.player != null && CouleurJoueur.get(mc.player) == COULEUR_DE_DEPART && mc.gui.screen() == null, 100);
+        ouvert.getServer().runOnServer(server -> Naissance.donnerCouleur(joueur(server), COULEUR_DE_DEPART));
+        // Le joueur quitte la scène de naissance : attendre son retour dans l'Overworld
+        context.waitFor(mc -> mc.player != null && CouleurJoueur.get(mc.player) == COULEUR_DE_DEPART && mc.gui.screen() == null
+                && mc.level != null && mc.level.dimension().equals(Level.OVERWORLD), 200);
+        ouvert.getConnection().waitForChunksRender();
         return ouvert;
     }
 

@@ -8,6 +8,7 @@ import io.github.yusufbyn.redrising.couleur.CouleurJoueur;
 import io.github.yusufbyn.redrising.couleur.Naissance;
 import io.github.yusufbyn.redrising.couleur.TestEnCours;
 import io.github.yusufbyn.redrising.couleur.TestPersonnalite;
+import io.github.yusufbyn.redrising.monde.SceneNaissance;
 import io.github.yusufbyn.redrising.net.ConclureTestPayload;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
@@ -20,7 +21,7 @@ import org.lwjgl.glfw.GLFW;
 import java.util.Objects;
 
 /**
- * G4.4 : un test de naissance complet donne une Couleur. Passe par les vrais écrans : clics sur les réponses,
+ * G4.4 et G4.5 : un test de naissance complet donne une Couleur, et il se déroule dans sa scène. Passe par les vrais écrans : clics sur les réponses,
  * puis sur « Refaire le test » et « Accepter ».
  *
  * <p>Les réponses sont choisies pour qu'une seule Couleur soit en tête (pas de hasard) :
@@ -39,7 +40,9 @@ public class TestNaissanceEnJeuTest implements FabricClientGameTest {
         // Monde par défaut : mode Test
         try (TestSingleplayerContext monde = context.worldBuilder().create()) {
             context.waitForScreen(EcranTestNaissance.class);
-            verifierEtat(monde, "à l'arrivée", null, TestEnCours.DEBUT);
+            // Le jeu est en pause pendant le test : on laisse juste au vitrail le temps de s'afficher avant la capture
+            context.waitTicks(20);
+            verifierEtat(monde, "à l'arrivée", null, TestEnCours.DEBUT, true);
             OutilsTest.garderCapture(context.takeScreenshot("test-question"));
             context.getInput().pressKey(GLFW.GLFW_KEY_ESCAPE);
             context.waitTicks(5);
@@ -48,17 +51,17 @@ public class TestNaissanceEnJeuTest implements FabricClientGameTest {
             // Premier passage : le résultat attend d'être accepté
             repondre(context, REPONSES_OBSIDIAN);
             context.waitForScreen(EcranResultatNaissance.class);
-            verifierEtat(monde, "après le premier passage", null, new TestEnCours(Couleur.OBSIDIAN, false));
+            verifierEtat(monde, "après le premier passage", null, new TestEnCours(Couleur.OBSIDIAN, false), true);
             OutilsTest.garderCapture(context.takeScreenshot("test-resultat"));
 
             // Relance : tout le test recommence
             context.clickScreenButton(EcranResultatNaissance.CLE_RELANCER);
             context.waitForScreen(EcranTestNaissance.class);
-            verifierEtat(monde, "après la relance", null, new TestEnCours(null, true));
+            verifierEtat(monde, "après la relance", null, new TestEnCours(null, true), true);
 
             repondre(context, REPONSES_JAUNE);
             context.waitForScreen(EcranResultatNaissance.class);
-            verifierEtat(monde, "après le second passage", null, new TestEnCours(Couleur.JAUNE, true));
+            verifierEtat(monde, "après le second passage", null, new TestEnCours(Couleur.JAUNE, true), true);
             if (context.tryClickScreenButton(EcranResultatNaissance.CLE_RELANCER)) {
                 throw new AssertionError("Bouton « Refaire le test » proposé une seconde fois");
             }
@@ -67,7 +70,7 @@ public class TestNaissanceEnJeuTest implements FabricClientGameTest {
             // Le serveur décide : une seconde relance (client modifié) est refusée
             context.runOnClient(mc -> ClientPlayNetworking.send(new ConclureTestPayload(true)));
             monde.getConnection().waitForServerboundPackets();
-            verifierEtat(monde, "après une seconde relance forcée", null, new TestEnCours(Couleur.JAUNE, true));
+            verifierEtat(monde, "après une seconde relance forcée", null, new TestEnCours(Couleur.JAUNE, true), true);
 
             sauvegarde = monde.getWorldSave();
         }
@@ -75,7 +78,7 @@ public class TestNaissanceEnJeuTest implements FabricClientGameTest {
         // Se déconnecter devant son résultat ne rend pas la relance : on retrouve le même résultat, définitif
         try (TestSingleplayerContext monde = sauvegarde.open()) {
             context.waitForScreen(EcranResultatNaissance.class);
-            verifierEtat(monde, "après rechargement", null, new TestEnCours(Couleur.JAUNE, true));
+            verifierEtat(monde, "après rechargement", null, new TestEnCours(Couleur.JAUNE, true), true);
             if (context.tryClickScreenButton(EcranResultatNaissance.CLE_RELANCER)) {
                 throw new AssertionError("Bouton « Refaire le test » revenu après rechargement");
             }
@@ -83,7 +86,7 @@ public class TestNaissanceEnJeuTest implements FabricClientGameTest {
             // Accepter : le joueur est né, l'écran se ferme
             context.clickScreenButton(EcranResultatNaissance.CLE_ACCEPTER);
             context.waitForScreen(null);
-            verifierEtat(monde, "après acceptation", Couleur.JAUNE, null);
+            verifierEtat(monde, "après acceptation", Couleur.JAUNE, null, false);
             Couleur client = context.computeOnClient(mc -> CouleurJoueur.get(Objects.requireNonNull(mc.player)));
             if (client != Couleur.JAUNE) {
                 throw new AssertionError("Couleur côté client : " + client);
@@ -92,15 +95,12 @@ public class TestNaissanceEnJeuTest implements FabricClientGameTest {
             // Debug : /rr naissance reset remet le joueur au début du test
             monde.getServer().runCommand("rr naissance reset @a[limit=1]");
             context.waitForScreen(EcranTestNaissance.class);
-            verifierEtat(monde, "après /rr naissance reset", null, TestEnCours.DEBUT);
-            monde.getServer().runOnServer(server -> {
-                var joueur = OutilsTest.joueur(server);
-                joueur.removeAttached(Naissance.TEST_EN_COURS);
-                CouleurJoueur.set(joueur, Couleur.JAUNE);
-            });
+            verifierEtat(monde, "après /rr naissance reset", null, TestEnCours.DEBUT, true);
+            monde.getServer().runOnServer(server -> Naissance.donnerCouleur(OutilsTest.joueur(server), Couleur.JAUNE));
             context.waitForScreen(null);
         }
         RedRising.LOGGER.info("[G4.4] OK : test complet passé par les écrans, relance unique, Couleur Jaune acceptée");
+        RedRising.LOGGER.info("[G4.5] OK : test passé dans la scène de naissance, retour au point d'apparition une fois né");
     }
 
     /** Clique, question après question, sur la réponse voulue (par son texte). */
@@ -110,13 +110,14 @@ public class TestNaissanceEnJeuTest implements FabricClientGameTest {
         }
     }
 
-    private static void verifierEtat(TestSingleplayerContext monde, String moment, @Nullable Couleur couleur, @Nullable TestEnCours test) {
-        record Etat(@Nullable Couleur couleur, @Nullable TestEnCours test) {
+    /** {@code dansLaScene} : le test se passe dans la scène de naissance (G4.5), qu'on quitte une fois né. */
+    private static void verifierEtat(TestSingleplayerContext monde, String moment, @Nullable Couleur couleur, @Nullable TestEnCours test, boolean dansLaScene) {
+        record Etat(@Nullable Couleur couleur, @Nullable TestEnCours test, boolean dansLaScene) {
         }
-        Etat attendu = new Etat(couleur, test);
+        Etat attendu = new Etat(couleur, test, dansLaScene);
         Etat obtenu = monde.getServer().computeOnServer(server -> {
             var joueur = OutilsTest.joueur(server);
-            return new Etat(CouleurJoueur.get(joueur), Naissance.testEnCours(joueur));
+            return new Etat(CouleurJoueur.get(joueur), Naissance.testEnCours(joueur), SceneNaissance.dans(joueur));
         });
         if (!attendu.equals(obtenu)) {
             throw new AssertionError("Naissance " + moment + " : attendu " + attendu + ", obtenu " + obtenu);

@@ -50,6 +50,7 @@ Option à la création du monde :
 
 ### Règles du test ✅
 - Scène d'ouverture façon Dive to the Heart (Kingdom Hearts).
+- ✅ Scène en place (G4.5, à embellir en G17) : une dimension à part, vide et noire, où le joueur se tient au centre d'un vitrail rond posé sur un pilier qui s'enfonce dans l'obscurité. Le vitrail est une roue des 14 Couleurs (verre teinté, l'Or devant le joueur, puis dans l'ordre de la hiérarchie) autour d'un cœur blanc. Pendant le test, la caméra passe derrière le joueur, qui se voit sur le vitrail, et l'interface de jeu disparaît. Une fois né, le joueur est ramené à son point d'apparition. Le choix libre, outil de développement, se fait sans la scène.
 - **7 questions, 4 réponses, 2 Couleurs par réponse.** Chaque réponse donne 1 point caché à chacune de ses 2 Couleurs.
 - La Couleur avec le plus de points gagne. Égalité départagée au hasard.
 - Le joueur ne voit jamais le barème.
