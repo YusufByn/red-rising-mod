@@ -55,7 +55,7 @@ Réservées aux ops (ou à la triche activée en solo). `[joueur]` est optionnel
 
 ## Tests
 
-- `./gradlew build` : compile et lance les tests unitaires (`src/test`).
+- `./gradlew build` : compile et lance les tests unitaires (`src/test`), dont la distribution du test de naissance (`TestPersonnaliteTest`, à surveiller après toute modification d'une paire de Couleurs).
 - `./gradlew runClientGameTest` : ouvre un vrai client et joue les tests en jeu (`src/gametest`), puis se ferme. Les captures d'écran prises par les tests sont copiées dans `build/captures-gametest/`.
 
 ## Conventions

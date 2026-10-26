@@ -56,7 +56,7 @@ Option à la création du monde :
 - Chaque Couleur apparaît exactement 4 fois. Distribution vérifiée par script : toutes les Couleurs sortent entre **6,8 % et 7,5 %** (idéal 7,1 %).
 - Une version à 5 questions a été testée et rejetée : Jaune à 1,3 %, Marron à 11,2 %.
 
-⚠️ **Les formulations peuvent changer librement. Les paires de Couleurs, non : toute modification d'une paire impose de relancer le script.**
+⚠️ **Les formulations peuvent changer librement. Les paires de Couleurs, non : toute modification d'une paire impose de relancer le script** (depuis G4.3 : `./gradlew build`, qui lance `TestPersonnaliteTest`).
 
 ### Questions ✅ (formulations à retravailler pour le ton)
 
@@ -106,6 +106,8 @@ Option à la création du monde :
 Choix (pas de hasard) : **promotion précédente** ou **promotion de Darrow** (voir section 7).
 
 ### Script de vérification de la distribution
+
+✅ Repris en Java (G4.3) : les paires sont dans `couleur/TestPersonnalite`, et le test unitaire `TestPersonnaliteTest` refait ce calcul à chaque build (il échoue si une Couleur sort de 6,8 % à 7,5 %, et affiche alors toute la distribution). C'est lui qui fait foi ; le script ci-dessous reste comme trace. Résultat actuel : de 6,82 % (Rouge) à 7,46 % (Or).
 
 ```python
 import itertools
