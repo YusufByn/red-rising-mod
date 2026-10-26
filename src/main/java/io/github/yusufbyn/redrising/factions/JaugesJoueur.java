@@ -52,6 +52,13 @@ public final class JaugesJoueur {
         return set(player, jauge, (long) get(player, jauge) + delta);
     }
 
+    /** Applique la variation d'une action (G5.2), dans les bornes. Renvoie les nouvelles valeurs. */
+    public static Jauges appliquer(Player player, Variation variation) {
+        Jauges nouvelles = get(player).plus(variation, CouleurJoueur.get(player));
+        player.setAttached(JAUGES, nouvelles);
+        return nouvelles;
+    }
+
     /** Appelé depuis {@link RedRising#onInitialize()} : charge la classe, donc enregistre l'attachment. */
     public static void init() {
     }

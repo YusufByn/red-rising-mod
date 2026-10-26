@@ -111,8 +111,16 @@
   "commande.redrising.naissance.relance_disponible": "available",
   "commande.redrising.naissance.reset": "Birth of %s restarted (Color and test cleared)",
   "commande.redrising.pnj.spawn": "%s NPC created (%s)",
-  "commande.redrising.pnj.get": "%s: Color %s, profession %s",
+  "commande.redrising.pnj.get": "%s: Color %s, profession %s, side %s",
   "commande.redrising.pnj.set": "%s: Color changed to %s (%s)",
   "commande.redrising.pnj.pas_villageois": "%s is not a villager",
-  "commande.redrising.pnj.refuse": "The NPC could not spawn here"
+  "commande.redrising.pnj.refuse": "The NPC could not spawn here",
+  "commande.redrising.pnj.camp": "%s: side %s",
+  "commande.redrising.coffre.get": "Chest at %s: side %s",
+  "commande.redrising.coffre.set": "Chest at %s: side %s",
+  "commande.redrising.coffre.absent": "No chest or barrel at %s",
+  "faction.redrising.aide": "The %s NPC accepts your food",
+  "faction.redrising.aide.deja": "You already helped this NPC today",
+  "faction.redrising.denonce": "The Grays take %s away",
+  "faction.redrising.denonce.personne": "No one to denounce here"
 }

@@ -16,6 +16,7 @@ import io.github.yusufbyn.redrising.couleur.Naissance;
 import io.github.yusufbyn.redrising.couleur.TestEnCours;
 import io.github.yusufbyn.redrising.data.EtatMonde;
 import io.github.yusufbyn.redrising.data.EtatMondeServeur;
+import io.github.yusufbyn.redrising.factions.ActionsFaction;
 import io.github.yusufbyn.redrising.factions.Camp;
 import io.github.yusufbyn.redrising.factions.Jauge;
 import io.github.yusufbyn.redrising.factions.Jauges;
@@ -28,6 +29,8 @@ import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.SharedSuggestionProvider;
 import net.minecraft.commands.arguments.EntityArgument;
+import net.minecraft.commands.arguments.coordinates.BlockPosArgument;
+import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.server.MinecraftServer;
@@ -35,6 +38,10 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.StringRepresentable;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.npc.villager.Villager;
+import net.minecraft.world.level.block.entity.BarrelBlockEntity;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.entity.ChestBlockEntity;
+import org.jspecify.annotations.Nullable;
 
 import java.util.Arrays;
 import java.util.Map;
@@ -55,6 +62,8 @@ public final class CommandesDebug {
             jalon -> Component.translatable("commande.redrising.jalon.absent", jalon));
     private static final DynamicCommandExceptionType PAS_UN_VILLAGEOIS = new DynamicCommandExceptionType(
             entite -> Component.translatable("commande.redrising.pnj.pas_villageois", entite));
+    private static final DynamicCommandExceptionType PAS_UN_COFFRE = new DynamicCommandExceptionType(
+            pos -> Component.translatable("commande.redrising.coffre.absent", pos));
     private static final SimpleCommandExceptionType PNJ_REFUSE = new SimpleCommandExceptionType(
             Component.translatable("commande.redrising.pnj.refuse"));
     private static final DynamicCommandExceptionType ZONE_ABSENTE = new DynamicCommandExceptionType(
@@ -95,7 +104,19 @@ public final class CommandesDebug {
                                 .then(Commands.argument("pnj", EntityArgument.entity()).executes(CommandesDebug::lirePnj)))
                         .then(Commands.literal("set")
                                 .then(Commands.argument("pnj", EntityArgument.entity())
-                                        .then(argEnum("couleur", Couleur.values()).executes(CommandesDebug::changerPnj)))))
+                                        .then(argEnum("couleur", Couleur.values()).executes(CommandesDebug::changerPnj))))
+                        .then(Commands.literal("camp")
+                                .then(Commands.argument("pnj", EntityArgument.entity())
+                                        .then(argEnum("camp", Camp.values()).executes(ctx -> changerCampPnj(ctx, lireEnum(ctx, "camp", Camp.values()))))
+                                        .then(Commands.literal("aucun").executes(ctx -> changerCampPnj(ctx, null))))))
+                .then(Commands.literal("coffre")
+                        .then(Commands.literal("get")
+                                .then(Commands.argument("pos", BlockPosArgument.blockPos()).executes(CommandesDebug::lireCoffre)))
+                        .then(Commands.literal("set")
+                                .then(Commands.argument("pos", BlockPosArgument.blockPos())
+                                        .then(argEnum("camp", Camp.values()).executes(ctx -> changerCoffre(ctx, lireEnum(ctx, "camp", Camp.values()))))))
+                        .then(Commands.literal("clear")
+                                .then(Commands.argument("pos", BlockPosArgument.blockPos()).executes(ctx -> changerCoffre(ctx, null)))))
                 .then(Commands.literal("jauge")
                         .then(Commands.literal("get").executes(ctx -> lireJauges(ctx, ctx.getSource().getPlayerOrException()))
                                 .then(argJoueur(CommandesDebug::lireJauges)))
@@ -195,7 +216,8 @@ public final class CommandesDebug {
         Villager pnj = villageois(ctx);
         Couleur couleur = PnjCouleur.couleur(pnj);
         Component nomCouleur = couleur == null ? Component.translatable("commande.redrising.aucun") : couleur.getDisplayName();
-        ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.pnj.get", pnj.getDisplayName(), nomCouleur, metier(pnj)), false);
+        ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.pnj.get", pnj.getDisplayName(), nomCouleur, metier(pnj),
+                nomCamp(pnj.getAttached(ActionsFaction.CAMP))), false);
         return couleur == null ? 0 : couleur.ordinal() + 1;
     }
 
@@ -205,6 +227,54 @@ public final class CommandesDebug {
         PnjCouleur.donnerCouleur(pnj, couleur);
         ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.pnj.set", pnj.getDisplayName(), couleur.getDisplayName(), metier(pnj)), true);
         return Command.SINGLE_SUCCESS;
+    }
+
+    /** Camp secret d'un PNJ (G5.2) : un PNJ du Rising peut être dénoncé. {@code null} : aucun camp. */
+    private static int changerCampPnj(CommandContext<CommandSourceStack> ctx, @Nullable Camp camp) throws CommandSyntaxException {
+        Villager pnj = villageois(ctx);
+        if (camp == null) {
+            pnj.removeAttached(ActionsFaction.CAMP);
+        } else {
+            pnj.setAttached(ActionsFaction.CAMP, camp);
+        }
+        ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.pnj.camp", pnj.getDisplayName(), nomCamp(camp)), true);
+        return Command.SINGLE_SUCCESS;
+    }
+
+    // --- Coffres d'un camp (G5.2) ---
+
+    private static int lireCoffre(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        BlockEntity coffre = coffre(ctx);
+        Camp camp = coffre.getAttached(ActionsFaction.CAMP);
+        ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.coffre.get", coffre.getBlockPos().toShortString(), nomCamp(camp)), false);
+        return camp == null ? 0 : camp.ordinal() + 1;
+    }
+
+    /** {@code null} : le coffre n'appartient plus à aucun camp. */
+    private static int changerCoffre(CommandContext<CommandSourceStack> ctx, @Nullable Camp camp) throws CommandSyntaxException {
+        BlockEntity coffre = coffre(ctx);
+        if (camp == null) {
+            coffre.removeAttached(ActionsFaction.CAMP);
+        } else {
+            coffre.setAttached(ActionsFaction.CAMP, camp);
+        }
+        coffre.setChanged(); // à sauvegarder avec le bloc
+        ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.coffre.set", coffre.getBlockPos().toShortString(), nomCamp(camp)), true);
+        return Command.SINGLE_SUCCESS;
+    }
+
+    /** Coffre ou tonneau à la position donnée (ce qui s'ouvre comme un coffre simple). */
+    private static BlockEntity coffre(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        BlockPos pos = BlockPosArgument.getLoadedBlockPos(ctx, "pos");
+        BlockEntity bloc = ctx.getSource().getLevel().getBlockEntity(pos);
+        if (bloc instanceof ChestBlockEntity || bloc instanceof BarrelBlockEntity) {
+            return bloc;
+        }
+        throw PAS_UN_COFFRE.create(pos.toShortString());
+    }
+
+    private static Component nomCamp(@Nullable Camp camp) {
+        return camp == null ? Component.translatable("commande.redrising.aucun") : nom("camp", camp);
     }
 
     private static Villager villageois(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {

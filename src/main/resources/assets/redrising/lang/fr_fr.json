@@ -111,8 +111,16 @@
   "commande.redrising.naissance.relance_disponible": "disponible",
   "commande.redrising.naissance.reset": "Naissance de %s relancée (Couleur et test effacés)",
   "commande.redrising.pnj.spawn": "PNJ %s créé (%s)",
-  "commande.redrising.pnj.get": "%s : Couleur %s, métier %s",
+  "commande.redrising.pnj.get": "%s : Couleur %s, métier %s, camp %s",
   "commande.redrising.pnj.set": "%s : Couleur changée en %s (%s)",
   "commande.redrising.pnj.pas_villageois": "%s n'est pas un villageois",
-  "commande.redrising.pnj.refuse": "Le PNJ n'a pas pu apparaître ici"
+  "commande.redrising.pnj.refuse": "Le PNJ n'a pas pu apparaître ici",
+  "commande.redrising.pnj.camp": "%s : camp %s",
+  "commande.redrising.coffre.get": "Coffre en %s : camp %s",
+  "commande.redrising.coffre.set": "Coffre en %s : camp %s",
+  "commande.redrising.coffre.absent": "Pas de coffre ni de tonneau en %s",
+  "faction.redrising.aide": "Le PNJ %s accepte ta nourriture",
+  "faction.redrising.aide.deja": "Tu as déjà aidé ce PNJ aujourd'hui",
+  "faction.redrising.denonce": "Les Gris emmènent %s",
+  "faction.redrising.denonce.personne": "Personne à dénoncer ici"
 }

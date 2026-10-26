@@ -64,6 +64,8 @@ Mod Fabric fan-made, solo, gratuit et non commercial, dans l'univers Red Rising 
 - Donner une Couleur sans passer par la naissance (debug, tests) : `Naissance.donnerCouleur`, qui abandonne le test en cours et sort le joueur de la scène. `CouleurJoueur.set` seul le laisserait dans la scène.
 - PNJ de Couleur (G5.1) : villageois vanilla + `CouleurJoueur.COULEUR` (l'attachment marche sur toute entité). Passer par `PnjCouleur.donnerCouleur` : il pose aussi le métier et le verrouille (un peu d'expérience), sinon le villageois le perd faute de poste de travail. « Sans métier » = `NITWIT` : un villageois `NONE` prend le métier du premier poste de travail à moins de 2 blocs.
 - Rendu d'une entité dont l'état de rendu ne garde pas l'entité (villageois...) : recopier la donnée voulue dans l'état avec un `RenderStateDataKey` de Fabric (`setData`), depuis un mixin sur `extractRenderState` (voir `VillagerRendererMixin`).
+- Tests client : le serveur avance au même pas que le client, `/tick sprint` n'accélère rien. Pour sauter du temps, avancer l'horloge du monde (`((ServerLevelData) level.getLevelData()).setGameTime(...)`, voir `ActionsFactionTest`).
+- Actions sur les jauges (G5.2) : toutes les valeurs dans `factions/EffetsActions` (logique pure, testée), les déclencheurs dans `factions/ActionsFaction`. Nouvelle action = une méthode dans l'un, un événement dans l'autre.
 - Commandes `/rr ... [joueur]` : l'argument vise un seul joueur. Depuis la console ou un test, `@a` est refusé : écrire `@a[limit=1]` ou le nom.
 
 ## CI

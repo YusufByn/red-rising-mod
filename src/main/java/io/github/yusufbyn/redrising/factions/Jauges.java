@@ -48,6 +48,11 @@ public record Jauges(int loyaute, int soutien, int suspicion) {
         };
     }
 
+    /** Copie avec la variation ajoutée, puis ramenée dans les bornes de la Couleur. */
+    public Jauges plus(Variation variation, @Nullable Couleur couleur) {
+        return new Jauges(loyaute + variation.loyaute(), soutien + variation.soutien(), suspicion + variation.suspicion()).borner(couleur);
+    }
+
     /** Copie avec chaque jauge ramenée dans les bornes de la Couleur. */
     public Jauges borner(@Nullable Couleur couleur) {
         return new Jauges(

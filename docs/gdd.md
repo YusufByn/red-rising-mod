@@ -237,6 +237,26 @@ Deux jauges séparées (pas une barre Société ↔ Rising) pour permettre **l'a
   - ✅ Mis en place (G5.1) : un PNJ de Couleur est un villageois avec une Couleur. Il porte les mêmes repères que le joueur, teintés (iris, cheveux sur le crâne, sigils sur les mains croisées ; les chapeaux de métier couvrent une partie des cheveux). Son métier est verrouillé (il ne le perd pas faute de poste de travail). Un villageois sans Couleur reste ordinaire.
   - ✅ Métiers (validés le 26/10 ; les 13 métiers de Minecraft ne couvrent pas les 14 Couleurs, deux sont partagés) : Or sans métier (il dépend des autres pour crafter), Argent bibliothécaire (registres et comptes), Cuivre cartographe (cadastre, titres de propriété), Blanc bibliothécaire (justice, enchantement), Bleu cartographe (navigation), Jaune prêtre (médecine, potions), Vert outilleur (technologie), Violet berger (teintures), Orange armurier (mécanique), Gris archer (combat à distance), Obsidian tanneur (tribus des pôles, fourrures), Marron fermier (agriculture), Rose sans métier (espionnage), Rouge maçon (pierre, mine). « Sans métier » = le villageois « nitwit » de Minecraft, sans commerce : un villageois sans métier ordinaire prendrait celui du premier poste de travail posé à côté (vérifié en jeu).
 
+### Actions qui bougent les jauges (G5.2)
+- ✅ Groupes de PNJ selon leur Couleur : **élite** (Or, Argent, Cuivre, Blanc), **ordre** (Gris, Obsidian), **peuple** (toutes les autres).
+- ✅ Actions et gestes :
+  - **Tuer** un PNJ de Couleur.
+  - **Aider** : accroupi, clic droit sur un PNJ de Couleur avec de la **nourriture** en main (pour l'instant) ; elle lui est donnée. Une fois par PNJ et par jour de jeu.
+  - **Voler** : prendre des objets dans un coffre (ou tonneau) d'un camp ; compté une fois par ouverture. Les coffres doubles ne sont pas encore pris en compte.
+  - **Dénoncer** : accroupi, clic droit **à mains vides** sur un PNJ Gris (aider = avec un objet, dénoncer = sans, pas d'ambiguïté) ; le PNJ du Rising le plus proche, à moins de 16 blocs, est arrêté (il disparaît).
+  - La **Suspicion retombe d'elle-même** chaque jour de jeu (sinon tout joueur du Rising finit traqué).
+- 🟡 Valeurs (Loyauté / Soutien / Suspicion), à régler en jeu, toutes dans `factions/EffetsActions` :
+
+| Action | Élite | Ordre | Peuple |
+|---|---|---|---|
+| Tuer | −15 / +5 / +15 | −10 / +4 / +10 | −3 / −5 / +5 |
+| Aider | +2 / 0 / 0 | +2 / 0 / 0 | 0 / +1 / 0 |
+
+  - Voler : coffre de la Société −5 / +2 / +5 ; coffre du Rising 0 / −5 / 0.
+  - Dénoncer : +5 / −10 / −5.
+  - Déclin : Suspicion −2 par jour de jeu (24 000 ticks).
+- Pour l'instant, la Suspicion monte même sans témoin ; les témoins arriveront avec les patrouilles de Gris (G5.5). Les camps des PNJ et des coffres seront posés par les structures (G5.3, G5.4) ; en attendant, `/rr pnj camp` et `/rr coffre`.
+
 ### Conséquences
 - Loyauté haute : accès aux domaines, commerces, équipement de la Société (razor réservé aux Or).
 - Soutien haut : bases cachées, équipement rebelle, soutien armé.

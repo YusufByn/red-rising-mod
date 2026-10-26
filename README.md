@@ -36,6 +36,7 @@ Code commun dans `src/main`, code client uniquement (HUD, écrans, rendu) dans `
 ## Contrôles
 
 - `R` (modifiable, catégorie « Red Rising ») : capacité active de sa Couleur.
+- Accroupi + clic droit sur un PNJ de Couleur avec de la nourriture : l'aider. À mains vides sur un PNJ Gris : dénoncer le PNJ du Rising le plus proche.
 - Options > Personnalisation du skin > « Cheveux de Couleur » : affiche ou non les cheveux teintés (réglage client, `config/redrising-client.properties`).
 
 ## Commandes de debug
@@ -46,6 +47,7 @@ Réservées aux ops (ou à la triche activée en solo). `[joueur]` est optionnel
 - `/rr jauge get [joueur]`, `/rr jauge set <jauge> <valeur> [joueur]`, `/rr jauge add <jauge> <delta> [joueur]`
 - `/rr jalon list`, `/rr jalon set <jalon> <issue>`, `/rr jalon clear <jalon>`
 - `/rr pnj spawn <couleur>` (un PNJ de cette Couleur à ta position), `/rr pnj get <pnj>`, `/rr pnj set <pnj> <couleur>`
+- `/rr pnj camp <pnj> <societe|rising|aucun>` (camp secret d'un PNJ), `/rr coffre get|set|clear <pos> [camp]` (coffre ou tonneau d'un camp)
 - `/rr naissance get [joueur]` (Couleur, ou test en cours : résultat en attente, relance), `/rr naissance reset [joueur]` (efface Couleur et test, et relance la naissance)
 - `/rr etat`, `/rr etat naissance <test|choix_libre>`, `/rr etat epoque <epoque>`, `/rr etat zone set <zone> <camp>`, `/rr etat zone clear <zone>`
 
