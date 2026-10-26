@@ -48,7 +48,7 @@ public class RestrictionsCouleurTest implements FabricClientGameTest {
                 .interditCraft(Items.BOOK)
                 .build());
 
-        try (TestSingleplayerContext monde = context.worldBuilder().create()) {
+        try (TestSingleplayerContext monde = OutilsTest.nouveauMonde(context)) {
             OutilsTest.attendreArrivee(context);
             monde.getServer().runCommand("tp @a 0.5 -60 0.5");
 

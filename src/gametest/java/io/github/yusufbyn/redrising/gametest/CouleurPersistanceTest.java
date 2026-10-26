@@ -20,7 +20,7 @@ public class CouleurPersistanceTest implements FabricClientGameTest {
         TestWorldSave sauvegarde;
         Couleur depart;
 
-        try (TestSingleplayerContext monde = context.worldBuilder().create()) {
+        try (TestSingleplayerContext monde = OutilsTest.nouveauMonde(context)) {
             depart = couleurDuJoueur(monde);
             if (depart == null) {
                 throw new AssertionError("Le joueur n'a pas de Couleur en arrivant dans le monde");

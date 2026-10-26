@@ -38,7 +38,7 @@ public class CapacitesActivesTest implements FabricClientGameTest {
                 })
                 .build());
 
-        try (TestSingleplayerContext monde = context.worldBuilder().create()) {
+        try (TestSingleplayerContext monde = OutilsTest.nouveauMonde(context)) {
             OutilsTest.attendreArrivee(context);
             monde.getServer().runOnServer(server -> {
                 var joueur = OutilsTest.joueur(server);

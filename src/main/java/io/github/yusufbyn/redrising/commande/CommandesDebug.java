@@ -12,6 +12,7 @@ import io.github.yusufbyn.redrising.couleur.Couleur;
 import io.github.yusufbyn.redrising.couleur.CouleurJoueur;
 import io.github.yusufbyn.redrising.couleur.ModeNaissance;
 import io.github.yusufbyn.redrising.couleur.Naissance;
+import io.github.yusufbyn.redrising.couleur.TestEnCours;
 import io.github.yusufbyn.redrising.data.EtatMonde;
 import io.github.yusufbyn.redrising.data.EtatMondeServeur;
 import io.github.yusufbyn.redrising.factions.Camp;
@@ -74,6 +75,11 @@ public final class CommandesDebug {
                         .then(Commands.literal("set")
                                 .then(argEnum("couleur", Couleur.values()).executes(ctx -> changerCouleur(ctx, ctx.getSource().getPlayerOrException()))
                                         .then(argJoueur(CommandesDebug::changerCouleur)))))
+                .then(Commands.literal("naissance")
+                        .then(Commands.literal("get").executes(ctx -> lireNaissance(ctx, ctx.getSource().getPlayerOrException()))
+                                .then(argJoueur(CommandesDebug::lireNaissance)))
+                        .then(Commands.literal("reset").executes(ctx -> relancerNaissance(ctx, ctx.getSource().getPlayerOrException()))
+                                .then(argJoueur(CommandesDebug::relancerNaissance))))
                 .then(Commands.literal("jauge")
                         .then(Commands.literal("get").executes(ctx -> lireJauges(ctx, ctx.getSource().getPlayerOrException()))
                                 .then(argJoueur(CommandesDebug::lireJauges)))
@@ -123,6 +129,34 @@ public final class CommandesDebug {
         Couleur couleur = lireEnum(ctx, "couleur", Couleur.values());
         CouleurJoueur.set(joueur, couleur);
         ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.couleur.set", joueur.getDisplayName(), couleur.getDisplayName()), true);
+        return Command.SINGLE_SUCCESS;
+    }
+
+    // --- Naissance ---
+
+    private static int lireNaissance(CommandContext<CommandSourceStack> ctx, ServerPlayer joueur) {
+        Couleur couleur = CouleurJoueur.get(joueur);
+        TestEnCours test = Naissance.testEnCours(joueur);
+        Component etat;
+        if (couleur != null) {
+            etat = Component.translatable("commande.redrising.naissance.nee", couleur.getDisplayName());
+        } else if (test == null) {
+            etat = Component.translatable("commande.redrising.naissance.aucune");
+        } else {
+            Component relance = Component.translatable(test.relanceUtilisee()
+                    ? "commande.redrising.naissance.relance_utilisee" : "commande.redrising.naissance.relance_disponible");
+            etat = test.resultat() == null
+                    ? Component.translatable("commande.redrising.naissance.questions", relance)
+                    : Component.translatable("commande.redrising.naissance.resultat", test.resultat().getDisplayName(), relance);
+        }
+        ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.naissance.get", joueur.getDisplayName(), etat), false);
+        return Command.SINGLE_SUCCESS;
+    }
+
+    /** Efface Couleur et test, et relance la naissance selon le mode du monde : l'écran de naissance revient. */
+    private static int relancerNaissance(CommandContext<CommandSourceStack> ctx, ServerPlayer joueur) {
+        Naissance.renaitre(joueur);
+        ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.naissance.reset", joueur.getDisplayName()), true);
         return Command.SINGLE_SUCCESS;
     }
 

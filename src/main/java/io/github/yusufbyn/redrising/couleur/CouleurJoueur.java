@@ -52,6 +52,12 @@ public final class CouleurJoueur {
         }
     }
 
+    /** Retire la Couleur (le joueur redevient « pas encore né ») ; les capacités passives suivent. Pour le debug. */
+    public static void retirer(ServerPlayer joueur) {
+        joueur.removeAttached(COULEUR);
+        CapacitesPassives.appliquer(joueur);
+    }
+
     /** Appelé depuis {@link RedRising#onInitialize()} : charge la classe (donc enregistre l'attachment) et branche les événements. */
     public static void init() {
         // Un joueur sans Couleur à l'arrivée est pris en charge par la naissance (Naissance)

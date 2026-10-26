@@ -22,7 +22,7 @@ public class JaugesPersistanceTest implements FabricClientGameTest {
         TestWorldSave sauvegarde;
         Jauges attendues = new Jauges(Bornes.PLAFOND_LOYAUTE_ROUGE, 70, 25);
 
-        try (TestSingleplayerContext monde = context.worldBuilder().create()) {
+        try (TestSingleplayerContext monde = OutilsTest.nouveauMonde(context)) {
             OutilsTest.attendreArrivee(context);
 
             monde.getServer().runOnServer(server -> {

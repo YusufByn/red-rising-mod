@@ -17,7 +17,7 @@ import net.fabricmc.fabric.api.client.gametest.v1.context.TestSingleplayerContex
 public class HudJaugesTest implements FabricClientGameTest {
     @Override
     public void runTest(ClientGameTestContext context) {
-        try (TestSingleplayerContext monde = context.worldBuilder().create()) {
+        try (TestSingleplayerContext monde = OutilsTest.nouveauMonde(context)) {
             OutilsTest.attendreArrivee(context);
             monde.getConnection().waitForChunksRender();
 

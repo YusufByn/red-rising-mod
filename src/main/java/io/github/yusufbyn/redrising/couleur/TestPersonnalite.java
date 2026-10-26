@@ -15,7 +15,8 @@ import static io.github.yusufbyn.redrising.couleur.Couleur.*;
  * une égalité est départagée au hasard.
  *
  * <p>Logique pure, sans joueur ni monde : l'interface (G4.4) envoie les réponses, le serveur appelle {@link #resultat}.
- * Les textes des questions viendront avec l'interface ; ici, seules comptent les paires de Couleurs.</p>
+ * Les textes des questions sont dans les fichiers de langue ({@link #cleQuestion}, {@link #cleReponse}) ;
+ * ici, seules comptent les paires de Couleurs.</p>
  *
  * <p>⚠️ Les paires ne se modifient pas à la légère : le test unitaire {@code TestPersonnaliteTest} vérifie que
  * chaque Couleur sort entre 6,8 % et 7,5 % des cas. Il remplace le script Python du GDD.</p>
@@ -87,6 +88,16 @@ public final class TestPersonnalite {
             }
         });
         return enTete;
+    }
+
+    /** Clé de traduction de la question i (à partir de 0), ex. {@code naissance.redrising.test.q1}. */
+    public static String cleQuestion(int question) {
+        return "naissance.redrising.test.q" + (question + 1);
+    }
+
+    /** Clé de traduction d'une réponse, ex. {@code naissance.redrising.test.q1.r4}. */
+    public static String cleReponse(int question, int reponse) {
+        return cleQuestion(question) + ".r" + (reponse + 1);
     }
 
     /** La Couleur de naissance : celle qui a le plus de points, tirée au hasard parmi les ex aequo. */

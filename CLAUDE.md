@@ -58,6 +58,8 @@ Mod Fabric fan-made, solo, gratuit et non commercial, dans l'univers Red Rising 
 - Mixins client : dans `src/client/.../client/mixin`, déclarés dans `src/client/resources/redrising.client.mixins.json` (environnement client).
 - Tests client qui passent par les vrais écrans (création de monde, ouverture) : pour quitter un monde, refaire comme Fabric (`level.disconnect`, `mc.disconnect(GenericMessageScreen, false)`, attendre `getSingleplayerServer() == null`, puis écran titre). `disconnectWithSavingScreen` ne ramène pas à l'écran titre. Les listes déroulantes d'options ne sont pas parcourues par `clickScreenButton` : cliquer à la souris (voir `ApparenceCouleurTest`).
 - Tests client : juste après l'entrée dans le monde, `/kill` n'a pas d'effet. Attendre une centaine de ticks avant.
+- Tests client : créer le monde avec `OutilsTest.nouveauMonde(context)` (joueur déjà né, Couleur Or). Avec `context.worldBuilder().create()`, l'écran du test de naissance s'ouvre et met le jeu en pause : à réserver aux tests de la naissance.
+- Commandes `/rr ... [joueur]` : l'argument vise un seul joueur. Depuis la console ou un test, `@a` est refusé : écrire `@a[limit=1]` ou le nom.
 
 ## CI
 

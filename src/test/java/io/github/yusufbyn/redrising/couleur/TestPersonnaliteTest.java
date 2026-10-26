@@ -1,8 +1,14 @@
 package io.github.yusufbyn.redrising.couleur;
 
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import net.minecraft.util.RandomSource;
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.List;
@@ -12,6 +18,7 @@ import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -111,6 +118,24 @@ class TestPersonnaliteTest {
         }
         // Chaque ex aequo sort, et jamais une autre Couleur
         assertEquals(exAequo, sorties);
+    }
+
+    /** Chaque question et chaque réponse a son texte en français et en anglais (G4.4). */
+    @Test
+    void textesTraduits() throws IOException {
+        for (String langue : List.of("fr_fr", "en_us")) {
+            JsonObject textes;
+            try (InputStream fichier = getClass().getResourceAsStream("/assets/redrising/lang/" + langue + ".json")) {
+                assertNotNull(fichier, "Fichier de langue absent : " + langue);
+                textes = JsonParser.parseReader(new InputStreamReader(fichier, StandardCharsets.UTF_8)).getAsJsonObject();
+            }
+            for (int question = 0; question < TestPersonnalite.QUESTIONS.size(); question++) {
+                assertTrue(textes.has(TestPersonnalite.cleQuestion(question)), langue + " : " + TestPersonnalite.cleQuestion(question));
+                for (int reponse = 0; reponse < TestPersonnalite.NB_REPONSES; reponse++) {
+                    assertTrue(textes.has(TestPersonnalite.cleReponse(question, reponse)), langue + " : " + TestPersonnalite.cleReponse(question, reponse));
+                }
+            }
+        }
     }
 
     @Test

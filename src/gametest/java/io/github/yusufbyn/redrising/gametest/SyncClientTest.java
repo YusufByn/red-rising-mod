@@ -34,7 +34,7 @@ public class SyncClientTest implements FabricClientGameTest {
     public void runTest(ClientGameTestContext context) {
         TestWorldSave sauvegarde;
 
-        try (TestSingleplayerContext monde = context.worldBuilder().create()) {
+        try (TestSingleplayerContext monde = OutilsTest.nouveauMonde(context)) {
             OutilsTest.attendreArrivee(context);
             verifierClientIdentique("au départ", context, monde);
 

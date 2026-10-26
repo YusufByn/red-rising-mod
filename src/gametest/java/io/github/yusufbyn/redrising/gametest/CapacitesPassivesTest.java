@@ -53,7 +53,7 @@ public class CapacitesPassivesTest implements FabricClientGameTest {
         Mesure base;
         Mesure attendue;
 
-        try (TestSingleplayerContext monde = context.worldBuilder().create()) {
+        try (TestSingleplayerContext monde = OutilsTest.nouveauMonde(context)) {
             OutilsTest.attendreArrivee(context);
 
             base = monde.getServer().computeOnServer(server -> {

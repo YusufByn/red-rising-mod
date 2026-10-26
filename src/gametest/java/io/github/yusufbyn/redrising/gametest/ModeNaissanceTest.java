@@ -29,7 +29,7 @@ public class ModeNaissanceTest implements FabricClientGameTest {
     @Override
     public void runTest(ClientGameTestContext context) {
         // Monde créé sans toucher à l'option : Test, la valeur par défaut du GDD
-        try (TestSingleplayerContext monde = context.worldBuilder().create()) {
+        try (TestSingleplayerContext monde = OutilsTest.nouveauMonde(context)) {
             verifier("monde par défaut", ModeNaissance.TEST, monde.getServer().computeOnServer(Naissance::mode));
         }
 

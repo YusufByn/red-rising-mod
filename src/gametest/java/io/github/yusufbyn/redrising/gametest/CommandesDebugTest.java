@@ -29,9 +29,8 @@ import java.util.Objects;
 public class CommandesDebugTest implements FabricClientGameTest {
     @Override
     public void runTest(ClientGameTestContext context) {
-        try (TestSingleplayerContext monde = context.worldBuilder()
-                .adjustSettings(reglages -> reglages.setAllowCommands(true))
-                .create()) {
+        try (TestSingleplayerContext monde = OutilsTest.nouveauMonde(context, context.worldBuilder()
+                .adjustSettings(reglages -> reglages.setAllowCommands(true)))) {
             OutilsTest.attendreArrivee(context);
 
             // Tapée par le joueur dans le vrai client : vérifie aussi la permission

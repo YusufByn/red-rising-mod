@@ -1,8 +1,12 @@
 package io.github.yusufbyn.redrising.gametest;
 
 import io.github.yusufbyn.redrising.RedRising;
+import io.github.yusufbyn.redrising.couleur.Couleur;
+import io.github.yusufbyn.redrising.couleur.CouleurJoueur;
+import io.github.yusufbyn.redrising.couleur.Naissance;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestSingleplayerContext;
+import net.fabricmc.fabric.api.client.gametest.v1.world.TestWorldBuilder;
 import net.minecraft.client.gui.screens.DeathScreen;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
@@ -21,6 +25,29 @@ final class OutilsTest {
     /** Le seul joueur du monde de test (côté serveur). */
     static ServerPlayer joueur(MinecraftServer server) {
         return server.getPlayerList().getPlayers().getFirst();
+    }
+
+    /** Couleur donnée par {@link #nouveauMonde(ClientGameTestContext)} : l'Or n'a pas encore de profil, donc ni bonus ni malus. */
+    static final Couleur COULEUR_DE_DEPART = Couleur.OR;
+
+    /** Monde de test où le joueur est déjà né ({@link #COULEUR_DE_DEPART}), pour les tests qui ne portent pas sur la naissance. */
+    static TestSingleplayerContext nouveauMonde(ClientGameTestContext context) {
+        return nouveauMonde(context, context.worldBuilder());
+    }
+
+    /**
+     * Crée le monde, puis fait naître le joueur sans passer par l'écran de naissance (G4) : il ouvrirait le test
+     * à l'arrivée, et le jeu reste en pause tant qu'il est affiché.
+     */
+    static TestSingleplayerContext nouveauMonde(ClientGameTestContext context, TestWorldBuilder monde) {
+        TestSingleplayerContext ouvert = monde.create();
+        ouvert.getServer().runOnServer(server -> {
+            ServerPlayer joueur = joueur(server);
+            joueur.removeAttached(Naissance.TEST_EN_COURS);
+            CouleurJoueur.set(joueur, COULEUR_DE_DEPART);
+        });
+        context.waitFor(mc -> mc.player != null && CouleurJoueur.get(mc.player) == COULEUR_DE_DEPART && mc.gui.screen() == null, 100);
+        return ouvert;
     }
 
     /** Juste après l'entrée dans le monde, certaines commandes (dont /kill) n'ont pas encore d'effet. */

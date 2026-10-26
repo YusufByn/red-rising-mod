@@ -29,7 +29,7 @@ public class EtatMondePersistanceTest implements FabricClientGameTest {
                 .avecIssue("pendaison_eo", Issue.CANON)
                 .avecZone("lykos", Camp.RISING);
 
-        try (TestSingleplayerContext monde = context.worldBuilder().create()) {
+        try (TestSingleplayerContext monde = OutilsTest.nouveauMonde(context)) {
             verifier("dans un monde neuf", EtatMonde.NOUVEAU, etatDuMonde(monde));
             monde.getServer().runOnServer(server -> EtatMondeServeur.set(server, attendu));
             sauvegarde = monde.getWorldSave();
