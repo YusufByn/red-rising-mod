@@ -10,6 +10,7 @@ import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.event.player.PlayerBlockBreakEvents;
 import net.fabricmc.fabric.api.event.player.UseEntityCallback;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.network.chat.Component;
@@ -22,7 +23,11 @@ import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.npc.villager.Villager;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.ChestBlock;
 import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.ChestType;
 import org.jspecify.annotations.Nullable;
 
 import java.util.Comparator;
@@ -150,6 +155,23 @@ public final class ActionsFaction {
     /** Camp d'un coffre, ou {@code null} s'il n'appartient à personne (ou n'est pas un coffre du monde). */
     public static @Nullable Camp campDuCoffre(Container coffre) {
         return coffre instanceof BlockEntity bloc ? bloc.getAttached(CAMP) : null;
+    }
+
+    /**
+     * Le bloc en {@code pos} est-il un coffre ou un tonneau d'un camp, que les entonnoirs ne doivent pas vider
+     * (mixin {@code HopperBlockEntityMixin}) ? Pour un coffre double, il suffit qu'une des deux moitiés appartienne à un camp.
+     */
+    public static boolean protegeDesEntonnoirs(Level monde, BlockPos pos, BlockState etat) {
+        if (aUnCamp(monde, pos)) {
+            return true;
+        }
+        return etat.getBlock() instanceof ChestBlock && etat.getValue(ChestBlock.TYPE) != ChestType.SINGLE
+                && aUnCamp(monde, ChestBlock.getConnectedBlockPos(pos, etat));
+    }
+
+    private static boolean aUnCamp(Level monde, BlockPos pos) {
+        BlockEntity bloc = monde.getBlockEntity(pos);
+        return bloc != null && bloc.getAttached(CAMP) != null;
     }
 
     public static int nombreObjets(Container coffre) {

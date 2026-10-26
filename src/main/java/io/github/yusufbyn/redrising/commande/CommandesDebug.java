@@ -24,6 +24,7 @@ import io.github.yusufbyn.redrising.factions.Jauges;
 import io.github.yusufbyn.redrising.factions.JaugesJoueur;
 import io.github.yusufbyn.redrising.jalons.Epoque;
 import io.github.yusufbyn.redrising.jalons.Issue;
+import io.github.yusufbyn.redrising.monde.CelluleRising;
 import io.github.yusufbyn.redrising.monde.PosteSociete;
 import io.github.yusufbyn.redrising.pnj.PnjCouleur;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
@@ -33,6 +34,7 @@ import net.minecraft.commands.SharedSuggestionProvider;
 import net.minecraft.commands.arguments.EntityArgument;
 import net.minecraft.commands.arguments.coordinates.BlockPosArgument;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.server.MinecraftServer;
@@ -50,7 +52,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.function.Function;
-import java.util.stream.Collectors;
 
 /**
  * Commandes de debug {@code /rr} (G2.5), réservées aux joueurs avec la triche activée.
@@ -68,7 +69,8 @@ public final class CommandesDebug {
             entite -> Component.translatable("commande.redrising.pnj.pas_villageois", entite));
     private static final DynamicCommandExceptionType PAS_UN_COFFRE = new DynamicCommandExceptionType(
             pos -> Component.translatable("commande.redrising.coffre.absent", pos));
-    private static final DynamicCommandExceptionType PAS_DE_POSTE = new DynamicCommandExceptionType(
+    private static final Direction[] HORIZONTALES = {Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST};
+    private static final DynamicCommandExceptionType PAS_DE_STRUCTURE = new DynamicCommandExceptionType(
             pos -> Component.translatable("commande.redrising.structure.absente", pos));
     private static final SimpleCommandExceptionType PNJ_REFUSE = new SimpleCommandExceptionType(
             Component.translatable("commande.redrising.pnj.refuse"));
@@ -116,11 +118,14 @@ public final class CommandesDebug {
                                         .then(argEnum("camp", Camp.values()).executes(ctx -> changerCampPnj(ctx, lireEnum(ctx, "camp", Camp.values()))))
                                         .then(Commands.literal("aucun").executes(ctx -> changerCampPnj(ctx, null))))))
                 .then(Commands.literal("structure")
-                        .then(Commands.literal("list").executes(CommandesDebug::listerPostes))
+                        .then(Commands.literal("list").executes(CommandesDebug::listerStructures))
                         .then(Commands.literal("poste")
                                 .then(Commands.argument("pos", BlockPosArgument.blockPos()).executes(CommandesDebug::construirePoste)))
+                        .then(Commands.literal("cellule")
+                                .then(Commands.argument("pos", BlockPosArgument.blockPos())
+                                        .then(argEnum("direction", HORIZONTALES).executes(CommandesDebug::construireCellule))))
                         .then(Commands.literal("oublier")
-                                .then(Commands.argument("pos", BlockPosArgument.blockPos()).executes(CommandesDebug::oublierPoste))))
+                                .then(Commands.argument("pos", BlockPosArgument.blockPos()).executes(CommandesDebug::oublierStructure))))
                 .then(Commands.literal("coffre")
                         .then(Commands.literal("get")
                                 .then(Commands.argument("pos", BlockPosArgument.blockPos()).executes(CommandesDebug::lireCoffre)))
@@ -253,14 +258,22 @@ public final class CommandesDebug {
         return Command.SINGLE_SUCCESS;
     }
 
-    // --- Structures (G5.3) ---
+    // --- Structures (G5.3, G5.4) ---
 
-    private static int listerPostes(CommandContext<CommandSourceStack> ctx) {
+    private static int listerStructures(CommandContext<CommandSourceStack> ctx) {
         List<PosteSociete.Poste> postes = PosteSociete.postes(ctx.getSource().getServer());
-        String liste = postes.stream().map(poste -> poste.porte().toShortString()).collect(Collectors.joining(" ; "));
+        List<String> portes = postes.stream().map(poste -> poste.porte().toShortString()).toList();
         ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.structure.list", postes.size(),
-                Acces.SEUIL_LOYAUTE_SOCIETE, postes.isEmpty() ? Component.translatable("commande.redrising.aucun") : Component.literal(liste)), false);
-        return postes.size();
+                Acces.SEUIL_LOYAUTE_SOCIETE, positions(portes)), false);
+        List<CelluleRising.Cellule> cellules = CelluleRising.cellules(ctx.getSource().getServer());
+        List<String> entrees = cellules.stream().map(cellule -> cellule.entree().toShortString() + " (" + cellule.versSalle().getSerializedName() + ")").toList();
+        ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.structure.list.cellules", cellules.size(),
+                Acces.SEUIL_SOUTIEN_RISING, positions(entrees)), false);
+        return postes.size() + cellules.size();
+    }
+
+    private static Component positions(List<String> positions) {
+        return positions.isEmpty() ? Component.translatable("commande.redrising.aucun") : Component.literal(String.join(" ; ", positions));
     }
 
     /** Construit un poste de la Société, coin nord-ouest du sol à la position donnée (la porte est au nord). */
@@ -271,10 +284,22 @@ public final class CommandesDebug {
         return Command.SINGLE_SUCCESS;
     }
 
-    private static int oublierPoste(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+    /** Construit une cellule du Rising : entrée cachée (moitié basse) à la position donnée, salle dans la direction donnée. */
+    private static int construireCellule(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
         BlockPos pos = BlockPosArgument.getLoadedBlockPos(ctx, ctx.getSource().getServer().overworld(), "pos");
-        if (!PosteSociete.oublier(ctx.getSource().getServer(), pos)) {
-            throw PAS_DE_POSTE.create(pos.toShortString());
+        Direction direction = lireEnum(ctx, "direction", HORIZONTALES);
+        CelluleRising.Cellule cellule = CelluleRising.construire(ctx.getSource().getServer().overworld(), pos, direction);
+        ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.structure.cellule", cellule.entree().toShortString(), direction.getSerializedName()), true);
+        return Command.SINGLE_SUCCESS;
+    }
+
+    /** Oublie le poste ou la cellule qui contient cette position (les blocs restent). */
+    private static int oublierStructure(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        BlockPos pos = BlockPosArgument.getLoadedBlockPos(ctx, ctx.getSource().getServer().overworld(), "pos");
+        MinecraftServer server = ctx.getSource().getServer();
+        // Pas de court-circuit : un poste et une cellule collés sont oubliés ensemble
+        if (!(PosteSociete.oublier(server, pos) | CelluleRising.oublier(server, pos))) {
+            throw PAS_DE_STRUCTURE.create(pos.toShortString());
         }
         ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.structure.oublier", pos.toShortString()), true);
         return Command.SINGLE_SUCCESS;

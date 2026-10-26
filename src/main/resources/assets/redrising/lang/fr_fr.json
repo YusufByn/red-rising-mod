@@ -126,6 +126,9 @@
   "structure.redrising.poste.refuse": "La Société te refuse l'entrée (Loyauté insuffisante)",
   "commande.redrising.structure.list": "%s poste(s) de la Société (entrée à partir de %s de Loyauté) ; portes : %s",
   "commande.redrising.structure.poste": "Poste de la Société construit, porte en %s",
-  "commande.redrising.structure.oublier": "Poste oublié en %s (les blocs restent)",
-  "commande.redrising.structure.absente": "Aucun poste en %s"
+  "commande.redrising.structure.oublier": "Structure oubliée en %s (les blocs restent)",
+  "commande.redrising.structure.absente": "Aucune structure en %s",
+  "structure.redrising.cellule.dehors": "Le Rising te met dehors",
+  "commande.redrising.structure.list.cellules": "%s cellule(s) du Rising (entrée à partir de %s de Soutien) ; entrées : %s",
+  "commande.redrising.structure.cellule": "Cellule du Rising construite, entrée cachée en %s (salle vers %s)"
 }

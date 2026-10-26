@@ -70,6 +70,10 @@ Mod Fabric fan-made, solo, gratuit et non commercial, dans l'univers Red Rising 
 - Refuser l'ouverture d'une porte côté serveur (`UseBlockCallback` → `FAIL`) : le client l'a déjà ouverte de son côté, lui renvoyer l'état des deux moitiés (`ClientboundBlockUpdatePacket`, voir `PosteSociete`).
 - Construire une structure par le code : poser les blocs avec `Block.UPDATE_CLIENTS | Block.UPDATE_KNOWN_SHAPE`, sinon une porte posée moitié par moitié se casse.
 - Commandes `/rr ... [joueur]` : l'argument vise un seul joueur. Depuis la console ou un test, `@a` est refusé : écrire `@a[limit=1]` ou le nom.
+- Information secrète (cellules du Rising...) : le client ne la connaît pas. Un geste secret laisse passer côté client (`PASS`) et le serveur décide ; un refus doit rester `PASS` côté serveur aussi, pour que rien ne le trahisse. Un effet réservé à certains joueurs (repère) : `ServerLevel.sendParticles(ServerPlayer, ...)`, envoyé à ce joueur seulement (voir `CelluleRising`).
+- Téléporter un joueur depuis un clic sur un bloc (`UseBlockCallback`) : le faire en fin de tick, pas dans l'événement. Le client envoie aussi le clic de la main secondaire ; s'il arrive après la téléportation, Minecraft le refuse avec le message rouge « limite de hauteur de construction » (voir `CelluleRising.PASSAGES`).
+- Coffres d'un camp : les entonnoirs (posés ou sur wagonnet) ne les vident pas (`HopperBlockEntityMixin`, règle dans `ActionsFaction.protegeDesEntonnoirs`, coffres doubles compris). Le mixin renvoie un contenant vide, pas `null` : sur `null`, l'API de transfert de Fabric cherche le coffre par un autre chemin et le vide quand même.
+- Tests client : lire un champ privé du client (message au-dessus de la barre d'objets...) par réflexion, dans le test seulement (noms officiels en 26.2), voir `CelluleRisingTest`.
 
 ## CI
 

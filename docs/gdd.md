@@ -242,7 +242,7 @@ Deux jauges séparées (pas une barre Société ↔ Rising) pour permettre **l'a
 - ✅ Actions et gestes :
   - **Tuer** un PNJ de Couleur.
   - **Aider** : accroupi, clic droit sur un PNJ de Couleur avec de la **nourriture** en main (pour l'instant) ; elle lui est donnée. Une fois par PNJ et par jour de jeu.
-  - **Voler** : prendre des objets dans un coffre (ou tonneau) d'un camp ; compté une fois par ouverture. **Casser** un coffre d'un camp compte aussi comme un vol (G5.3 : sinon on vide un poste en perçant un mur). Les coffres doubles ne sont pas encore pris en compte.
+  - **Voler** : prendre des objets dans un coffre (ou tonneau) d'un camp ; compté une fois par ouverture. **Casser** un coffre d'un camp compte aussi comme un vol (G5.3 : sinon on vide un poste en perçant un mur). Les coffres doubles ne sont pas encore pris en compte pour le vol.
   - **Dénoncer** : accroupi, clic droit **à mains vides** sur un PNJ Gris (aider = avec un objet, dénoncer = sans, pas d'ambiguïté) ; le PNJ du Rising le plus proche, à moins de 16 blocs, est arrêté (il disparaît).
   - La **Suspicion retombe d'elle-même** chaque jour de jeu (sinon tout joueur du Rising finit traqué).
 - 🟡 Valeurs (Loyauté / Soutien / Suspicion), à régler en jeu, toutes dans `factions/EffetsActions` :
@@ -261,6 +261,15 @@ Deux jauges séparées (pas une barre Société ↔ Rising) pour permettre **l'a
 - ✅ Structure générique : une salle en quartz (7×7) avec un comptoir, un PNJ Cuivre (camp Société) et un coffre de la Société. Construite par `/rr structure poste` en attendant la génération (G7.1).
 - 🟡 **Seuil d'entrée : Loyauté 40 ou plus** (à régler en jeu, dans `factions/Acces`). Égal au plafond du Rouge : un Rouge irréprochable entre tout juste, la moindre faute (un vol de la Société) le refoule jusqu'à ce qu'il se rattrape. Un nouveau joueur (50) entre ; tuer un PNJ de l'élite (−15) suffit à être refoulé.
 - ✅ Refoulement : la porte ne s'ouvre pas, avec le message « La Société te refuse l'entrée » ; l'intérieur est surveillé (toutes les demi-secondes) : un joueur refusé qui s'y trouve quand même (mur percé, fenêtre, Loyauté tombée une fois dedans) est reconduit devant l'entrée. Pas d'effet sur les jauges pour une tentative (la Suspicion d'une effraction viendra avec les patrouilles, G5.5).
+
+### Cellule du Rising (G5.4)
+- ✅ Structure générique : une vraie salle du monde (5×3×5, sol en dalles d'ardoise des profondeurs, lanternes) noyée dans la pierre, avec un PNJ Rouge (camp Rising) et un coffre du Rising. Construite par `/rr structure cellule` en attendant la génération dans les mines (G7.5).
+- 🟡 **Seuil d'entrée : Soutien 20 ou plus** (à régler en jeu, dans `factions/Acces`). Atteignable sans tuer : 20 dons de nourriture au peuple (+1 chacun, une fois par PNJ et par jour : environ 3 jours avec 7 PNJ), ou un mélange de dons et de vols à la Société (+2 chacun, mais Loyauté et Suspicion en pâtissent). Par l'aide seule, la Loyauté ne bouge pas : l'agent double reste admis au poste de la Société. Une dénonciation (−10) fait perdre l'accès. Même seuil pour le Rouge pour l'instant ; son avantage (« accès aux cellules ») viendra avec les cellules dans ses mines (G7.5).
+- ✅ **Entrée cachée** : deux blocs de pierre ordinaires (vanilla, même F3 n'y voit que de la pierre) dans le mur. Accroupi, main vide, clic droit : un joueur admis passe dans la salle. Un joueur refusé n'apprend rien : il ne se passe rien, comme sur n'importe quelle pierre (pas de message, pas de son).
+- ✅ **Repère** : quelques particules rouges sur l'entrée toutes les 2 secondes, envoyées par le serveur aux seuls joueurs admis à moins de 12 blocs.
+- ✅ **Sortie** : même geste depuis l'intérieur, quel que soit le Soutien. **Intérieur surveillé** : un joueur refusé dans la salle (Soutien tombé une fois dedans, mur percé) est mis devant l'entrée, avec le message « Le Rising te met dehors » (il connaît déjà la cellule).
+- ✅ **Trouver une cellule en creusant est permis** : on en fera du contenu (dénoncer une cellule, raids) avec les patrouilles (G5.5) et le Triomphe.
+- ✅ **Entonnoirs** : un entonnoir (posé ou sur wagonnet) ne vide pas un coffre ou un tonneau d'un camp, ni un coffre double dont une moitié appartient à un camp. Il peut toujours le remplir (c'est un don).
 
 ### Conséquences
 - Loyauté haute : accès aux domaines, commerces, équipement de la Société (razor réservé aux Or).

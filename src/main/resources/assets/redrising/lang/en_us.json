@@ -126,6 +126,9 @@
   "structure.redrising.poste.refuse": "The Society refuses you entry (Loyalty too low)",
   "commande.redrising.structure.list": "%s Society post(s) (entry from %s Loyalty); doors: %s",
   "commande.redrising.structure.poste": "Society post built, door at %s",
-  "commande.redrising.structure.oublier": "Post forgotten at %s (blocks remain)",
-  "commande.redrising.structure.absente": "No post at %s"
+  "commande.redrising.structure.oublier": "Structure forgotten at %s (blocks remain)",
+  "commande.redrising.structure.absente": "No structure at %s",
+  "structure.redrising.cellule.dehors": "The Rising throws you out",
+  "commande.redrising.structure.list.cellules": "%s Rising cell(s) (entry from %s Support); entrances: %s",
+  "commande.redrising.structure.cellule": "Rising cell built, hidden entrance at %s (room towards %s)"
 }
