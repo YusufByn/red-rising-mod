@@ -19,13 +19,18 @@ import io.github.yusufbyn.redrising.data.EtatMondeServeur;
 import io.github.yusufbyn.redrising.factions.Acces;
 import io.github.yusufbyn.redrising.factions.ActionsFaction;
 import io.github.yusufbyn.redrising.factions.Camp;
+import io.github.yusufbyn.redrising.factions.ChausseTrappes;
+import io.github.yusufbyn.redrising.factions.Contrebande;
 import io.github.yusufbyn.redrising.factions.Jauge;
 import io.github.yusufbyn.redrising.factions.Jauges;
 import io.github.yusufbyn.redrising.factions.JaugesJoueur;
+import io.github.yusufbyn.redrising.factions.Nuage;
+import io.github.yusufbyn.redrising.factions.RegistreChausseTrappes;
 import io.github.yusufbyn.redrising.jalons.Epoque;
 import io.github.yusufbyn.redrising.jalons.Issue;
 import io.github.yusufbyn.redrising.monde.CelluleRising;
 import io.github.yusufbyn.redrising.monde.PosteSociete;
+import io.github.yusufbyn.redrising.monde.Vue;
 import io.github.yusufbyn.redrising.factions.Ronde;
 import io.github.yusufbyn.redrising.factions.Traque;
 import io.github.yusufbyn.redrising.pnj.PatrouillePnj;
@@ -37,11 +42,13 @@ import net.minecraft.commands.Commands;
 import net.minecraft.commands.SharedSuggestionProvider;
 import net.minecraft.commands.arguments.EntityArgument;
 import net.minecraft.commands.arguments.coordinates.BlockPosArgument;
+import net.minecraft.commands.arguments.coordinates.Vec3Argument;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.StringRepresentable;
 import net.minecraft.world.entity.Entity;
@@ -49,6 +56,7 @@ import net.minecraft.world.entity.npc.villager.Villager;
 import net.minecraft.world.level.block.entity.BarrelBlockEntity;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
+import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -156,6 +164,20 @@ public final class CommandesDebug {
                                 .then(argJoueur(CommandesDebug::arreterTraque)))
                         .then(Commands.literal("arreter").executes(ctx -> arreterJoueur(ctx, ctx.getSource().getPlayerOrException()))
                                 .then(argJoueur(CommandesDebug::arreterJoueur))))
+                .then(Commands.literal("fumee")
+                        .then(Commands.literal("list").executes(CommandesDebug::listerFumees))
+                        .then(Commands.literal("clear").executes(CommandesDebug::dissiperFumees))
+                        .then(Commands.argument("pos", Vec3Argument.vec3()).executes(CommandesDebug::enfumer)))
+                .then(Commands.literal("chausse_trappes")
+                        .then(Commands.literal("list").executes(ctx -> listerChausseTrappes(ctx, null))
+                                .then(argJoueur(CommandesDebug::listerChausseTrappes)))
+                        .then(Commands.literal("clear").executes(ctx -> effacerChausseTrappes(ctx, null))
+                                .then(argJoueur(CommandesDebug::effacerChausseTrappes))))
+                .then(Commands.literal("contrebande")
+                        .then(Commands.literal("get").executes(ctx -> lireContrebande(ctx, ctx.getSource().getPlayerOrException()))
+                                .then(argJoueur(CommandesDebug::lireContrebande)))
+                        .then(Commands.literal("reset").executes(ctx -> effacerContrebande(ctx, ctx.getSource().getPlayerOrException()))
+                                .then(argJoueur(CommandesDebug::effacerContrebande))))
                 .then(Commands.literal("coffre")
                         .then(Commands.literal("get")
                                 .then(Commands.argument("pos", BlockPosArgument.blockPos()).executes(CommandesDebug::lireCoffre)))
@@ -366,7 +388,7 @@ public final class CommandesDebug {
         UUID suspect = PatrouillePnj.suspectControle(pnj);
         Component controle = suspect == null ? Component.translatable("commande.redrising.aucun") : Component.literal(suspect.toString());
         ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.patrouille.get", pnj.getDisplayName(), points,
-                ronde.index() + 1, controle), false);
+                ronde.index() + 1, controle, PatrouillePnj.fouilleRestante(pnj)), false);
         return ronde.index() + 1;
     }
 
@@ -429,6 +451,60 @@ public final class CommandesDebug {
     private static int arreterJoueur(CommandContext<CommandSourceStack> ctx, ServerPlayer joueur) {
         TraqueGris.arreter(joueur);
         ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.traque.arreter", joueur.getDisplayName()), true);
+        return Command.SINGLE_SUCCESS;
+    }
+
+    // --- Objets rebelles (G5.8) ---
+
+    private static int listerFumees(CommandContext<CommandSourceStack> ctx) {
+        ServerLevel monde = ctx.getSource().getLevel();
+        List<Nuage> nuages = Vue.nuages(monde);
+        String liste = nuages.stream()
+                .map(nuage -> BlockPos.containing(nuage.centre()).toShortString() + " (" + Math.max(0, nuage.fin() - monde.getGameTime()) / 20 + " s)")
+                .collect(Collectors.joining(" ; "));
+        ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.fumee.list", nuages.size(), liste), false);
+        return nuages.size();
+    }
+
+    private static int enfumer(CommandContext<CommandSourceStack> ctx) {
+        Vec3 centre = Vec3Argument.getVec3(ctx, "pos");
+        Vue.enfumer(ctx.getSource().getLevel(), centre);
+        ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.fumee.creee", BlockPos.containing(centre).toShortString()), true);
+        return Command.SINGLE_SUCCESS;
+    }
+
+    private static int dissiperFumees(CommandContext<CommandSourceStack> ctx) {
+        int nombre = Vue.dissiper(ctx.getSource().getLevel());
+        ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.fumee.clear", nombre), true);
+        return nombre;
+    }
+
+    /** Chausse-trappes d'un joueur, ou toutes sans joueur. */
+    private static int listerChausseTrappes(CommandContext<CommandSourceStack> ctx, @Nullable ServerPlayer joueur) {
+        RegistreChausseTrappes registre = ChausseTrappes.registre(ctx.getSource().getServer());
+        List<RegistreChausseTrappes.Piege> pieges = joueur == null ? registre.pieges() : registre.de(joueur.getUUID());
+        String liste = pieges.stream().map(piege -> piege.pos().toShortString()).collect(Collectors.joining(" ; "));
+        Component qui = joueur == null ? Component.translatable("commande.redrising.tous") : joueur.getDisplayName();
+        ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.chausse_trappes.list", qui, pieges.size(), liste), false);
+        return pieges.size();
+    }
+
+    private static int effacerChausseTrappes(CommandContext<CommandSourceStack> ctx, @Nullable ServerPlayer joueur) {
+        int nombre = ChausseTrappes.effacer(ctx.getSource().getServer(), joueur == null ? null : joueur.getUUID());
+        ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.chausse_trappes.clear", nombre), true);
+        return nombre;
+    }
+
+    private static int lireContrebande(CommandContext<CommandSourceStack> ctx, ServerPlayer joueur) {
+        Long dernier = joueur.getAttached(Contrebande.DERNIER_REPERAGE);
+        Component quand = dernier == null ? Component.translatable("commande.redrising.aucun") : Component.literal(String.valueOf(dernier));
+        ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.contrebande.get", joueur.getDisplayName(), quand), false);
+        return Command.SINGLE_SUCCESS;
+    }
+
+    private static int effacerContrebande(CommandContext<CommandSourceStack> ctx, ServerPlayer joueur) {
+        joueur.removeAttached(Contrebande.DERNIER_REPERAGE);
+        ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.contrebande.reset", joueur.getDisplayName()), true);
         return Command.SINGLE_SUCCESS;
     }
 

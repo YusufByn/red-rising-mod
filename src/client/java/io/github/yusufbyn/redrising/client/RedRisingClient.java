@@ -14,5 +14,6 @@ public class RedRisingClient implements ClientModInitializer {
         MarqueCouleurLayer.init();
         MarqueVillageoisLayer.init();
         NaissanceClient.init();
+        ObjetsRebellesClient.init();
     }
 }

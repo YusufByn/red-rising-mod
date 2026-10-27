@@ -81,6 +81,11 @@ public final class EffetsActions {
         return new Variation(-5, 0, 10);
     }
 
+    /** Un Gris a vu de la contrebande du Rising en main, ou utilisée (G5.8) ; une fois par minute au plus ({@link Contrebande}). */
+    public static Variation contrebandeVue() {
+        return new Variation(0, 0, 5);
+    }
+
     /**
      * Ce que la Société apprend d'une action selon ses témoins (G5.5).
      * <ul>

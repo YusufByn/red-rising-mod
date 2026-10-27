@@ -423,8 +423,24 @@ PNJ qu'on peut **croiser et influencer**. Trois règles :
   - **rangé dans l'inventaire** : invisible pour l'instant ; la fouille (plus tard) le confisquera, Suspicion +10 par objet trouvé ;
   - le coffre d'une cellule est une planque sûre (les entonnoirs ne le vident pas, la fouille ne s'y appliquera pas).
 - ✅ **Fumigène** (🟡 Soutien 20, le seuil d'entrée d'une cellule) : grenade à fumée, lancée, à usage unique. Nuage d'environ 5 blocs pendant 10 secondes, qui coupe la ligne de vue des PNJ au travers : un chasseur perd le joueur (il fouille autour de sa dernière position connue), le témoin d'un vol ne voit rien. Lancé devant un Gris, c'est de la contrebande (sans effet de plus pendant une traque, la Suspicion y est déjà au maximum).
-- ✅ **Chausse-trappes** (🟡 Soutien 40) : bloc de ferraille bas, posé au sol, discret. Un PNJ ou un joueur qui marche dessus (le poseur compris) est ralenti 3 secondes, et la chausse-trappe **disparaît** une fois déclenchée. Un Gris qui s'y prend fouille autour du piège : il sait qu'un rebelle est passé. **Au plus 3 posées par joueur** : en poser une quatrième fait disparaître la plus ancienne (on ne tapisse pas les abords d'une cellule). Le poseur peut reprendre la sienne en la cassant ; cassée par un autre, elle est perdue.
-- 🟡 Valeurs (seuils, durées, rayon du nuage, nombre de chausse-trappes, Suspicion de la contrebande) à régler en jeu, chacune à un seul endroit du code.
+  - ✅ **Règle de vue** (G5.8) : partout où un PNJ « voit » le joueur (témoins, patrouille qui repère un suspect, chasseurs, arrestation, apparition des chasseurs hors de vue), il faut à la fois la ligne de vue de Minecraft (les murs) et aucun nuage entre les deux paires d'yeux.
+  - ✅ **Au contact, la fumée ne cache rien** (2,5 blocs, la distance d'une arrestation) : un chasseur collé au joueur dans le nuage l'arrête quand même, quelqu'un à un pas voit le vol. La fumée sert à fuir, pas à rester au contact sans être pris.
+  - ✅ **Un contrôle déjà commencé n'est pas touché** : la fuite se mesure à la distance, le Gris sait qui il contrôle. La fumée empêche seulement d'être repéré.
+  - ✅ Entrer dans une cellule derrière un nuage, c'est y entrer sans être vu (traque gagnée, cellule pas repérée). Combinaison forte, voulue (le geste des Fils d'Arès) ; à revoir en jouant.
+  - ✅ Les monstres de Minecraft voient à travers : seuls les PNJ du mod sont concernés.
+- ✅ **Chausse-trappes** (🟡 Soutien 40) : bloc de ferraille bas, posé au sol, discret. Un joueur (le poseur compris ; ni créatif ni spectateur) ou un PNJ de Couleur qui marche dessus est ralenti 3 secondes, et la chausse-trappe **disparaît** une fois déclenchée. **Les monstres et les animaux ne la déclenchent pas** (sinon, dans les mines, araignées et zombies videraient les pièges). Un Gris qui s'y prend fouille autour du piège, il sait qu'un rebelle est passé : un chasseur repart de là, une patrouille fouille 20 secondes avant de reprendre sa ronde. **Au plus 3 posées par joueur** : en poser une quatrième fait disparaître la plus ancienne (on ne tapisse pas les abords d'une cellule). Le poseur peut reprendre la sienne en la cassant ; cassée par un autre, elle est perdue.
+- ✅ **Obtention** : les seuils de Soutien valent pour l'obtention (la boutique, G5.9), pas pour l'usage : un joueur dont le Soutien retombe garde ce qu'il a. En attendant la boutique : `/give` ou l'onglet « Red Rising » de l'inventaire créatif.
+- 🟡 Valeurs (G5.8), à régler en jeu, chacune à un seul endroit du code :
+
+| Valeur | Réglage | Où |
+|---|---|---|
+| Seuils d'obtention | fumigène 20, chausse-trappe 40 | `factions/Acces` |
+| Nuage | rayon 2,5 blocs, 10 secondes | `factions/Nuage` |
+| Vue gardée au contact | 2,5 blocs | `factions/Nuage` |
+| Ralentissement d'une chausse-trappe | 3 secondes, Lenteur III | `factions/ChausseTrappes` |
+| Chausse-trappes par joueur | 3 | `factions/RegistreChausseTrappes` |
+| Fouille d'une patrouille prise au piège | 20 secondes | `pnj/PatrouillePnj` |
+| Contrebande vue par un Gris | Suspicion +5, une fois par minute | `EffetsActions`, `factions/Contrebande` |
 - **Pistes pour plus tard** (non décidées) :
   - **Insigne d'Arès**, avec la fouille : gardé dans l'inventaire, les témoins du peuple couvrent le joueur (ils comptent comme « aucun témoin ») et le repère des cellules se voit de plus loin ; preuve d'appartenance, il coûterait cher à une fouille (Suspicion +25). À surveiller : proche de l'effet des faux papiers du Cuivre.
   - **Appel aux Fils**, avec le soutien armé : à usage unique, deux PNJ Rouges du Rising viennent se battre 60 secondes ; une fois par jour de jeu, Soutien −5 si l'un d'eux est tué ou arrêté. Demande des PNJ alliés qui combattent.

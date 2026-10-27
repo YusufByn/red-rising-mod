@@ -25,6 +25,7 @@
       "io.github.yusufbyn.redrising.gametest.CelluleRisingTest",
       "io.github.yusufbyn.redrising.gametest.PatrouilleGrisTest",
       "io.github.yusufbyn.redrising.gametest.TraqueTest",
+      "io.github.yusufbyn.redrising.gametest.ObjetsRebellesTest",
       "io.github.yusufbyn.redrising.gametest.CapacitesPassivesTest"
     ]
   },

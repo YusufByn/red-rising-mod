@@ -79,6 +79,10 @@ Mod Fabric fan-made, solo, gratuit et non commercial, dans l'univers Red Rising 
 - `ServerPlayConnectionEvents.DISCONNECT` peut tourner sur le fil réseau (`Netty Local IO` en solo), pas sur celui du serveur : n'y modifier ni jauges ni attachments. Pour punir une déconnexion, poser un attachment persistant pendant l'action et le traiter à `JOIN` (voir `PatrouillePnj.CONTROLE_EN_COURS`).
 - `ServerLivingEntityEvents.ALLOW_DAMAGE` est appelé après le test d'invulnérabilité : rien pour un joueur en créatif. Tests de dégâts : `gamemode survival`, et l'effet Résistance V pour ne pas mourir (l'événement est appelé avant la réduction des dégâts). Voir `TraqueTest`.
 - PNJ qui ne doivent pas fuir quand on les frappe (chasseurs) : effacer les mémoires `HURT_BY` et `HURT_BY_ENTITY` de leur cerveau à chaque tick, sinon les villageois paniquent.
+- Objets, blocs, entités (G5.8) : inscrits dans les registres au démarrage (`Registry.register(BuiltInRegistries.X, cle, ...)`), avec `Properties.setId(cle)` obligatoire en 26.2, `useBlockDescriptionPrefix()` pour l'objet d'un bloc (Fabric remplit `Item.BY_BLOCK` tout seul). Voir `factions/ObjetsRebelles`. Rendu d'une entité : `EntityRenderers.register` de Minecraft (celui de Fabric est déprécié). Un bloc à texture en partie transparente est dessiné en « cutout » sans rien déclarer.
+- Ce qu'un PNJ voit : toujours `monde/Vue.voit(pnj, joueur)` (murs et fumée), jamais `hasLineOfSight` directement.
+- Tests unitaires : une classe qui charge `Level` (`Level.RESOURCE_KEY_CODEC`, `Level.OVERWORLD`) plante sans Minecraft démarré. Pour un codec de dimension : `ResourceKey.codec(Registries.DIMENSION)`.
+- Tests client de traque : un chasseur téléporté loin sort des chunks chargés, il est oublié et la traque en fait apparaître un autre. Pour en garder un seul, tuer les autres (un chasseur tué n'est remplacé que par les renforts).
 - Durées longues (traque, interrogatoire) : compter le temps de jeu écoulé entre deux passages (`getGameTime`), joueur connecté seulement ; un test peut alors avancer l'horloge du monde au lieu d'attendre.
 
 ## CI

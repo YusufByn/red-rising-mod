@@ -10,6 +10,7 @@ import io.github.yusufbyn.redrising.factions.Controle;
 import io.github.yusufbyn.redrising.factions.EffetsActions;
 import io.github.yusufbyn.redrising.factions.JaugesJoueur;
 import io.github.yusufbyn.redrising.factions.Ronde;
+import io.github.yusufbyn.redrising.monde.Vue;
 import net.fabricmc.fabric.api.attachment.v1.AttachmentRegistry;
 import net.fabricmc.fabric.api.attachment.v1.AttachmentType;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerEntityEvents;
@@ -80,6 +81,9 @@ public final class PatrouillePnj {
     private static final int PAUSE_AU_POINT = 60;
     private static final float VITESSE_RONDE = 0.5f;
     private static final float VITESSE_APPROCHE = 0.6f;
+    private static final float VITESSE_FOUILLE = 0.6f;
+    /** 🟡 Un Gris pris dans une chausse-trappe fouille 20 secondes autour avant de reprendre sa ronde (G5.8). */
+    public static final long DUREE_FOUILLE_PIEGE = 400;
 
     /** PNJ en patrouille chargés dans le monde (tenus à jour au chargement et au déchargement des entités). */
     private static final Set<Villager> PATROUILLEURS = new HashSet<>();
@@ -89,6 +93,12 @@ public final class PatrouillePnj {
     private static final Map<UUID, EnCours> CONTROLES = new HashMap<>();
 
     private record EnCours(UUID suspect, Controle controle) {
+    }
+
+    /** PNJ qui fouillent autour d'une chausse-trappe → la fouille (pas sauvegardée). */
+    private static final Map<UUID, Fouille> FOUILLES = new HashMap<>();
+
+    private record Fouille(Ronde ronde, long fin) {
     }
 
     private PatrouillePnj() {
@@ -161,6 +171,7 @@ public final class PatrouillePnj {
         PATROUILLEURS.remove(pnj);
         EN_PAUSE.remove(pnj.getUUID());
         CONTROLES.remove(pnj.getUUID());
+        FOUILLES.remove(pnj.getUUID());
     }
 
     private static void agir(ServerLevel monde, Villager gris, long maintenant) {
@@ -177,7 +188,39 @@ public final class PatrouillePnj {
             commencerControle(gris, suspect, maintenant);
             return;
         }
-        faireLaRonde(gris, maintenant);
+        if (!fouiller(gris, maintenant)) {
+            faireLaRonde(gris, maintenant);
+        }
+    }
+
+    /** Un Gris en patrouille s'est pris dans une chausse-trappe (G5.8) : il fouille autour avant de reprendre sa ronde. */
+    public static void piegeDeclenche(Villager gris, BlockPos piege) {
+        if (gris.hasAttached(RONDE)) {
+            FOUILLES.put(gris.getUUID(), new Fouille(TraqueGris.fouilleAutour(gris.level(), piege), gris.level().getGameTime() + DUREE_FOUILLE_PIEGE));
+            EN_PAUSE.remove(gris.getUUID());
+        }
+    }
+
+    /** Fouille en cours autour d'une chausse-trappe ; renvoie {@code false} s'il n'y en a pas (ou plus). */
+    private static boolean fouiller(Villager gris, long maintenant) {
+        Fouille fouille = FOUILLES.get(gris.getUUID());
+        if (fouille == null) {
+            return false;
+        }
+        if (maintenant >= fouille.fin()) {
+            FOUILLES.remove(gris.getUUID());
+            return false;
+        }
+        Ronde ronde = fouille.ronde().atteint(gris.blockPosition()) ? fouille.ronde().suivante() : fouille.ronde();
+        FOUILLES.put(gris.getUUID(), new Fouille(ronde, fouille.fin()));
+        gris.getBrain().setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(ronde.pointEnCours(), VITESSE_FOUILLE, 1));
+        return true;
+    }
+
+    /** Fin de la fouille autour d'une chausse-trappe, en secondes restantes (0 sinon) ; debug. */
+    public static long fouilleRestante(Villager gris) {
+        Fouille fouille = FOUILLES.get(gris.getUUID());
+        return fouille == null ? 0 : Math.max(0, fouille.fin() - gris.level().getGameTime()) / 20;
     }
 
     private static void faireLaRonde(Villager gris, long maintenant) {
@@ -203,7 +246,7 @@ public final class PatrouillePnj {
             if (joueur.isSpectator() || !joueur.isAlive() || !Acces.estControle(JaugesJoueur.get(joueur))
                     || gris.distanceTo(joueur) > Controle.DETECTION
                     || maintenant - suivi(joueur).dernierControle() < Controle.ATTENTE_ENTRE_CONTROLES
-                    || dejaControle(joueur) || !gris.hasLineOfSight(joueur)) {
+                    || dejaControle(joueur) || !Vue.voit(gris, joueur)) {
                 continue;
             }
             return joueur;

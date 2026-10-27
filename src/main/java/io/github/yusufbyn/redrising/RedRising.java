@@ -8,9 +8,13 @@ import io.github.yusufbyn.redrising.couleur.Naissance;
 import io.github.yusufbyn.redrising.couleur.RestrictionsCouleur;
 import io.github.yusufbyn.redrising.data.EtatMondeServeur;
 import io.github.yusufbyn.redrising.factions.ActionsFaction;
+import io.github.yusufbyn.redrising.factions.ChausseTrappes;
+import io.github.yusufbyn.redrising.factions.Contrebande;
 import io.github.yusufbyn.redrising.factions.JaugesJoueur;
+import io.github.yusufbyn.redrising.factions.ObjetsRebelles;
 import io.github.yusufbyn.redrising.monde.CelluleRising;
 import io.github.yusufbyn.redrising.monde.PosteSociete;
+import io.github.yusufbyn.redrising.monde.Vue;
 import io.github.yusufbyn.redrising.pnj.PatrouillePnj;
 import io.github.yusufbyn.redrising.pnj.TraqueGris;
 import net.fabricmc.api.ModInitializer;
@@ -25,6 +29,7 @@ public class RedRising implements ModInitializer {
     @Override
     public void onInitialize() {
         LOGGER.info("Red Rising : initialisation");
+        ObjetsRebelles.init();
         CouleurJoueur.init();
         Naissance.init();
         CapacitesPassives.init();
@@ -36,6 +41,9 @@ public class RedRising implements ModInitializer {
         CelluleRising.init();
         PatrouillePnj.init();
         TraqueGris.init();
+        Vue.init();
+        ChausseTrappes.init();
+        Contrebande.init();
         EtatMondeServeur.init();
         CommandesDebug.init();
     }

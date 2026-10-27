@@ -14,6 +14,7 @@ import io.github.yusufbyn.redrising.factions.Ronde;
 import io.github.yusufbyn.redrising.factions.Traque;
 import io.github.yusufbyn.redrising.monde.CelluleRising;
 import io.github.yusufbyn.redrising.monde.PosteSociete;
+import io.github.yusufbyn.redrising.monde.Vue;
 import net.fabricmc.fabric.api.attachment.v1.AttachmentRegistry;
 import net.fabricmc.fabric.api.attachment.v1.AttachmentType;
 import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents;
@@ -287,18 +288,18 @@ public final class TraqueGris {
             FOUILLES.put(chasseur.getUUID(), fouille);
             cerveau.setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(fouille.pointEnCours(), VITESSE_FOUILLE, 1));
         }
-        // Pas d'arrestation à travers un mur (joueur caché dans une cellule, contre la paroi)
+        // Pas d'arrestation à travers un mur (joueur caché dans une cellule, contre la paroi) ; au contact, la fumée ne cache rien
         Controle arret = ARRETS.computeIfAbsent(chasseur.getUUID(), id -> new Controle(Traque.ARRESTATION, maintenant));
-        double distanceArret = chasseur.hasLineOfSight(joueur) ? distance : Double.MAX_VALUE;
+        double distanceArret = Vue.voit(chasseur, joueur) ? distance : Double.MAX_VALUE;
         return arret.suivre(distanceArret, maintenant) == Controle.Issue.ABOUTI;
     }
 
     private static boolean voit(Villager chasseur, ServerPlayer joueur) {
-        return chasseur.level() == joueur.level() && chasseur.distanceTo(joueur) <= Traque.VUE && chasseur.hasLineOfSight(joueur);
+        return chasseur.level() == joueur.level() && chasseur.distanceTo(joueur) <= Traque.VUE && Vue.voit(chasseur, joueur);
     }
 
-    /** Fouille : les quatre coins d'un carré autour de la dernière position connue, au niveau du sol. */
-    private static Ronde fouilleAutour(Level monde, BlockPos centre) {
+    /** Fouille : les quatre coins d'un carré autour de la dernière position connue, au niveau du sol (aussi pour les patrouilles). */
+    static Ronde fouilleAutour(Level monde, BlockPos centre) {
         return Ronde.de(List.of(coin(monde, centre, -RAYON_FOUILLE, -RAYON_FOUILLE), coin(monde, centre, RAYON_FOUILLE, -RAYON_FOUILLE),
                 coin(monde, centre, RAYON_FOUILLE, RAYON_FOUILLE), coin(monde, centre, -RAYON_FOUILLE, RAYON_FOUILLE)));
     }
@@ -321,6 +322,15 @@ public final class TraqueGris {
         fleche.shoot(dx, dy + Math.sqrt(dx * dx + dz * dz) * 0.2, dz, 1.6f, 2);
         monde.addFreshEntity(fleche);
         monde.playSound(null, chasseur.getX(), chasseur.getY(), chasseur.getZ(), SoundEvents.SKELETON_SHOOT, SoundSource.HOSTILE, 1, 1);
+    }
+
+    /** Un chasseur s'est pris dans une chausse-trappe (G5.8) : un rebelle est passé là, la fouille repart de ce point. */
+    public static void piegeDeclenche(Villager chasseur, BlockPos piege) {
+        UUID chasse = chasseur.getAttached(CHASSEUR);
+        if (chasse != null) {
+            DERNIERE_POSITION_VUE.put(chasse, piege.immutable());
+            FOUILLES.remove(chasseur.getUUID());
+        }
     }
 
     // --- Chasseurs ---
@@ -353,7 +363,7 @@ public final class TraqueGris {
             if (gris == null) {
                 continue;
             }
-            if (essai < 9 && gris.hasLineOfSight(joueur)) {
+            if (essai < 9 && Vue.voit(gris, joueur)) {
                 gris.discard();
                 continue;
             }

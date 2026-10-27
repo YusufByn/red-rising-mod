@@ -72,4 +72,9 @@ class EffetsActionsTest {
         assertEquals(new Variation(0, 0, -5), EffetsActions.controleObei());
         assertEquals(new Variation(-5, 0, 10), EffetsActions.fuiteControle());
     }
+
+    @Test
+    void contrebande() {
+        assertEquals(new Variation(0, 0, 5), EffetsActions.contrebandeVue());
+    }
 }

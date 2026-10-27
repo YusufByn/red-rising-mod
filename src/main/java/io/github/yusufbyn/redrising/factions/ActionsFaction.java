@@ -3,6 +3,7 @@ package io.github.yusufbyn.redrising.factions;
 import com.mojang.serialization.Codec;
 import io.github.yusufbyn.redrising.RedRising;
 import io.github.yusufbyn.redrising.couleur.Couleur;
+import io.github.yusufbyn.redrising.monde.Vue;
 import io.github.yusufbyn.redrising.pnj.PnjCouleur;
 import io.github.yusufbyn.redrising.pnj.TraqueGris;
 import net.fabricmc.fabric.api.attachment.v1.AttachmentRegistry;
@@ -207,8 +208,8 @@ public final class ActionsFaction {
     }
 
     /**
-     * Qui voit le joueur : les PNJ de Couleur à moins de {@value EffetsActions#PORTEE_TEMOIN} blocs, avec une ligne de vue
-     * sur lui. Ne comptent pas : les PNJ du Rising (ils ne parlent pas à la Société), {@code exclu} (la victime),
+     * Qui voit le joueur : les PNJ de Couleur à moins de {@value EffetsActions#PORTEE_TEMOIN} blocs, qui le voient
+     * ({@link Vue} : ni mur ni fumée entre eux). Ne comptent pas : les PNJ du Rising (ils ne parlent pas à la Société), {@code exclu} (la victime),
      * les villageois sans Couleur. Un Gris l'emporte sur un témoin ordinaire.
      */
     public static Temoin temoin(ServerPlayer joueur, @Nullable Entity exclu) {
@@ -217,7 +218,7 @@ public final class ActionsFaction {
         for (Villager pnj : joueur.level().getEntities(EntityTypes.VILLAGER, joueur.getBoundingBox().inflate(portee),
                 pnj -> pnj != exclu && pnj.isAlive() && pnj.distanceTo(joueur) <= portee)) {
             Couleur couleur = PnjCouleur.couleur(pnj);
-            if (couleur == null || pnj.getAttached(CAMP) == Camp.RISING || !pnj.hasLineOfSight(joueur)) {
+            if (couleur == null || pnj.getAttached(CAMP) == Camp.RISING || !Vue.voit(pnj, joueur)) {
                 continue;
             }
             if (couleur == Couleur.GRIS) {
