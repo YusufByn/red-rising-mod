@@ -31,11 +31,17 @@ import io.github.yusufbyn.redrising.factions.Jauges;
 import io.github.yusufbyn.redrising.factions.JaugesJoueur;
 import io.github.yusufbyn.redrising.factions.Nuage;
 import io.github.yusufbyn.redrising.factions.RegistreChausseTrappes;
+import io.github.yusufbyn.redrising.jalons.Bilan;
 import io.github.yusufbyn.redrising.jalons.ContributionDuJour;
+import io.github.yusufbyn.redrising.jalons.Echeance;
 import io.github.yusufbyn.redrising.jalons.Epoque;
 import io.github.yusufbyn.redrising.jalons.Horloge;
 import io.github.yusufbyn.redrising.jalons.HorlogeMonde;
 import io.github.yusufbyn.redrising.jalons.Issue;
+import io.github.yusufbyn.redrising.jalons.Jalon;
+import io.github.yusufbyn.redrising.jalons.Jalons;
+import io.github.yusufbyn.redrising.jalons.JalonsEvents;
+import io.github.yusufbyn.redrising.jalons.MoteurJalons;
 import io.github.yusufbyn.redrising.monde.CelluleRising;
 import io.github.yusufbyn.redrising.monde.PosteSociete;
 import io.github.yusufbyn.redrising.monde.Vue;
@@ -70,8 +76,10 @@ import org.jspecify.annotations.Nullable;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -88,6 +96,10 @@ public final class CommandesDebug {
             valeur -> Component.translatable("commande.redrising.inconnu", valeur));
     private static final DynamicCommandExceptionType JALON_ABSENT = new DynamicCommandExceptionType(
             jalon -> Component.translatable("commande.redrising.jalon.absent", jalon));
+    private static final DynamicCommandExceptionType JALON_INCONNU = new DynamicCommandExceptionType(
+            jalon -> Component.translatable("commande.redrising.jalon.inconnu", jalon));
+    private static final DynamicCommandExceptionType JALON_DEJA_PASSE = new DynamicCommandExceptionType(
+            jalon -> Component.translatable("commande.redrising.jalon.deja_passe", jalon));
     private static final DynamicCommandExceptionType PAS_UN_VILLAGEOIS = new DynamicCommandExceptionType(
             entite -> Component.translatable("commande.redrising.pnj.pas_villageois", entite));
     private static final DynamicCommandExceptionType PAS_UN_COFFRE = new DynamicCommandExceptionType(
@@ -232,7 +244,16 @@ public final class CommandesDebug {
                                 .then(Commands.argument("jalon", StringArgumentType.word())
                                         .then(argEnum("issue", Issue.values()).executes(CommandesDebug::fixerJalon))))
                         .then(Commands.literal("clear")
-                                .then(Commands.argument("jalon", StringArgumentType.word()).executes(CommandesDebug::effacerJalon))))
+                                .then(Commands.argument("jalon", StringArgumentType.word()).executes(CommandesDebug::effacerJalon)))
+                        // Moteur des jalons (G6.2)
+                        .then(Commands.literal("prochains").executes(CommandesDebug::listerProchains))
+                        .then(Commands.literal("declencher")
+                                .then(argJalonDeclare().executes(ctx -> declencherJalon(ctx, null))
+                                        .then(argEnum("issue", Issue.values()).executes(ctx -> declencherJalon(ctx, lireEnum(ctx, "issue", Issue.values()))))))
+                        .then(Commands.literal("effets")
+                                .then(Commands.argument("jalon", StringArgumentType.word())
+                                        .then(Commands.literal("appliques").executes(ctx -> marquerEffets(ctx, false)))
+                                        .then(Commands.literal("en_attente").executes(ctx -> marquerEffets(ctx, true))))))
                 .then(Commands.literal("etat").executes(CommandesDebug::lireEtat)
                         .then(Commands.literal("naissance")
                                 .then(argEnum("mode", ModeNaissance.values()).executes(CommandesDebug::changerModeNaissance)))
@@ -250,6 +271,11 @@ public final class CommandesDebug {
                                         .then(Commands.argument("ticks", LongArgumentType.longArg(0)).executes(ctx -> changerTemps(ctx, false))))
                                 .then(Commands.literal("add")
                                         .then(Commands.argument("ticks", LongArgumentType.longArg()).executes(ctx -> changerTemps(ctx, true)))))
+                        .then(Commands.literal("presence")
+                                .then(Commands.literal("set")
+                                        .then(Commands.argument("ticks", LongArgumentType.longArg(0)).executes(ctx -> changerPresence(ctx, false))))
+                                .then(Commands.literal("add")
+                                        .then(Commands.argument("ticks", LongArgumentType.longArg()).executes(ctx -> changerPresence(ctx, true)))))
                         .then(Commands.literal("soutien")
                                 .then(compteurSoutien("aide"))
                                 .then(compteurSoutien("tort")))
@@ -705,9 +731,75 @@ public final class CommandesDebug {
     // --- Jalons ---
 
     private static int listerJalons(CommandContext<CommandSourceStack> ctx) {
-        Map<String, Issue> jalons = EtatMondeServeur.get(ctx.getSource().getServer()).jalons();
-        ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.jalon.list", liste(jalons, "issue")), false);
+        EtatMonde etat = EtatMondeServeur.get(ctx.getSource().getServer());
+        Map<String, Issue> jalons = etat.jalons();
+        Component enAttente = etat.effetsEnAttente().isEmpty() ? Component.translatable("commande.redrising.aucun")
+                : Component.literal(String.join(", ", new TreeSet<>(etat.effetsEnAttente())));
+        ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.jalon.list", liste(jalons, "issue"), enAttente), false);
         return jalons.size();
+    }
+
+    /** Argument : un jalon déclaré, avec l'autocomplétion. */
+    private static RequiredArgumentBuilder<CommandSourceStack, String> argJalonDeclare() {
+        return Commands.argument("jalon", StringArgumentType.word())
+                .suggests((ctx, builder) -> SharedSuggestionProvider.suggest(Jalons.tous().stream().map(Jalon::id), builder));
+    }
+
+    /** Chaque jalon déclaré pas encore passé : en route (dans combien de temps, pourquoi, avec quelle issue) ou pas encore. */
+    private static int listerProchains(CommandContext<CommandSourceStack> ctx) {
+        EtatMonde etat = EtatMondeServeur.get(ctx.getSource().getServer());
+        int nombre = 0;
+        for (Jalon jalon : Jalons.tous()) {
+            if (etat.jalons().containsKey(jalon.id())) {
+                continue;
+            }
+            nombre++;
+            Component ligne;
+            if (etat.enRoute().containsKey(jalon.id())) {
+                Bilan bilan = Jalons.bilan(jalon, etat);
+                Echeance echeance = jalon.echeance();
+                ligne = Component.translatable("commande.redrising.jalon.prochain", jalon.id(),
+                        temps(Math.max(0, Jalons.restant(jalon, etat))), temps(Jalons.delai(jalon, etat)),
+                        temps(echeance.base()), String.format(Locale.ROOT, "%.2f", bilan.rythme()), temps(echeance.minimum()), temps(echeance.maximum()),
+                        nom("issue", jalon.issue(bilan)));
+            } else {
+                ligne = Component.translatable("commande.redrising.jalon.pas_en_route", jalon.id(), nom("epoque", jalon.epoque()));
+            }
+            ctx.getSource().sendSuccess(() -> ligne, false);
+        }
+        if (nombre == 0) {
+            ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.jalon.aucun_prochain"), false);
+        }
+        return nombre;
+    }
+
+    /** Passage complet (issue, époque, sauvegarde, événement), avec l'issue donnée ou celle que donne l'état du monde. */
+    private static int declencherJalon(CommandContext<CommandSourceStack> ctx, @Nullable Issue forcee) throws CommandSyntaxException {
+        String id = StringArgumentType.getString(ctx, "jalon");
+        Jalon jalon = Jalons.get(id);
+        if (jalon == null) {
+            throw JALON_INCONNU.create(id);
+        }
+        MinecraftServer server = ctx.getSource().getServer();
+        EtatMonde etat = EtatMondeServeur.get(server);
+        if (etat.jalons().containsKey(id)) {
+            throw JALON_DEJA_PASSE.create(id);
+        }
+        Issue issue = forcee != null ? forcee : jalon.issue(Jalons.bilan(jalon, etat));
+        MoteurJalons.passer(server, jalon, issue, JalonsEvents.Raison.COMMANDE);
+        ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.jalon.declenche", id, nom("issue", issue)), true);
+        return Command.SINGLE_SUCCESS;
+    }
+
+    private static int marquerEffets(CommandContext<CommandSourceStack> ctx, boolean enAttente) throws CommandSyntaxException {
+        String jalon = StringArgumentType.getString(ctx, "jalon");
+        if (!EtatMondeServeur.get(ctx.getSource().getServer()).jalons().containsKey(jalon)) {
+            throw JALON_ABSENT.create(jalon);
+        }
+        modifierEtat(ctx, etat -> etat.avecEffetsEnAttente(jalon, enAttente));
+        ctx.getSource().sendSuccess(() -> Component.translatable(enAttente ? "commande.redrising.jalon.effets.en_attente"
+                : "commande.redrising.jalon.effets.appliques", jalon), true);
+        return Command.SINGLE_SUCCESS;
     }
 
     private static int fixerJalon(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
@@ -740,7 +832,7 @@ public final class CommandesDebug {
                 nom("epoque", etat.epoque()),
                 liste(etat.jalons(), "issue"),
                 liste(etat.zones(), "camp"),
-                temps(horloge.temps()),
+                temps(horloge.temps()), temps(horloge.presence()),
                 horloge.aide(), horloge.tort(), horloge.net()), false);
         return etat.schemaVersion();
     }
@@ -757,6 +849,15 @@ public final class CommandesDebug {
         HorlogeMonde.modifier(server, horloge -> horloge.avecTemps(ajouter ? horloge.temps() + ticks : ticks));
         long obtenu = HorlogeMonde.get(server).temps();
         ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.etat.temps", temps(obtenu)), true);
+        return Command.SINGLE_SUCCESS;
+    }
+
+    private static int changerPresence(CommandContext<CommandSourceStack> ctx, boolean ajouter) {
+        long ticks = LongArgumentType.getLong(ctx, "ticks");
+        MinecraftServer server = ctx.getSource().getServer();
+        HorlogeMonde.modifier(server, horloge -> horloge.avecPresence(ajouter ? horloge.presence() + ticks : ticks));
+        long obtenue = HorlogeMonde.get(server).presence();
+        ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.etat.presence", temps(obtenue)), true);
         return Command.SINGLE_SUCCESS;
     }
 

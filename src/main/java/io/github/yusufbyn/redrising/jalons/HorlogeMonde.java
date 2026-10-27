@@ -41,8 +41,9 @@ public final class HorlogeMonde {
     /** Appelé depuis {@link RedRising#onInitialize()}. */
     public static void init() {
         ServerTickEvents.END_SERVER_TICK.register(server -> {
-            if (server.getTickCount() % PERIODE == 0 && server.getPlayerCount() > 0) {
-                modifier(server, horloge -> horloge.avancer(PERIODE));
+            int joueurs = server.getPlayerCount();
+            if (server.getTickCount() % PERIODE == 0 && joueurs > 0) {
+                modifier(server, horloge -> horloge.avancer(PERIODE, joueurs));
             }
         });
     }

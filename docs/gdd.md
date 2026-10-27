@@ -445,6 +445,7 @@ Le monde démarre **au début du tome 1, avant la mort d'Eo**. La Société domi
 - Exemple : au Triomphe, Rising fort → il est blessé mais survit comme dans le livre. Rising faible → écrasé, les cellules tombent, phase d'occupation plus dure.
 - Les jalons sont des **événements mondiaux**, pas des quêtes.
 - Passage d'époque selon le temps de jeu et le Soutien Rising cumulé : aider le Rising accélère, le combattre ralentit ou fait diverger.
+- Limiter l'explosion des états : les branches doivent se rejoindre (divergence temporaire, retour vers un nombre réduit d'états) plutôt que former un arbre complet.
 
 ### Horloge du monde (décidée le 27/10 en G6.1)
 - ✅ **Temps de jeu** : un compteur du mod, qui avance seulement quand au moins un joueur est connecté. Pas `gameTime` brut : sur un serveur dédié sans joueur (pause désactivée par l'admin, chunks forcés), le monde vieillirait sans personne. Ni le sommeil ni `/time` ne le font sauter ; en solo, la pause (Échap) l'arrête. Les règles « par jour » déjà en place (déclin de la Suspicion, stock des boutiques, aide) restent sur les jours de `gameTime`. Limite : un joueur absent de son clavier le fait avancer.
@@ -454,9 +455,21 @@ Le monde démarre **au début du tome 1, avant la mort d'Eo**. La Société domi
   - Une perte puis un regain comptent chacun de leur côté : le net ne bouge pas, rien n'est compté deux fois, et regagner demande de vraies actions.
 - 🟡 **Plafond par joueur et par jour de jeu : 30 d'aide et 30 de tort** comptés pour le monde (`jalons/ContributionDuJour`). Filet contre les boucles qu'on n'aurait pas vues ; en multijoueur, un seul joueur ne peut ni porter ni écraser le Rising en un jour. La jauge du joueur, elle, bouge normalement.
 - ✅ **Multijoueur** : un seul compteur pour le monde (somme des joueurs). Par joueur, seulement le suivi du plafond du jour.
-- ❓ **Pour G6.2** : un compteur unique pour le monde grandit plus vite à plusieurs joueurs. Les seuils des jalons devront en tenir compte (seuils selon le nombre de joueurs actifs, ou compteur rapporté au temps de jeu, par exemple).
-- Sauvegarde : dans l'état du monde (schéma v2, voir section 10). Lecture et modification : `/rr etat`, `/rr etat temps`, `/rr etat soutien`, `/rr etat contribution`.
-- Limiter l'explosion des états : les branches doivent se rejoindre (divergence temporaire, retour vers un nombre réduit d'états) plutôt que former un arbre complet.
+- ✅ **Multijoueur, tranché en G6.2** : un compteur unique pour le monde grandit plus vite à plusieurs joueurs. Les jalons le rapportent donc à la **présence** (temps de jeu × joueurs connectés) : leur rythme est un net par joueur et par jour, et leurs seuils valent en solo comme à plusieurs (voir « Moteur des jalons »).
+- Sauvegarde : dans l'état du monde (schéma v2, voir section 10). Lecture et modification : `/rr etat`, `/rr etat temps`, `/rr etat presence`, `/rr etat soutien`, `/rr etat contribution`.
+
+### Moteur des jalons (décidé le 27/10 en G6.2)
+- ✅ **Déclaration** en quelques lignes (`jalons/Jalon`, enregistré par `Jalons.declarer`) : identifiant, époque, dépendances, échéance, choix de l'issue (`.issue(bilan -> ...)`) ou issue fixe (`.fixe(Issue.CANON)`, pour la pendaison d'Eo), époque ouverte (`.ouvre(...)`), lieu (`.surPlace(...)`). Les vrais jalons et leurs chiffres : G7.10 (Eo) et G16.1.
+- ✅ **Mise en route** : dès que ses dépendances sont passées et que le monde est à son époque. On garde alors l'horloge du moment ; tout se mesure depuis cette mise en route (la « période »).
+- ✅ **Rythme** : net de Soutien de la période par joueur et par jour de jeu (net ÷ présence, au moins un jour-joueur). Il ne dépend pas du nombre de joueurs. Limite : un joueur absent de son clavier dilue le rythme des autres.
+- ✅ **Échéance** : délai = borné(base − pente × rythme, minimum, maximum), recalculé une fois par seconde. Aider le Rising avance le jalon, le combattre le recule ; le minimum l'empêche d'arriver tout de suite, le maximum garantit qu'il arrive.
+- ✅ **Issue** : jugée au moment du jalon, sur le rythme de toute la période (`Bilan` : aide, tort, net, rythme, issues passées, zones ; plus tard attitudes des PNJ canon, G6.5, et personnages tués, G6.4). Pas de bascule de dernière minute : avec le plafond de 30 par jour (G6.1), un dernier jour ne déplace le rythme que de 30 / P sur une période de P jours-joueur. Il ne fait basculer qu'une issue déjà sur le fil ; les seuils de G16.1 en tiendront compte.
+- ✅ **Ordre et branches** : `.apres("x")` attend que x soit passé, quelle que soit son issue (par défaut, les deux issues mènent au même jalon suivant : les branches se rejoignent) ; `.apres("x", Issue.DIVERGENTE)` pour un jalon propre à une branche ; `.apresUnDe("a", "b")` pour rejoindre deux branches. Plusieurs jalons peuvent être en route en même temps. Une époque différente selon l'issue s'ajoutera si G16.1 en a besoin.
+- ✅ **Un seul passage** : issue, fin de la mise en route, époque et effets en attente écrits d'un coup, sauvegarde immédiate du monde, puis l'événement `JalonsEvents.PASSE`. Un jalon qui a une issue ne repasse jamais. Crash avant la sauvegarde : le monde rechargé n'a rien vu, le jalon repassera.
+- ✅ **Effets après un crash** : chaque jalon passé a un drapeau « effets appliqués » (dans l'état du monde, l'ensemble `effets_en_attente`). L'événement part avec le drapeau à faux ; au chargement, un jalon passé dont les effets ne sont pas appliqués renvoie l'événement (raison « rejeu » : ni nouvelle issue ni changement d'époque). G6.3 pose le drapeau (`MoteurJalons.effetsAppliques`). **Règle pour G6.3 : des effets qui supportent d'être rejoués.**
+- ✅ **Qui doit être là** : aucun joueur connecté, le temps de jeu ne bouge pas, rien n'est dû. Par défaut, un jalon dû attend un joueur connecté hors de la scène de naissance, quelle que soit sa dimension (un Or à l'Institut, G13, ne bloque pas les jalons). `.surPlace(Level.OVERWORLD)` pour un jalon qui doit être vécu sur place (Eo, G7.10). En multijoueur, un joueur dans la scène pendant que les autres jouent arrive dans le monde déjà changé.
+- ✅ **G6.2 n'a aucun effet sur le monde** : il enregistre l'issue et envoie l'événement, auquel G6.3 s'abonnera.
+- Debug : `/rr jalon prochains` (temps restant, délai et ce qui le compose, issue si c'était maintenant), `/rr jalon declencher <jalon> [issue]` (passage complet), `/rr jalon effets <jalon> appliques|en_attente`.
 
 ### Personnages canon ✅
 PNJ qu'on peut **croiser et influencer**. Trois règles :
@@ -524,6 +537,7 @@ PNJ qu'on peut **croiser et influencer**. Trois règles :
 - ✅ Même en solo, Minecraft tourne en client-serveur : synchronisation réseau obligatoire pour toutes les données joueur.
 - ✅ **Format de sauvegarde versionné dès la v1** : enregistrer proprement l'état du monde (issue de chaque jalon, jauges, zones contrôlées, Couleur, Sculpture) pour permettre le passage v1 → v2 sans migrations douloureuses.
   - ✅ Mis en place en G2.4 (schéma v1) : l'état du monde est un attachment global Fabric (`data/fabric/attachments.dat`, clé `redrising:etat_monde`) avec `schemaVersion`, `epoque` (`red_rising`, `golden_son`, `morning_star`), `jalons` (identifiant de jalon → `canon` ou `divergente`) et `zones` (identifiant de zone → `societe` ou `rising`). Couleur et jauges sont attachées au joueur, dans son fichier.
+  - ✅ Schéma v3 (G6.2) : + `presence` dans l'horloge, `en_route` (jalon → horloge au moment de sa mise en route), `effets_en_attente` (jalons passés dont les effets ne sont pas appliqués). Un monde v2 est migré : présence = temps de jeu (comme à un seul joueur), rien en route, effets déjà appliqués.
   - ✅ Schéma v2 (G6.1) : + `horloge` (`temps`, `aide`, `tort`, voir section 8). Un monde v1 est migré en v2 à la lecture, avec une horloge à zéro (aucun monde n'avait été publié : pas besoin d'estimer le passé).
   - Règle : toute modification du format incrémente `EtatMonde.VERSION_SCHEMA` et ajoute une étape de migration dans `EtatMonde.migrer`. Un monde au schéma plus récent que le mod est refusé.
 - Assets : Blockbench pour modèles et textures. Poste de temps le plus lourd avec les sons et l'équilibrage.

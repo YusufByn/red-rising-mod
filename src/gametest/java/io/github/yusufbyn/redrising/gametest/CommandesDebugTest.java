@@ -78,7 +78,7 @@ public class CommandesDebugTest implements FabricClientGameTest {
                 executer(server, "rr etat soutien aide set 40");
                 executer(server, "rr etat soutien aide add 2");
                 executer(server, "rr etat soutien tort set 5");
-                verifier("Soutien cumulé", new Horloge(49_000, 42, 5), EtatMondeServeur.get(server).horloge().avecTemps(49_000));
+                verifier("Soutien cumulé", new Horloge(49_000, 0, 42, 5), EtatMondeServeur.get(server).horloge().avecTemps(49_000).avecPresence(0));
                 long temps = EtatMondeServeur.get(server).horloge().temps();
                 if (temps < 49_000 || temps > 49_040) {
                     throw new AssertionError("Temps de jeu après /rr etat temps : " + temps + " (attendu 49000)");

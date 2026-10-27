@@ -48,7 +48,8 @@ Réservées aux ops (ou à la triche activée en solo). `[joueur]` est optionnel
 
 - `/rr couleur get [joueur]`, `/rr couleur set <couleur> [joueur]`
 - `/rr jauge get [joueur]`, `/rr jauge set <jauge> <valeur> [joueur]`, `/rr jauge add <jauge> <delta> [joueur]`
-- `/rr jalon list`, `/rr jalon set <jalon> <issue>`, `/rr jalon clear <jalon>`
+- `/rr jalon list`, `/rr jalon set <jalon> <issue>`, `/rr jalon clear <jalon>` (sans événement)
+- `/rr jalon prochains`, `/rr jalon declencher <jalon> [issue]` (passage complet, avec l'événement), `/rr jalon effets <jalon> appliques|en_attente`
 - `/rr pnj spawn <couleur>` (un PNJ de cette Couleur à ta position), `/rr pnj get <pnj>`, `/rr pnj set <pnj> <couleur>`
 - `/rr pnj camp <pnj> <societe|rising|aucun>` (camp secret d'un PNJ), `/rr coffre get|set|clear <pos> [camp]` (coffre ou tonneau d'un camp)
 - `/rr patrouille creer <pos1> <pos2> [pos3] [pos4]` (un PNJ Gris qui fait la ronde entre ces points), `/rr patrouille get <pnj>` (ronde, contrôle en cours, fouille autour d'une chausse-trappe), `/rr patrouille clear <pnj>`
@@ -62,7 +63,7 @@ Réservées aux ops (ou à la triche activée en solo). `[joueur]` est optionnel
 - `/rr denonciation get [joueur]` (cellules connues, quarantaine, dernier jour de blanchiment, peines de descente en attente), `/rr denonciation reset [joueur]`
 - `/rr naissance get [joueur]` (Couleur, ou test en cours : résultat en attente, relance), `/rr naissance reset [joueur]` (efface Couleur et test, et relance la naissance)
 - `/rr etat`, `/rr etat naissance <test|choix_libre>`, `/rr etat epoque <epoque>`, `/rr etat zone set <zone> <camp>`, `/rr etat zone clear <zone>`
-- `/rr etat temps set|add <ticks>` (temps de jeu du monde), `/rr etat soutien aide|tort set|add <n>` (Soutien Rising cumulé), `/rr etat contribution get|reset [joueur]` (plafond du jour)
+- `/rr etat temps set|add <ticks>` (temps de jeu du monde), `/rr etat presence set|add <ticks>` (temps de jeu × joueurs connectés), `/rr etat soutien aide|tort set|add <n>` (Soutien Rising cumulé), `/rr etat contribution get|reset [joueur]` (plafond du jour)
 
 ## Outils
 

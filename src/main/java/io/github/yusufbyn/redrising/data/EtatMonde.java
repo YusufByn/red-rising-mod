@@ -9,33 +9,42 @@ import io.github.yusufbyn.redrising.jalons.Horloge;
 import io.github.yusufbyn.redrising.jalons.Issue;
 
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.TreeSet;
 
 /**
  * État du monde sauvegardé (G2.4) : époque, issue de chaque jalon passé, camp qui contrôle chaque zone, horloge du monde
- * (temps de jeu et Soutien Rising cumulé, G6.1).
+ * (temps de jeu et Soutien Rising cumulé, G6.1), jalons en route et effets de jalon pas encore appliqués (G6.2).
  *
  * <p>Le format est versionné ({@code schemaVersion}) pour que les mondes v1 restent lisibles en v2 (GDD section 10).
  * Règle : toute modification du format sauvegardé incrémente {@link #VERSION_SCHEMA} et ajoute une étape
  * dans {@link #migrer}. Une instance en mémoire est toujours au format actuel.</p>
  *
- * @param jalons issue de chaque jalon passé, par identifiant de jalon (ex. {@code "pendaison_eo"})
- * @param zones  camp qui contrôle chaque zone, par identifiant de zone
- * @param horloge temps de jeu et Soutien Rising cumulé (G6.1, schéma v2)
+ * @param jalons  issue de chaque jalon passé, par identifiant de jalon (ex. {@code "pendaison_eo"})
+ * @param zones   camp qui contrôle chaque zone, par identifiant de zone
+ * @param horloge temps de jeu, présence et Soutien Rising cumulé (G6.1, schéma v2 ; présence en v3)
+ * @param enRoute jalons en route : l'horloge au moment où chacun s'est mis en route (G6.2, schéma v3)
+ * @param effetsEnAttente jalons passés dont les effets (G6.3) ne sont pas encore appliqués : l'événement repart au
+ *                        chargement (G6.2, schéma v3). Un jalon passé absent de cet ensemble a ses effets appliqués.
  */
-public record EtatMonde(int schemaVersion, Epoque epoque, Map<String, Issue> jalons, Map<String, Camp> zones, Horloge horloge) {
+public record EtatMonde(int schemaVersion, Epoque epoque, Map<String, Issue> jalons, Map<String, Camp> zones, Horloge horloge,
+                        Map<String, Horloge> enRoute, Set<String> effetsEnAttente) {
     /**
      * Version actuelle du format.
      * <ul>
      *     <li>v1 (G2.4) : époque, jalons, zones.</li>
      *     <li>v2 (G6.1) : + horloge.</li>
+     *     <li>v3 (G6.2) : + présence dans l'horloge, jalons en route, effets en attente.</li>
      * </ul>
      */
-    public static final int VERSION_SCHEMA = 2;
+    public static final int VERSION_SCHEMA = 3;
 
-    /** État d'un monde neuf : début du tome 1, aucun jalon passé, aucune zone attribuée, horloge à zéro. */
-    public static final EtatMonde NOUVEAU = new EtatMonde(VERSION_SCHEMA, Epoque.RED_RISING, Map.of(), Map.of(), Horloge.ZERO);
+    /** État d'un monde neuf : début du tome 1, aucun jalon passé ni en route, aucune zone attribuée, horloge à zéro. */
+    public static final EtatMonde NOUVEAU = new EtatMonde(VERSION_SCHEMA, Epoque.RED_RISING, Map.of(), Map.of(), Horloge.ZERO, Map.of(), Set.of());
 
     /** Format brut, tel qu'il est écrit sur le disque, sans migration. */
     private static final Codec<EtatMonde> CODEC_BRUT = RecordCodecBuilder.create(instance -> instance.group(
@@ -44,7 +53,11 @@ public record EtatMonde(int schemaVersion, Epoque epoque, Map<String, Issue> jal
             Codec.unboundedMap(Codec.STRING, Issue.CODEC).optionalFieldOf("jalons", Map.of()).forGetter(EtatMonde::jalons),
             Codec.unboundedMap(Codec.STRING, Camp.CODEC).optionalFieldOf("zones", Map.of()).forGetter(EtatMonde::zones),
             // Absente d'un monde v1 : lue à zéro, puis la migration pose le numéro v2. Toujours écrite, même à zéro
-            Horloge.CODEC.optionalFieldOf("horloge").xmap(lue -> lue.orElse(Horloge.ZERO), Optional::of).forGetter(EtatMonde::horloge)
+            Horloge.CODEC.optionalFieldOf("horloge").xmap(lue -> lue.orElse(Horloge.ZERO), Optional::of).forGetter(EtatMonde::horloge),
+            Codec.unboundedMap(Codec.STRING, Horloge.CODEC).optionalFieldOf("en_route", Map.of()).forGetter(EtatMonde::enRoute),
+            // Écrit trié, pour un fichier stable
+            Codec.STRING.listOf().<Set<String>>xmap(Set::copyOf, ensemble -> List.copyOf(new TreeSet<>(ensemble)))
+                    .optionalFieldOf("effets_en_attente", Set.of()).forGetter(EtatMonde::effetsEnAttente)
     ).apply(instance, EtatMonde::new));
 
     /** Codec de sauvegarde : à la lecture, le numéro de version est lu puis l'état est migré au format actuel. */
@@ -54,6 +67,8 @@ public record EtatMonde(int schemaVersion, Epoque epoque, Map<String, Issue> jal
         // Copies immuables : un record ne doit pas partager une Map modifiable
         jalons = Map.copyOf(jalons);
         zones = Map.copyOf(zones);
+        enRoute = Map.copyOf(enRoute);
+        effetsEnAttente = Set.copyOf(effetsEnAttente);
     }
 
     /** Ramène un état lu sur le disque au format actuel. */
@@ -70,6 +85,9 @@ public record EtatMonde(int schemaVersion, Epoque epoque, Map<String, Issue> jal
         if (etat.schemaVersion() == 1) {
             etat = migrerV1VersV2(etat);
         }
+        if (etat.schemaVersion() == 2) {
+            etat = migrerV2VersV3(etat);
+        }
         return DataResult.success(etat);
     }
 
@@ -78,40 +96,74 @@ public record EtatMonde(int schemaVersion, Epoque epoque, Map<String, Issue> jal
      * cumulé à la mise à jour (aucun monde n'avait été publié : pas besoin d'estimer le passé).
      */
     private static EtatMonde migrerV1VersV2(EtatMonde v1) {
-        return new EtatMonde(2, v1.epoque(), v1.jalons(), v1.zones(), Horloge.ZERO);
+        return new EtatMonde(2, v1.epoque(), v1.jalons(), v1.zones(), Horloge.ZERO, Map.of(), Set.of());
+    }
+
+    /**
+     * v2 → v3 (G6.2) : la présence vaut le temps de jeu (comme si on avait joué à un seul joueur) ; aucun jalon en route
+     * (ils se mettent en route au premier passage du moteur) ; les jalons déjà passés ont leurs effets appliqués
+     * (il n'y avait pas encore d'effets).
+     */
+    private static EtatMonde migrerV2VersV3(EtatMonde v2) {
+        return new EtatMonde(3, v2.epoque(), v2.jalons(), v2.zones(), v2.horloge().avecPresence(v2.horloge().temps()), Map.of(), Set.of());
     }
 
     public EtatMonde avecEpoque(Epoque nouvelle) {
-        return new EtatMonde(schemaVersion, nouvelle, jalons, zones, horloge);
+        return new EtatMonde(schemaVersion, nouvelle, jalons, zones, horloge, enRoute, effetsEnAttente);
     }
 
     public EtatMonde avecIssue(String jalon, Issue issue) {
         Map<String, Issue> copie = new HashMap<>(jalons);
         copie.put(jalon, issue);
-        return new EtatMonde(schemaVersion, epoque, copie, zones, horloge);
+        return new EtatMonde(schemaVersion, epoque, copie, zones, horloge, enRoute, effetsEnAttente);
     }
 
     public EtatMonde avecZone(String zone, Camp camp) {
         Map<String, Camp> copie = new HashMap<>(zones);
         copie.put(zone, camp);
-        return new EtatMonde(schemaVersion, epoque, jalons, copie, horloge);
+        return new EtatMonde(schemaVersion, epoque, jalons, copie, horloge, enRoute, effetsEnAttente);
     }
 
     public EtatMonde avecHorloge(Horloge nouvelle) {
-        return new EtatMonde(schemaVersion, epoque, jalons, zones, nouvelle);
+        return new EtatMonde(schemaVersion, epoque, jalons, zones, nouvelle, enRoute, effetsEnAttente);
     }
 
-    /** Copie sans l'issue de ce jalon (comme s'il n'était pas encore passé). */
+    /** Ce jalon se met en route : on garde l'horloge de ce moment, d'où se mesure son échéance. */
+    public EtatMonde avecMiseEnRoute(String jalon, Horloge depart) {
+        Map<String, Horloge> copie = new HashMap<>(enRoute);
+        copie.put(jalon, depart);
+        return new EtatMonde(schemaVersion, epoque, jalons, zones, horloge, copie, effetsEnAttente);
+    }
+
+    public EtatMonde sansMiseEnRoute(String jalon) {
+        Map<String, Horloge> copie = new HashMap<>(enRoute);
+        copie.remove(jalon);
+        return new EtatMonde(schemaVersion, epoque, jalons, zones, horloge, copie, effetsEnAttente);
+    }
+
+    /** Les effets de ce jalon passé restent à appliquer (ou, {@code false}, sont appliqués). */
+    public EtatMonde avecEffetsEnAttente(String jalon, boolean enAttente) {
+        Set<String> copie = new HashSet<>(effetsEnAttente);
+        if (enAttente) {
+            copie.add(jalon);
+        } else {
+            copie.remove(jalon);
+        }
+        return new EtatMonde(schemaVersion, epoque, jalons, zones, horloge, enRoute, copie);
+    }
+
+    /** Copie sans l'issue de ce jalon (comme s'il n'était pas encore passé) : ni effets en attente, ni mise en route. */
     public EtatMonde sansIssue(String jalon) {
         Map<String, Issue> copie = new HashMap<>(jalons);
         copie.remove(jalon);
-        return new EtatMonde(schemaVersion, epoque, copie, zones, horloge);
+        return new EtatMonde(schemaVersion, epoque, copie, zones, horloge, enRoute, effetsEnAttente)
+                .avecEffetsEnAttente(jalon, false).sansMiseEnRoute(jalon);
     }
 
     /** Copie où cette zone n'est contrôlée par aucun camp. */
     public EtatMonde sansZone(String zone) {
         Map<String, Camp> copie = new HashMap<>(zones);
         copie.remove(zone);
-        return new EtatMonde(schemaVersion, epoque, jalons, copie, horloge);
+        return new EtatMonde(schemaVersion, epoque, jalons, copie, horloge, enRoute, effetsEnAttente);
     }
 }
