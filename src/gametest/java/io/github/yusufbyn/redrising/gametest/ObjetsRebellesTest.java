@@ -50,7 +50,8 @@ import java.util.function.Predicate;
  * G5.8 : objets rebelles. Le nuage du fumigène coupe la vue des PNJ (témoins, patrouille, chasseurs) sans rien cacher
  * au contact (l'arrestation tient) ; un vrai lancer crée le nuage. La chausse-trappe : trois par joueur au plus, un zombie
  * passe dessus sans la déclencher, un Gris en patrouille s'y prend (ralenti, il fouille), le poseur aussi ; cassée,
- * elle revient à son poseur seulement ; le registre survit au rechargement. La contrebande en main devant un Gris :
+ * elle revient à son poseur seulement ; disparue autrement (sol retiré, eau), elle sort du registre ; le registre survit au
+ * rechargement. La contrebande en main devant un Gris :
  * +5 de Suspicion, une fois par minute, rien rangée ni dans la fumée.
  */
 public class ObjetsRebellesTest implements FabricClientGameTest {
@@ -343,6 +344,29 @@ public class ObjetsRebellesTest implements FabricClientGameTest {
             throw new AssertionError("Chausse-trappe cassée : " + rendue + " rendue au poseur (attendu 1), " + perdue + " pour un autre (attendu 0)");
         }
         RedRising.LOGGER.info("[G5.8] Chausse-trappe cassée : rendue à son poseur, perdue pour un autre");
+
+        // Disparue sans être cassée par un joueur : elle sort du registre et ne compte plus dans les trois du poseur
+        enMain(monde, new ItemStack(ObjetsRebelles.CHAUSSE_TRAPPE_OBJET, 2));
+        poser(monde, context, 18);
+        monde.getServer().runCommand("setblock 18 " + (Y - 1) + " 61 air");
+        attendre(monde, "chausse-trappe tombée avec son sol", server -> !estUnePiege(server, new BlockPos(18, Y, 61)), 10);
+        verifierSiennes(monde, "sol retiré", List.of(trappeDuZombie));
+        poser(monde, context, 21);
+        // De l'eau qui coule jusqu'à elle
+        monde.getServer().runCommand("setblock 21 " + Y + " 60 water");
+        attendre(monde, "chausse-trappe emportée par l'eau", server -> !estUnePiege(server, new BlockPos(21, Y, 61)), 60);
+        verifierSiennes(monde, "eau", List.of(trappeDuZombie));
+        monde.getServer().runCommand("fill 20 " + Y + " 59 23 " + Y + " 63 air replace water");
+        monde.getServer().runCommand("clear @a[limit=1]");
+        RedRising.LOGGER.info("[G5.8] Chausse-trappe disparue sans être cassée (sol retiré, eau) : sortie du registre");
+    }
+
+    private static void verifierSiennes(TestSingleplayerContext monde, String cas, List<BlockPos> attendues) {
+        List<BlockPos> siennes = monde.getServer().computeOnServer(server ->
+                ChausseTrappes.registre(server).de(OutilsTest.joueur(server).getUUID()).stream().map(RegistreChausseTrappes.Piege::pos).toList());
+        if (!siennes.equals(attendues)) {
+            throw new AssertionError(cas + " : chausse-trappes du joueur au registre " + siennes + ", attendues " + attendues);
+        }
     }
 
     /** Debout en (x, 60), regard vers le sol devant : un clic droit pose la chausse-trappe en (x, 61). */

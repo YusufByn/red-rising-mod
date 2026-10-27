@@ -9,6 +9,7 @@ import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.InsideBlockEffectApplier;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
@@ -64,6 +65,22 @@ public class ChausseTrappe extends Block {
         if (monde instanceof ServerLevel serveur && poseur instanceof ServerPlayer joueur) {
             ChausseTrappes.posee(serveur, pos, joueur);
         }
+    }
+
+    /** Cassée par un joueur : le poseur (hors créatif) récupère la sienne. Appelé juste avant que le bloc disparaisse. */
+    @Override
+    public BlockState playerWillDestroy(Level monde, BlockPos pos, BlockState etat, Player joueur) {
+        if (monde instanceof ServerLevel serveur) {
+            ChausseTrappes.casseePar(serveur, pos, joueur);
+        }
+        return super.playerWillDestroy(monde, pos, etat, joueur);
+    }
+
+    /** Le bloc a disparu, quelle qu'en soit la cause (casse, déclenchement, eau, explosion, piston, sol retiré, commande). */
+    @Override
+    protected void affectNeighborsAfterRemoval(BlockState etat, ServerLevel monde, BlockPos pos, boolean parUnPiston) {
+        super.affectNeighborsAfterRemoval(etat, monde, pos, parUnPiston);
+        ChausseTrappes.disparue(monde, pos);
     }
 
     @Override

@@ -7,7 +7,6 @@ import io.github.yusufbyn.redrising.pnj.PnjCouleur;
 import io.github.yusufbyn.redrising.pnj.TraqueGris;
 import net.fabricmc.fabric.api.attachment.v1.AttachmentRegistry;
 import net.fabricmc.fabric.api.attachment.v1.AttachmentType;
-import net.fabricmc.fabric.api.event.player.PlayerBlockBreakEvents;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
@@ -18,6 +17,7 @@ import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.npc.villager.Villager;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.Block;
@@ -36,7 +36,8 @@ import java.util.UUID;
  *     <li>Un Gris qui s'y prend fouille autour : un chasseur repart de là, une patrouille fouille 20 secondes
  *     avant de reprendre sa ronde.</li>
  *     <li>Au plus {@value RegistreChausseTrappes#MAX_PAR_JOUEUR} par joueur ; le poseur reprend la sienne en la cassant,
- *     cassée par un autre, elle est perdue.</li>
+ *     cassée par un autre, elle est perdue. Disparue autrement (eau, explosion, piston, sol retiré), elle sort aussi du
+ *     registre et ne compte plus.</li>
  * </ul>
  */
 public final class ChausseTrappes {
@@ -53,28 +54,27 @@ public final class ChausseTrappes {
     private ChausseTrappes() {
     }
 
-    /** Appelé depuis {@link RedRising#onInitialize()}. */
-    public static void init() {
-        PlayerBlockBreakEvents.AFTER.register((monde, joueur, pos, etat, blocEntite) -> {
-            if (!(monde instanceof ServerLevel serveur) || !etat.is(ObjetsRebelles.CHAUSSE_TRAPPE)) {
-                return;
-            }
-            RegistreChausseTrappes registre = registre(serveur.getServer());
-            RegistreChausseTrappes.Piege piege = registre.a(serveur.dimension(), pos);
-            if (piege == null) {
-                return;
-            }
-            enregistrer(serveur.getServer(), registre.retirer(serveur.dimension(), pos));
-            if (piege.poseur().equals(joueur.getUUID()) && !joueur.isCreative()) {
-                Block.popResource(serveur, pos, new ItemStack(ObjetsRebelles.CHAUSSE_TRAPPE_OBJET));
-            }
-        });
+    /** Cassée par un joueur (juste avant qu'elle disparaisse) : rendue à son poseur, hors créatif ; perdue pour un autre. */
+    static void casseePar(ServerLevel monde, BlockPos pos, Player joueur) {
+        RegistreChausseTrappes.Piege piege = registre(monde.getServer()).a(monde.dimension(), pos);
+        if (piege != null && piege.poseur().equals(joueur.getUUID()) && !joueur.isCreative()) {
+            Block.popResource(monde, pos, new ItemStack(ObjetsRebelles.CHAUSSE_TRAPPE_OBJET));
+        }
+    }
+
+    /** Le bloc a disparu (toutes les causes) : il sort du registre et ne compte plus dans les chausse-trappes du poseur. */
+    static void disparue(ServerLevel monde, BlockPos pos) {
+        RegistreChausseTrappes registre = registre(monde.getServer());
+        if (registre.a(monde.dimension(), pos) != null) {
+            enregistrer(monde.getServer(), registre.retirer(monde.dimension(), pos));
+        }
     }
 
     /** Posée par un joueur : inscrite au registre ; s'il en a déjà trop, ses plus anciennes disparaissent. */
     static void posee(ServerLevel monde, BlockPos pos, ServerPlayer poseur) {
         Contrebande.utilisee(poseur);
         MinecraftServer server = monde.getServer();
+        oublierLesDisparues(server, poseur.getUUID());
         RegistreChausseTrappes.Pose pose = registre(server).poser(
                 new RegistreChausseTrappes.Piege(monde.dimension(), pos.immutable(), poseur.getUUID(), monde.getGameTime()));
         enregistrer(server, pose.registre());
@@ -89,9 +89,9 @@ public final class ChausseTrappes {
             return;
         }
         victime.addEffect(new MobEffectInstance(MobEffects.SLOWNESS, RALENTISSEMENT, AMPLIFICATEUR));
+        // Le bloc retiré sort du registre de lui-même (ChausseTrappe.affectNeighborsAfterRemoval)
         monde.removeBlock(pos, false);
         monde.playSound(null, pos, SoundEvents.CHAIN_BREAK, SoundSource.BLOCKS, 1, 0.8f);
-        enregistrer(monde.getServer(), registre(monde.getServer()).retirer(monde.dimension(), pos));
         if (victime instanceof Villager gris && PnjCouleur.couleur(gris) == Couleur.GRIS) {
             // Un rebelle est passé par là : le Gris fouille autour
             if (gris.hasAttached(TraqueGris.CHASSEUR)) {
@@ -125,6 +125,25 @@ public final class ChausseTrappes {
         }
         enregistrer(server, registre);
         return aRetirer.size();
+    }
+
+    /**
+     * Filet de sécurité : Minecraft ne prévient pas le bloc de toutes les disparitions (un bloc remplacé sans mise à jour
+     * des voisins, par une structure par exemple). À chaque pose, les chausse-trappes du poseur qui ne sont plus là
+     * (dans une zone chargée) sortent du registre.
+     */
+    private static void oublierLesDisparues(MinecraftServer server, UUID poseur) {
+        RegistreChausseTrappes registre = registre(server);
+        RegistreChausseTrappes nettoye = registre;
+        for (RegistreChausseTrappes.Piege piege : registre.de(poseur)) {
+            ServerLevel monde = server.getLevel(piege.dimension());
+            if (monde == null || (monde.isLoaded(piege.pos()) && !monde.getBlockState(piege.pos()).is(ObjetsRebelles.CHAUSSE_TRAPPE))) {
+                nettoye = nettoye.retirer(piege.dimension(), piege.pos());
+            }
+        }
+        if (nettoye != registre) {
+            enregistrer(server, nettoye);
+        }
     }
 
     private static void enregistrer(MinecraftServer server, RegistreChausseTrappes registre) {
