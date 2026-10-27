@@ -51,4 +51,25 @@ class EffetsActionsTest {
         // Et rien ne dépasse 100
         assertEquals(new Jauges(0, 100, 100), new Jauges(10, 98, 90).plus(EffetsActions.tuer(Couleur.OR), Couleur.VERT));
     }
+
+    @Test
+    void temoins() {
+        // Sans témoin : pas de Loyauté perdue, Soutien inchangé, Suspicion à moitié (arrondie au-dessus)
+        assertEquals(new Variation(0, 5, 8), EffetsActions.selonTemoins(EffetsActions.tuer(Couleur.OR), Temoin.AUCUN));
+        assertEquals(new Variation(0, 2, 3), EffetsActions.selonTemoins(EffetsActions.voler(Camp.SOCIETE), Temoin.AUCUN));
+        assertEquals(new Variation(0, -5, 0), EffetsActions.selonTemoins(EffetsActions.voler(Camp.RISING), Temoin.AUCUN));
+        // Témoin ordinaire : l'effet entier ; un Gris : Suspicion doublée
+        assertEquals(new Variation(-5, 2, 5), EffetsActions.selonTemoins(EffetsActions.voler(Camp.SOCIETE), Temoin.ORDINAIRE));
+        assertEquals(new Variation(-5, 2, 10), EffetsActions.selonTemoins(EffetsActions.voler(Camp.SOCIETE), Temoin.GRIS));
+        assertEquals(new Variation(-15, 5, 30), EffetsActions.selonTemoins(EffetsActions.tuer(Couleur.OR), Temoin.GRIS));
+        // Effraction d'un poste
+        assertEquals(new Variation(0, 0, 3), EffetsActions.selonTemoins(EffetsActions.effraction(), Temoin.AUCUN));
+        assertEquals(new Variation(0, 0, 10), EffetsActions.selonTemoins(EffetsActions.effraction(), Temoin.GRIS));
+    }
+
+    @Test
+    void controles() {
+        assertEquals(new Variation(0, 0, -5), EffetsActions.controleObei());
+        assertEquals(new Variation(-5, 0, 10), EffetsActions.fuiteControle());
+    }
 }

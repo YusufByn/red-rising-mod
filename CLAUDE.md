@@ -74,6 +74,8 @@ Mod Fabric fan-made, solo, gratuit et non commercial, dans l'univers Red Rising 
 - Téléporter un joueur depuis un clic sur un bloc (`UseBlockCallback`) : le faire en fin de tick, pas dans l'événement. Le client envoie aussi le clic de la main secondaire ; s'il arrive après la téléportation, Minecraft le refuse avec le message rouge « limite de hauteur de construction » (voir `CelluleRising.PASSAGES`).
 - Coffres d'un camp : les entonnoirs (posés ou sur wagonnet) ne les vident pas (`HopperBlockEntityMixin`, règle dans `ActionsFaction.protegeDesEntonnoirs`, coffres doubles compris). Le mixin renvoie un contenant vide, pas `null` : sur `null`, l'API de transfert de Fabric cherche le coffre par un autre chemin et le vide quand même.
 - Tests client : lire un champ privé du client (message au-dessus de la barre d'objets...) par réflexion, dans le test seulement (noms officiels en 26.2), voir `CelluleRisingTest`.
+- Témoins (G5.5) : une action qui dépend de qui l'a vue passe par `ActionsFaction.agirDevantTemoins` (témoin calculé, puis `EffetsActions.selonTemoins`). Les tests qui ne portent pas sur les témoins attendent `selonTemoins(..., Temoin.AUCUN)` et retirent les PNJ qui verraient le joueur.
+- Faire marcher un villageois (patrouille) : donner sa destination au cerveau (`brain.setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(...))`) toutes les demi-secondes ; ses comportements libres ne la remplacent que si elle est absente. Les PNJ en patrouille chargés sont suivis par `ServerEntityEvents.ENTITY_LOAD`/`ENTITY_UNLOAD` (voir `PatrouillePnj`).
 
 ## CI
 

@@ -6,13 +6,16 @@ import io.github.yusufbyn.redrising.couleur.Couleur;
  * Effet des actions du joueur sur ses jauges (G5.2, GDD section 6) : logique pure, testée par {@code EffetsActionsTest}.
  * Valeurs en 🟡 dans le GDD : à régler en jeu, toutes ici.
  *
- * <p>La Suspicion monte quoi qu'il arrive pour l'instant : les témoins arriveront avec les patrouilles de Gris (G5.5).</p>
+ * <p>Tuer, voler et l'effraction passent ensuite par {@link #selonTemoins} (G5.5) : ce que la Société en apprend
+ * dépend de qui a vu le joueur.</p>
  */
 public final class EffetsActions {
     /** La Suspicion retombe d'elle-même, chaque jour de jeu (sinon tout joueur du Rising finit traqué). */
     public static final int DECLIN_SUSPICION_PAR_JOUR = 2;
     /** Distance à laquelle un PNJ du Rising peut être dénoncé à un Gris. */
     public static final double PORTEE_DENONCIATION = 16;
+    /** Un PNJ de Couleur voit le joueur agir à cette distance (et s'il a une ligne de vue). */
+    public static final double PORTEE_TEMOIN = 16;
 
     private EffetsActions() {
     }
@@ -50,5 +53,38 @@ public final class EffetsActions {
     /** Une journée de jeu a passé. */
     public static Variation jourPasse() {
         return new Variation(0, 0, -DECLIN_SUSPICION_PAR_JOUR);
+    }
+
+    /** Le joueur a été reconduit hors d'un poste de la Société où il était entré sans y être admis. */
+    public static Variation effraction() {
+        return new Variation(0, 0, 5);
+    }
+
+    /** Le joueur est resté jusqu'au bout d'un contrôle (au plus une fois par jour de jeu, voir {@code PatrouillePnj}). */
+    public static Variation controleObei() {
+        return new Variation(0, 0, -5);
+    }
+
+    /** Le joueur a fui un contrôle. */
+    public static Variation fuiteControle() {
+        return new Variation(-5, 0, 10);
+    }
+
+    /**
+     * Ce que la Société apprend d'une action selon ses témoins (G5.5).
+     * <ul>
+     *     <li>Sans témoin : pas de Loyauté perdue, mais la Suspicion monte quand même de moitié (arrondie au-dessus),
+     *     pour qu'agir en cachette ne soit pas gratuit.</li>
+     *     <li>Témoin ordinaire : l'effet entier.</li>
+     *     <li>Un Gris : Suspicion doublée.</li>
+     * </ul>
+     * Le Soutien ne dépend pas des témoins : le Rising apprend tout par les siens.
+     */
+    public static Variation selonTemoins(Variation variation, Temoin temoin) {
+        return switch (temoin) {
+            case AUCUN -> new Variation(0, variation.soutien(), Math.ceilDiv(variation.suspicion(), 2));
+            case ORDINAIRE -> variation;
+            case GRIS -> new Variation(variation.loyaute(), variation.soutien(), variation.suspicion() * 2);
+        };
     }
 }

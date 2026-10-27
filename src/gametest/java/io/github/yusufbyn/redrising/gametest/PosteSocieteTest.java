@@ -9,6 +9,7 @@ import io.github.yusufbyn.redrising.factions.EffetsActions;
 import io.github.yusufbyn.redrising.factions.Jauge;
 import io.github.yusufbyn.redrising.factions.Jauges;
 import io.github.yusufbyn.redrising.factions.JaugesJoueur;
+import io.github.yusufbyn.redrising.factions.Temoin;
 import io.github.yusufbyn.redrising.monde.PosteSociete;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
@@ -60,9 +61,16 @@ public class PosteSocieteTest implements FabricClientGameTest {
             loyaute(monde, 35);
             clicSurLaPorte(context);
             verifierPorte(monde, context, "Loyauté 35", false);
+            // Entré sans être admis : une effraction, vue par le commis (G5.5)
+            int suspicionAvant = jauges(monde).suspicion();
             monde.getServer().runCommand(DANS_LA_SALLE);
             context.waitTicks(30);
             verifierDedans(monde, "Loyauté 35", false);
+            int effraction = jauges(monde).suspicion() - suspicionAvant;
+            if (effraction != EffetsActions.effraction().suspicion()) {
+                throw new AssertionError("Effraction vue par le commis : Suspicion +" + effraction + ", attendu +" + EffetsActions.effraction().suspicion());
+            }
+            RedRising.LOGGER.info("[G5.5] Effraction d'un poste vue par le commis : Suspicion +{}", effraction);
 
             // --- Rouge irréprochable : plafonné à 40, il entre tout juste ---
             monde.getServer().runOnServer(server -> CouleurJoueur.set(OutilsTest.joueur(server), Couleur.ROUGE));
@@ -78,13 +86,13 @@ public class PosteSocieteTest implements FabricClientGameTest {
             context.waitTicks(30);
             verifierDedans(monde, "Rouge à 40", true);
 
-            // --- Casser le coffre du poste depuis dehors (mur percé) : un vol de la Société ---
+            // --- Casser le coffre du poste depuis dehors (mur percé) : un vol de la Société, sans témoin (le commis ne voit pas dehors) ---
             monde.getServer().runOnServer(server -> CouleurJoueur.set(OutilsTest.joueur(server), Couleur.OR));
             loyaute(monde, 50);
             monde.getServer().runCommand("tp @a 3.5 -60 9.5 90 0"); // dehors, contre le mur est
             Jauges avant = jauges(monde);
             boolean casse = monde.getServer().computeOnServer(server -> OutilsTest.joueur(server).gameMode.destroyBlock(COFFRE));
-            Jauges attendues = avant.plus(EffetsActions.voler(Camp.SOCIETE), Couleur.OR);
+            Jauges attendues = avant.plus(EffetsActions.selonTemoins(EffetsActions.voler(Camp.SOCIETE), Temoin.AUCUN), Couleur.OR);
             if (!casse || !jauges(monde).equals(attendues)) {
                 throw new AssertionError("Coffre du poste cassé (" + casse + ") : jauges attendues " + attendues + ", obtenues " + jauges(monde));
             }

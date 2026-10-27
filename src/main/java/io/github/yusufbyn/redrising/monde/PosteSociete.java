@@ -36,7 +36,10 @@ import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.UUID;
 
 /**
  * Poste de la Société (G5.3) : une petite salle en quartz avec un comptoir, un PNJ Cuivre et un coffre de la Société.
@@ -45,7 +48,7 @@ import java.util.List;
  * <ul>
  *     <li><b>Porte</b> : elle ne s'ouvre pas pour un joueur refusé.</li>
  *     <li><b>Intérieur surveillé</b> : un joueur refusé qui s'y trouve quand même (mur percé, fenêtre, ou Loyauté tombée
- *     une fois dedans) est reconduit devant l'entrée.</li>
+ *     une fois dedans) est reconduit devant l'entrée. Entré sans être admis, c'est une effraction (G5.5).</li>
  * </ul>
  *
  * <p>Pour l'instant, un poste est construit par le code ({@code /rr structure poste}) ; la génération du monde
@@ -82,6 +85,8 @@ public final class PosteSociete {
     private static final int HAUTEUR_MURS = 4;
     /** Surveillance de l'intérieur toutes les 10 ticks (une demi-seconde). */
     private static final int PERIODE_SURVEILLANCE = 10;
+    /** Joueurs entrés dans un poste en y étant admis (à la dernière surveillance) : les reconduire n'est pas une effraction. */
+    private static final Set<UUID> ENTRES_ADMIS = new HashSet<>();
 
     private PosteSociete() {
     }
@@ -116,17 +121,26 @@ public final class PosteSociete {
                 return;
             }
             for (ServerPlayer joueur : server.overworld().players()) {
-                if (joueur.isSpectator() || Acces.peutEntrerSociete(JaugesJoueur.get(joueur))) {
-                    continue;
-                }
-                for (Poste poste : postes) {
-                    if (poste.interieur().isInside(joueur.blockPosition())) {
-                        reconduire(joueur, poste);
-                        break;
-                    }
+                Poste poste = joueur.isSpectator() ? null : posteContenant(postes, joueur.blockPosition());
+                if (poste == null) {
+                    ENTRES_ADMIS.remove(joueur.getUUID());
+                } else if (Acces.peutEntrerSociete(JaugesJoueur.get(joueur))) {
+                    ENTRES_ADMIS.add(joueur.getUUID());
+                } else {
+                    // Entré admis puis tombé sous le seuil : pas une effraction
+                    reconduire(joueur, poste, !ENTRES_ADMIS.remove(joueur.getUUID()));
                 }
             }
         });
+    }
+
+    private static @Nullable Poste posteContenant(List<Poste> postes, BlockPos pos) {
+        for (Poste poste : postes) {
+            if (poste.interieur().isInside(pos)) {
+                return poste;
+            }
+        }
+        return null;
     }
 
     private static @Nullable Poste posteDeLaPorte(MinecraftServer server, Level monde, BlockPos pos) {
@@ -145,8 +159,14 @@ public final class PosteSociete {
         joueur.sendOverlayMessage(Component.translatable("structure.redrising.poste.refuse"));
     }
 
-    /** Devant la porte, dos au poste. */
-    private static void reconduire(ServerPlayer joueur, Poste poste) {
+    /**
+     * Devant la porte, dos au poste. {@code effraction} : le joueur est entré sans être admis (mur percé, fenêtre) ;
+     * vu avant d'être reconduit, ça fait monter sa Suspicion (G5.5).
+     */
+    private static void reconduire(ServerPlayer joueur, Poste poste, boolean effraction) {
+        if (effraction) {
+            ActionsFaction.effraction(joueur);
+        }
         Vec3 sortie = Vec3.atBottomCenterOf(poste.sortie());
         joueur.teleport(new TeleportTransition(joueur.level(), sortie, Vec3.ZERO, 180, 0, TeleportTransition.DO_NOTHING));
         refuser(joueur);

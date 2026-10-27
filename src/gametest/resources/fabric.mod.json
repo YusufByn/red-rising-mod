@@ -23,6 +23,7 @@
       "io.github.yusufbyn.redrising.gametest.ActionsFactionTest",
       "io.github.yusufbyn.redrising.gametest.PosteSocieteTest",
       "io.github.yusufbyn.redrising.gametest.CelluleRisingTest",
+      "io.github.yusufbyn.redrising.gametest.PatrouilleGrisTest",
       "io.github.yusufbyn.redrising.gametest.CapacitesPassivesTest"
     ]
   },

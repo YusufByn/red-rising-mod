@@ -130,5 +130,16 @@
   "commande.redrising.structure.absente": "Aucune structure en %s",
   "structure.redrising.cellule.dehors": "Le Rising te met dehors",
   "commande.redrising.structure.list.cellules": "%s cellule(s) du Rising (entrée à partir de %s de Soutien) ; entrées : %s",
-  "commande.redrising.structure.cellule": "Cellule du Rising construite, entrée cachée en %s (salle vers %s)"
+  "commande.redrising.structure.cellule": "Cellule du Rising construite, entrée cachée en %s (salle vers %s)",
+  "faction.redrising.temoin": "Quelqu'un t'a vu",
+  "faction.redrising.temoin.gris": "Un Gris t'a vu",
+  "faction.redrising.controle.halte": "Halte ! Contrôle.",
+  "faction.redrising.controle.fin": "Contrôle terminé : tu peux circuler",
+  "faction.redrising.controle.fuite": "Tu as fui un contrôle",
+  "commande.redrising.patrouille.creer": "Patrouille créée : le Gris %s fait la ronde entre %s points",
+  "commande.redrising.patrouille.get": "Ronde de %s : %s (point en cours : %s) ; contrôle en cours : %s",
+  "commande.redrising.patrouille.aucune": "%s ne fait pas de ronde",
+  "commande.redrising.patrouille.clear": "Ronde retirée à %s",
+  "commande.redrising.controle.get": "Contrôles de %s : dernier contrôle au tick %s, dernière baisse de Suspicion le jour %s",
+  "commande.redrising.controle.reset": "Contrôles de %s remis à zéro"
 }

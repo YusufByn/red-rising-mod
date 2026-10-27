@@ -26,6 +26,8 @@ import io.github.yusufbyn.redrising.jalons.Epoque;
 import io.github.yusufbyn.redrising.jalons.Issue;
 import io.github.yusufbyn.redrising.monde.CelluleRising;
 import io.github.yusufbyn.redrising.monde.PosteSociete;
+import io.github.yusufbyn.redrising.factions.Ronde;
+import io.github.yusufbyn.redrising.pnj.PatrouillePnj;
 import io.github.yusufbyn.redrising.pnj.PnjCouleur;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.minecraft.commands.CommandSourceStack;
@@ -47,11 +49,14 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
 import org.jspecify.annotations.Nullable;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.UUID;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * Commandes de debug {@code /rr} (G2.5), réservées aux joueurs avec la triche activée.
@@ -126,6 +131,20 @@ public final class CommandesDebug {
                                         .then(argEnum("direction", HORIZONTALES).executes(CommandesDebug::construireCellule))))
                         .then(Commands.literal("oublier")
                                 .then(Commands.argument("pos", BlockPosArgument.blockPos()).executes(CommandesDebug::oublierStructure))))
+                .then(Commands.literal("patrouille")
+                        .then(Commands.literal("creer")
+                                .then(argPoint(1).then(argPoint(2).executes(ctx -> creerPatrouille(ctx, 2))
+                                        .then(argPoint(3).executes(ctx -> creerPatrouille(ctx, 3))
+                                                .then(argPoint(4).executes(ctx -> creerPatrouille(ctx, 4)))))))
+                        .then(Commands.literal("get")
+                                .then(Commands.argument("pnj", EntityArgument.entity()).executes(CommandesDebug::lirePatrouille)))
+                        .then(Commands.literal("clear")
+                                .then(Commands.argument("pnj", EntityArgument.entity()).executes(CommandesDebug::retirerPatrouille))))
+                .then(Commands.literal("controle")
+                        .then(Commands.literal("get").executes(ctx -> lireControle(ctx, ctx.getSource().getPlayerOrException()))
+                                .then(argJoueur(CommandesDebug::lireControle)))
+                        .then(Commands.literal("reset").executes(ctx -> effacerControle(ctx, ctx.getSource().getPlayerOrException()))
+                                .then(argJoueur(CommandesDebug::effacerControle))))
                 .then(Commands.literal("coffre")
                         .then(Commands.literal("get")
                                 .then(Commands.argument("pos", BlockPosArgument.blockPos()).executes(CommandesDebug::lireCoffre)))
@@ -302,6 +321,62 @@ public final class CommandesDebug {
             throw PAS_DE_STRUCTURE.create(pos.toShortString());
         }
         ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.structure.oublier", pos.toShortString()), true);
+        return Command.SINGLE_SUCCESS;
+    }
+
+    // --- Patrouilles et contrôles (G5.5) ---
+
+    private static RequiredArgumentBuilder<CommandSourceStack, ?> argPoint(int numero) {
+        return Commands.argument("point" + numero, BlockPosArgument.blockPos());
+    }
+
+    /** Un PNJ Gris au premier point, qui fait la ronde entre les points donnés. */
+    private static int creerPatrouille(CommandContext<CommandSourceStack> ctx, int nombre) throws CommandSyntaxException {
+        List<BlockPos> points = new ArrayList<>();
+        for (int i = 1; i <= nombre; i++) {
+            points.add(BlockPosArgument.getLoadedBlockPos(ctx, ctx.getSource().getLevel(), "point" + i));
+        }
+        Villager gris = PatrouillePnj.creer(ctx.getSource().getLevel(), points);
+        if (gris == null) {
+            throw PNJ_REFUSE.create();
+        }
+        ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.patrouille.creer", gris.getUUID().toString(), nombre), true);
+        return Command.SINGLE_SUCCESS;
+    }
+
+    private static int lirePatrouille(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        Villager pnj = villageois(ctx);
+        Ronde ronde = pnj.getAttached(PatrouillePnj.RONDE);
+        if (ronde == null) {
+            ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.patrouille.aucune", pnj.getDisplayName()), false);
+            return 0;
+        }
+        String points = ronde.points().stream().map(BlockPos::toShortString).collect(Collectors.joining(" ; "));
+        UUID suspect = PatrouillePnj.suspectControle(pnj);
+        Component controle = suspect == null ? Component.translatable("commande.redrising.aucun") : Component.literal(suspect.toString());
+        ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.patrouille.get", pnj.getDisplayName(), points,
+                ronde.index() + 1, controle), false);
+        return ronde.index() + 1;
+    }
+
+    private static int retirerPatrouille(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        Villager pnj = villageois(ctx);
+        PatrouillePnj.retirerRonde(pnj);
+        ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.patrouille.clear", pnj.getDisplayName()), true);
+        return Command.SINGLE_SUCCESS;
+    }
+
+    private static int lireControle(CommandContext<CommandSourceStack> ctx, ServerPlayer joueur) {
+        PatrouillePnj.SuiviControle suivi = PatrouillePnj.suivi(joueur);
+        ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.controle.get", joueur.getDisplayName(),
+                suivi.dernierControle(), suivi.dernierJourBlanchi()), false);
+        return Command.SINGLE_SUCCESS;
+    }
+
+    /** Efface l'attente entre deux contrôles et le dernier jour blanchi. */
+    private static int effacerControle(CommandContext<CommandSourceStack> ctx, ServerPlayer joueur) {
+        joueur.removeAttached(PatrouillePnj.SUIVI_CONTROLE);
+        ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.controle.reset", joueur.getDisplayName()), true);
         return Command.SINGLE_SUCCESS;
     }
 

@@ -19,6 +19,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.Container;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.npc.villager.Villager;
 import net.minecraft.world.entity.player.Player;
@@ -49,6 +50,9 @@ import java.util.UUID;
  *     (à moins de {@value EffetsActions#PORTEE_DENONCIATION} blocs) est arrêté.</li>
  *     <li>Chaque jour de jeu, la Suspicion retombe un peu.</li>
  * </ul>
+ *
+ * <p>Tuer, voler et l'effraction d'un poste dépendent des témoins (G5.5) : voir {@link #temoin} et
+ * {@link EffetsActions#selonTemoins}.</p>
  */
 public final class ActionsFaction {
     /** Camp d'un PNJ ou d'un coffre (secret : pas envoyé aux clients). Les structures le poseront (G5.3, G5.4). */
@@ -74,7 +78,7 @@ public final class ActionsFaction {
             if (entite instanceof Villager pnj && source.getEntity() instanceof ServerPlayer joueur) {
                 Couleur couleur = PnjCouleur.couleur(pnj);
                 if (couleur != null) {
-                    agir(joueur, "tue un PNJ " + couleur.getSerializedName(), EffetsActions.tuer(couleur));
+                    agirDevantTemoins(joueur, "tue un PNJ " + couleur.getSerializedName(), EffetsActions.tuer(couleur), pnj);
                 }
             }
         });
@@ -107,7 +111,7 @@ public final class ActionsFaction {
         PlayerBlockBreakEvents.AFTER.register((monde, joueur, pos, etat, bloc) -> {
             Camp camp = bloc == null ? null : bloc.getAttached(CAMP);
             if (camp != null && joueur instanceof ServerPlayer serveur) {
-                agir(serveur, "casse un coffre " + camp.getSerializedName(), EffetsActions.voler(camp));
+                agirDevantTemoins(serveur, "casse un coffre " + camp.getSerializedName(), EffetsActions.voler(camp), null);
             }
         });
 
@@ -189,11 +193,50 @@ public final class ActionsFaction {
     public static void coffreFerme(Player joueur, Container coffre, int objetsAOuverture) {
         Camp camp = campDuCoffre(coffre);
         if (camp != null && joueur instanceof ServerPlayer serveur && nombreObjets(coffre) < objetsAOuverture) {
-            agir(serveur, "vole un coffre " + camp.getSerializedName(), EffetsActions.voler(camp));
+            agirDevantTemoins(serveur, "vole un coffre " + camp.getSerializedName(), EffetsActions.voler(camp), null);
         }
     }
 
-    private static void agir(ServerPlayer joueur, String action, Variation variation) {
+    /** Le joueur est reconduit hors d'un poste de la Société où il était entré sans y être admis ({@code PosteSociete}). */
+    public static void effraction(ServerPlayer joueur) {
+        agirDevantTemoins(joueur, "effraction d'un poste", EffetsActions.effraction(), null);
+    }
+
+    /**
+     * Qui voit le joueur : les PNJ de Couleur à moins de {@value EffetsActions#PORTEE_TEMOIN} blocs, avec une ligne de vue
+     * sur lui. Ne comptent pas : les PNJ du Rising (ils ne parlent pas à la Société), {@code exclu} (la victime),
+     * les villageois sans Couleur. Un Gris l'emporte sur un témoin ordinaire.
+     */
+    public static Temoin temoin(ServerPlayer joueur, @Nullable Entity exclu) {
+        double portee = EffetsActions.PORTEE_TEMOIN;
+        Temoin temoin = Temoin.AUCUN;
+        for (Villager pnj : joueur.level().getEntities(EntityTypes.VILLAGER, joueur.getBoundingBox().inflate(portee),
+                pnj -> pnj != exclu && pnj.isAlive() && pnj.distanceTo(joueur) <= portee)) {
+            Couleur couleur = PnjCouleur.couleur(pnj);
+            if (couleur == null || pnj.getAttached(CAMP) == Camp.RISING || !pnj.hasLineOfSight(joueur)) {
+                continue;
+            }
+            if (couleur == Couleur.GRIS) {
+                return Temoin.GRIS;
+            }
+            temoin = Temoin.ORDINAIRE;
+        }
+        return temoin;
+    }
+
+    /** Applique une action selon ses témoins, et prévient le joueur s'il a été vu. */
+    private static void agirDevantTemoins(ServerPlayer joueur, String action, Variation variation, @Nullable Entity exclu) {
+        Temoin temoin = temoin(joueur, exclu);
+        switch (temoin) {
+            case AUCUN -> {
+            }
+            case ORDINAIRE -> joueur.sendOverlayMessage(Component.translatable("faction.redrising.temoin"));
+            case GRIS -> joueur.sendOverlayMessage(Component.translatable("faction.redrising.temoin.gris"));
+        }
+        agir(joueur, action + " (témoin : " + temoin.name().toLowerCase() + ")", EffetsActions.selonTemoins(variation, temoin));
+    }
+
+    public static void agir(ServerPlayer joueur, String action, Variation variation) {
         Jauges apres = JaugesJoueur.appliquer(joueur, variation);
         RedRising.LOGGER.info("{} {} : {} → {}", joueur.getPlainTextName(), action, variation, apres);
     }

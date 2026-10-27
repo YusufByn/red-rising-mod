@@ -9,6 +9,7 @@ import io.github.yusufbyn.redrising.factions.EffetsActions;
 import io.github.yusufbyn.redrising.factions.Jauge;
 import io.github.yusufbyn.redrising.factions.Jauges;
 import io.github.yusufbyn.redrising.factions.JaugesJoueur;
+import io.github.yusufbyn.redrising.factions.Temoin;
 import io.github.yusufbyn.redrising.factions.Variation;
 import io.github.yusufbyn.redrising.pnj.PnjCouleur;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
@@ -31,7 +32,8 @@ import java.util.UUID;
 
 /**
  * G5.2 : chaque action modifie les bonnes jauges. Aider et dénoncer passent par de vrais clics (accroupi, clic droit) ;
- * tuer et voler sont joués côté serveur (coup du joueur, coffre ouvert puis refermé par lui).
+ * tuer et voler sont joués côté serveur (coup du joueur, coffre ouvert puis refermé par lui), sans témoin
+ * (les témoins de G5.5 sont vérifiés par {@code PatrouilleGrisTest}).
  */
 public class ActionsFactionTest implements FabricClientGameTest {
     /** PNJ placé juste devant le joueur, qui regarde vers le sud et un peu vers le bas. */
@@ -50,9 +52,9 @@ public class ActionsFactionTest implements FabricClientGameTest {
                 }
             });
 
-            // --- Tuer : un PNJ de l'élite, de l'ordre, du peuple ---
+            // --- Tuer : un PNJ de l'élite, de l'ordre, du peuple (sans témoin) ---
             for (Couleur victime : new Couleur[]{Couleur.OR, Couleur.GRIS, Couleur.ROUGE}) {
-                attendre(monde, "tuer un PNJ " + victime.getSerializedName(), EffetsActions.tuer(victime), () ->
+                attendre(monde, "tuer un PNJ " + victime.getSerializedName(), sansTemoin(EffetsActions.tuer(victime)), () ->
                         monde.getServer().runOnServer(server -> {
                             ServerPlayer joueur = OutilsTest.joueur(server);
                             Villager pnj = Objects.requireNonNull(PnjCouleur.creer(server.overworld(), new Vec3(4.5, -60, 4.5), 0, victime));
@@ -73,7 +75,7 @@ public class ActionsFactionTest implements FabricClientGameTest {
             retirer(monde, marron);
 
             // --- Dénoncer : un PNJ Gris, mains vides ; deux PNJ du Rising à 6 et 10 blocs, le plus proche est arrêté ---
-            pnjDevant(monde, Couleur.GRIS);
+            UUID gris = pnjDevant(monde, Couleur.GRIS);
             UUID proche = pnjRebelle(monde, new Vec3(6.5, -60, 0.5));
             UUID loin = pnjRebelle(monde, new Vec3(-9.5, -60, 0.5));
             // Camp posé par la commande de debug pour l'un, directement pour l'autre
@@ -90,10 +92,11 @@ public class ActionsFactionTest implements FabricClientGameTest {
             }
             verifierAucunEcran(context, "après la dénonciation");
             RedRising.LOGGER.info("[G5.2] Dénonciation : le PNJ du Rising le plus proche a été arrêté, l'autre est resté");
+            retirer(monde, gris); // sinon il serait témoin des vols (le PNJ du Rising restant ne compte pas)
 
-            // --- Voler : prendre dans un coffre de la Société, puis du Rising ; ouvrir sans rien prendre ne compte pas ---
-            voler(monde, new BlockPos(3, -60, -3), "societe", true, EffetsActions.voler(Camp.SOCIETE));
-            voler(monde, new BlockPos(5, -60, -3), "rising", true, EffetsActions.voler(Camp.RISING));
+            // --- Voler (sans témoin) : prendre dans un coffre de la Société, puis du Rising ; ouvrir sans rien prendre ne compte pas ---
+            voler(monde, new BlockPos(3, -60, -3), "societe", true, sansTemoin(EffetsActions.voler(Camp.SOCIETE)));
+            voler(monde, new BlockPos(5, -60, -3), "rising", true, sansTemoin(EffetsActions.voler(Camp.RISING)));
             voler(monde, new BlockPos(7, -60, -3), "societe", false, Variation.AUCUNE);
 
             // --- Un jour de jeu passe : la Suspicion retombe ---
@@ -109,6 +112,10 @@ public class ActionsFactionTest implements FabricClientGameTest {
                     monde.getServer().waitFor(server -> server.overworld().getGameTime() > finDuJour + 2, 100));
         }
         RedRising.LOGGER.info("[G5.2] OK : tuer, aider, dénoncer, voler et le déclin de la Suspicion modifient les bonnes jauges");
+    }
+
+    private static Variation sansTemoin(Variation variation) {
+        return EffetsActions.selonTemoins(variation, Temoin.AUCUN);
     }
 
     /** Joue l'action, puis vérifie que les jauges ont bougé exactement de la variation attendue (bornée selon la Couleur). */

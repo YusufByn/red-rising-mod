@@ -245,7 +245,7 @@ Deux jauges séparées (pas une barre Société ↔ Rising) pour permettre **l'a
   - **Voler** : prendre des objets dans un coffre (ou tonneau) d'un camp ; compté une fois par ouverture. **Casser** un coffre d'un camp compte aussi comme un vol (G5.3 : sinon on vide un poste en perçant un mur). Les coffres doubles ne sont pas encore pris en compte pour le vol.
   - **Dénoncer** : accroupi, clic droit **à mains vides** sur un PNJ Gris (aider = avec un objet, dénoncer = sans, pas d'ambiguïté) ; le PNJ du Rising le plus proche, à moins de 16 blocs, est arrêté (il disparaît).
   - La **Suspicion retombe d'elle-même** chaque jour de jeu (sinon tout joueur du Rising finit traqué).
-- 🟡 Valeurs (Loyauté / Soutien / Suspicion), à régler en jeu, toutes dans `factions/EffetsActions` :
+- 🟡 Valeurs de base (Loyauté / Soutien / Suspicion), à régler en jeu, toutes dans `factions/EffetsActions`. Pour tuer et voler, c'est l'effet **avec un témoin ordinaire** ; les témoins (G5.5, plus bas) le modifient :
 
 | Action | Élite | Ordre | Peuple |
 |---|---|---|---|
@@ -255,12 +255,47 @@ Deux jauges séparées (pas une barre Société ↔ Rising) pour permettre **l'a
   - Voler : coffre de la Société −5 / +2 / +5 ; coffre du Rising 0 / −5 / 0.
   - Dénoncer : +5 / −10 / −5.
   - Déclin : Suspicion −2 par jour de jeu (24 000 ticks).
-- Pour l'instant, la Suspicion monte même sans témoin ; les témoins arriveront avec les patrouilles de Gris (G5.5). Les camps des PNJ et des coffres seront posés par les structures (G5.3, G5.4) ; en attendant, `/rr pnj camp` et `/rr coffre`.
+- Les camps des PNJ et des coffres sont posés par les structures (G5.3, G5.4) ; sinon `/rr pnj camp` et `/rr coffre`.
+
+### Témoins (G5.5)
+- ✅ **Qui compte** : un PNJ de Couleur vivant, à moins de 16 blocs, avec une ligne de vue sur le joueur au moment de l'action. Ne comptent pas : les PNJ du Rising (ils ne parlent pas à la Société), la victime, les villageois sans Couleur, les autres joueurs. S'il y a plusieurs témoins, un Gris l'emporte. Le témoin compte au moment de l'action : le tuer ensuite n'efface rien.
+- ✅ **Actions concernées** : tuer, voler (ouvrir ou casser le coffre), effraction d'un poste. Aider et dénoncer ne le sont pas : le PNJ aidé ou le Gris à qui l'on parle est lui-même témoin.
+- ✅ Le joueur est prévenu : « Quelqu'un t'a vu » ou « Un Gris t'a vu ».
+- 🟡 **Effet** (dans `EffetsActions.selonTemoins`) ; le Soutien ne change jamais, le Rising apprend tout par les siens :
+
+| Témoin | Loyauté | Soutien | Suspicion |
+|---|---|---|---|
+| Aucun | 0 | inchangé | moitié, arrondie au-dessus (agir en cachette n'est pas gratuit) |
+| Ordinaire | inchangée | inchangé | inchangée |
+| Au moins un Gris | inchangée | inchangé | doublée |
+
+  Ce que ça donne avec les valeurs de base :
+
+| Action | Sans témoin | Témoin ordinaire | Gris |
+|---|---|---|---|
+| Tuer un PNJ de l'élite | 0 / +5 / +8 | −15 / +5 / +15 | −15 / +5 / +30 |
+| Tuer un PNJ de l'ordre | 0 / +4 / +5 | −10 / +4 / +10 | −10 / +4 / +20 |
+| Tuer un PNJ du peuple | 0 / −5 / +3 | −3 / −5 / +5 | −3 / −5 / +10 |
+| Voler la Société | 0 / +2 / +3 | −5 / +2 / +5 | −5 / +2 / +10 |
+| Voler le Rising | 0 / −5 / 0 | 0 / −5 / 0 | 0 / −5 / 0 |
+| Effraction d'un poste | 0 / 0 / +3 | 0 / 0 / +5 | 0 / 0 / +10 |
+
+- ✅ **Effraction** : être reconduit hors d'un poste où l'on est entré sans y être admis (mur percé, fenêtre). Entré admis puis tombé sous le seuil une fois dedans, ce n'en est pas une. Le commis Cuivre est presque toujours témoin.
+
+### Patrouilles et contrôles (G5.5)
+- ✅ **Patrouille** : un PNJ Gris qui suit une ronde (des points dans l'ordre, en boucle, avec 3 secondes d'arrêt à chacun), de jour comme de nuit. Créée par `/rr patrouille creer` en attendant les garnisons (G8.1). La ronde (`factions/Ronde`) ne sait pas qui marche : le joueur Gris recevra les mêmes rondes en G8.4 ; le contrôle (`factions/Controle`) servira au joueur Gris qui contrôle un suspect en G8.3.
+- 🟡 **Paliers de Suspicion** (seuils dans `factions/Acces`) : 0 à 39, les Gris t'ignorent ; **40 à 99, contrôle** ; 100, traque (G5.6).
+- ✅ **Contrôle** : un Gris en patrouille qui voit un joueur au palier de contrôle à moins de 12 blocs l'arrête (« Halte ! Contrôle. »), vient à lui, puis le contrôle pendant 5 secondes avant de reprendre sa ronde. Un joueur n'est pas contrôlé plus d'une fois toutes les 5 minutes de jeu. Le contrôle est abandonné, sans effet, si le Gris n'arrive pas en 20 secondes.
+  - **Obéir** (rester jusqu'au bout) : Suspicion −5, **une fois par jour de jeu au plus** (sinon on se blanchit en allant voir les patrouilles). Message « Contrôle terminé : tu peux circuler ».
+  - **Fuir** : s'éloigner à plus de 16 blocs du Gris, **dès le « Halte »**, approche comprise : Loyauté −5, Suspicion +10. Une seule limite de distance, plus grande que la distance de détection, pour qu'on ne soit pas en fuite dès le « Halte ».
+  - Attaquer le Gris : c'est « tuer un PNJ de l'ordre », avec un Gris témoin.
+- 🟡 Distances et durées dans `factions/Controle`, effets dans `EffetsActions`.
+- Pour plus tard : une fouille qui trouverait les objets volés (marqués à la sortie d'un coffre de la Société).
 
 ### Poste de la Société (G5.3)
 - ✅ Structure générique : une salle en quartz (7×7) avec un comptoir, un PNJ Cuivre (camp Société) et un coffre de la Société. Construite par `/rr structure poste` en attendant la génération (G7.1).
 - 🟡 **Seuil d'entrée : Loyauté 40 ou plus** (à régler en jeu, dans `factions/Acces`). Égal au plafond du Rouge : un Rouge irréprochable entre tout juste, la moindre faute (un vol de la Société) le refoule jusqu'à ce qu'il se rattrape. Un nouveau joueur (50) entre ; tuer un PNJ de l'élite (−15) suffit à être refoulé.
-- ✅ Refoulement : la porte ne s'ouvre pas, avec le message « La Société te refuse l'entrée » ; l'intérieur est surveillé (toutes les demi-secondes) : un joueur refusé qui s'y trouve quand même (mur percé, fenêtre, Loyauté tombée une fois dedans) est reconduit devant l'entrée. Pas d'effet sur les jauges pour une tentative (la Suspicion d'une effraction viendra avec les patrouilles, G5.5).
+- ✅ Refoulement : la porte ne s'ouvre pas, avec le message « La Société te refuse l'entrée » ; l'intérieur est surveillé (toutes les demi-secondes) : un joueur refusé qui s'y trouve quand même (mur percé, fenêtre, Loyauté tombée une fois dedans) est reconduit devant l'entrée. Essayer la porte n'a pas d'effet sur les jauges ; entrer sans être admis est une effraction (G5.5, voir Témoins).
 
 ### Cellule du Rising (G5.4)
 - ✅ Structure générique : une vraie salle du monde (5×3×5, sol en dalles d'ardoise des profondeurs, lanternes) noyée dans la pierre, avec un PNJ Rouge (camp Rising) et un coffre du Rising. Construite par `/rr structure cellule` en attendant la génération dans les mines (G7.5).
@@ -268,7 +303,8 @@ Deux jauges séparées (pas une barre Société ↔ Rising) pour permettre **l'a
 - ✅ **Entrée cachée** : deux blocs de pierre ordinaires (vanilla, même F3 n'y voit que de la pierre) dans le mur. Accroupi, main vide, clic droit : un joueur admis passe dans la salle. Un joueur refusé n'apprend rien : il ne se passe rien, comme sur n'importe quelle pierre (pas de message, pas de son).
 - ✅ **Repère** : quelques particules rouges sur l'entrée toutes les 2 secondes, envoyées par le serveur aux seuls joueurs admis à moins de 12 blocs.
 - ✅ **Sortie** : même geste depuis l'intérieur, quel que soit le Soutien. **Intérieur surveillé** : un joueur refusé dans la salle (Soutien tombé une fois dedans, mur percé) est mis devant l'entrée, avec le message « Le Rising te met dehors » (il connaît déjà la cellule).
-- ✅ **Trouver une cellule en creusant est permis** : on en fera du contenu (dénoncer une cellule, raids) avec les patrouilles (G5.5) et le Triomphe.
+- ✅ **Trouver une cellule en creusant est permis** : on en fera du contenu avec la dénonciation d'une cellule (G5.9), la traque (G5.6) et le Triomphe.
+- 🟡 **Dénoncer une cellule (G5.9, esquisse)** : une cellule où le joueur est entré au moins une fois (par l'entrée ou en creusant) lui est connue. Même geste que dénoncer un PNJ (accroupi, main vide, clic droit sur un Gris) : si une cellule connue est à moins de 32 blocs du Gris, c'est elle qui est dénoncée, sinon le PNJ du Rising le plus proche. La cellule tombe : ses PNJ sont arrêtés, son coffre saisi (vidé, sans camp), elle sort de la liste. Jauges : +10 / −25 / −10.
 - ✅ **Entonnoirs** : un entonnoir (posé ou sur wagonnet) ne vide pas un coffre ou un tonneau d'un camp, ni un coffre double dont une moitié appartient à un camp. Il peut toujours le remplir (c'est un don).
 
 ### Conséquences

@@ -130,5 +130,16 @@
   "commande.redrising.structure.absente": "No structure at %s",
   "structure.redrising.cellule.dehors": "The Rising throws you out",
   "commande.redrising.structure.list.cellules": "%s Rising cell(s) (entry from %s Support); entrances: %s",
-  "commande.redrising.structure.cellule": "Rising cell built, hidden entrance at %s (room towards %s)"
+  "commande.redrising.structure.cellule": "Rising cell built, hidden entrance at %s (room towards %s)",
+  "faction.redrising.temoin": "Someone saw you",
+  "faction.redrising.temoin.gris": "A Gray saw you",
+  "faction.redrising.controle.halte": "Halt! Inspection.",
+  "faction.redrising.controle.fin": "Inspection over: move along",
+  "faction.redrising.controle.fuite": "You fled an inspection",
+  "commande.redrising.patrouille.creer": "Patrol created: Gray %s walks a round between %s points",
+  "commande.redrising.patrouille.get": "Round of %s: %s (current point: %s); inspection in progress: %s",
+  "commande.redrising.patrouille.aucune": "%s has no round",
+  "commande.redrising.patrouille.clear": "Round removed from %s",
+  "commande.redrising.controle.get": "Inspections of %s: last inspection at tick %s, last Suspicion drop on day %s",
+  "commande.redrising.controle.reset": "Inspections of %s reset"
 }
