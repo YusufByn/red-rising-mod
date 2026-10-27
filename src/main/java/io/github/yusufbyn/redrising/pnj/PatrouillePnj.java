@@ -164,6 +164,9 @@ public final class PatrouillePnj {
     }
 
     private static void agir(ServerLevel monde, Villager gris, long maintenant) {
+        if (gris.hasAttached(TraqueGris.CHASSEUR)) {
+            return; // en traque (G5.6) : il reprendra sa ronde après
+        }
         EnCours enCours = CONTROLES.get(gris.getUUID());
         if (enCours != null) {
             suivreControle(monde.getServer(), gris, enCours, maintenant);
@@ -213,7 +216,7 @@ public final class PatrouillePnj {
     }
 
     private static void commencerControle(Villager gris, ServerPlayer suspect, long maintenant) {
-        CONTROLES.put(gris.getUUID(), new EnCours(suspect.getUUID(), new Controle(maintenant)));
+        CONTROLES.put(gris.getUUID(), new EnCours(suspect.getUUID(), new Controle(Controle.CONTROLE, maintenant)));
         suspect.setAttached(SUIVI_CONTROLE, new SuiviControle(maintenant, suivi(suspect).dernierJourBlanchi()));
         suspect.setAttached(CONTROLE_EN_COURS, true);
         suspect.sendOverlayMessage(Component.translatable("faction.redrising.controle.halte"));
@@ -243,7 +246,7 @@ public final class PatrouillePnj {
                 gris.getBrain().setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(suspect, VITESSE_APPROCHE, 1));
                 gris.getBrain().setMemory(MemoryModuleType.LOOK_TARGET, new EntityTracker(suspect, true));
             }
-            case OBEI -> {
+            case ABOUTI -> {
                 CONTROLES.remove(gris.getUUID());
                 obeir(suspect, maintenant);
             }

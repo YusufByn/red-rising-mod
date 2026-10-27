@@ -200,7 +200,7 @@ public class PatrouilleGrisTest implements FabricClientGameTest {
         pres(monde, gris);
         attendreDebutControle(monde, context, gris, "contrôle fui");
         Vec3 ici = monde.getServer().computeOnServer(server -> OutilsTest.joueur(server).position());
-        monde.getServer().runCommand("tp @a " + (ici.x + Controle.DISTANCE_FUITE + 8) + " -60 " + ici.z);
+        monde.getServer().runCommand("tp @a " + (ici.x + Controle.CONTROLE.distanceFuite() + 8) + " -60 " + ici.z);
         attendreFinControle(monde, gris);
         verifierJauges(monde, "contrôle fui", new Jauges(45, 0, 50));
         context.waitTicks(3);
@@ -227,7 +227,7 @@ public class PatrouilleGrisTest implements FabricClientGameTest {
 
     private static void attendreFinControle(TestSingleplayerContext monde, UUID gris) {
         monde.getServer().waitFor(server -> PatrouillePnj.suspectControle((Villager) Objects.requireNonNull(server.overworld().getEntity(gris))) == null,
-                Controle.APPROCHE_MAX + Controle.DUREE);
+                Controle.CONTROLE.approcheMax() + Controle.CONTROLE.duree());
     }
 
     /** Efface l'attente entre deux contrôles, en gardant le jour du dernier blanchiment. */

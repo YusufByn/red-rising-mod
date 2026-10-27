@@ -260,7 +260,7 @@ Deux jauges séparées (pas une barre Société ↔ Rising) pour permettre **l'a
 ### Témoins (G5.5)
 - ✅ **Qui compte** : un PNJ de Couleur vivant, à moins de 16 blocs, avec une ligne de vue sur le joueur au moment de l'action. Ne comptent pas : les PNJ du Rising (ils ne parlent pas à la Société), la victime, les villageois sans Couleur, les autres joueurs. S'il y a plusieurs témoins, un Gris l'emporte. Le témoin compte au moment de l'action : le tuer ensuite n'efface rien.
 - ✅ **Actions concernées** : tuer, voler (ouvrir ou casser le coffre), effraction d'un poste. Aider et dénoncer ne le sont pas : le PNJ aidé ou le Gris à qui l'on parle est lui-même témoin.
-- ✅ Le joueur est prévenu : « Quelqu'un t'a vu » ou « Un Gris t'a vu ».
+- ✅ Le joueur est prévenu : « Quelqu'un a tout vu » ou « Un Gris a tout vu » (formulé pour ne pas s'accorder avec le joueur).
 - 🟡 **Effet** (dans `EffetsActions.selonTemoins`) ; le Soutien ne change jamais, le Rising apprend tout par les siens :
 
 | Témoin | Loyauté | Soutien | Suspicion |
@@ -307,6 +307,28 @@ Deux jauges séparées (pas une barre Société ↔ Rising) pour permettre **l'a
 - ✅ **Trouver une cellule en creusant est permis** : on en fera du contenu avec la dénonciation d'une cellule (G5.9), la traque (G5.6) et le Triomphe.
 - 🟡 **Dénoncer une cellule (G5.9, esquisse)** : une cellule où le joueur est entré au moins une fois (par l'entrée ou en creusant) lui est connue. Même geste que dénoncer un PNJ (accroupi, main vide, clic droit sur un Gris) : si une cellule connue est à moins de 32 blocs du Gris, c'est elle qui est dénoncée, sinon le PNJ du Rising le plus proche. La cellule tombe : ses PNJ sont arrêtés, son coffre saisi (vidé, sans camp), elle sort de la liste. Jauges : +10 / −25 / −10.
 - ✅ **Entonnoirs** : un entonnoir (posé ou sur wagonnet) ne vide pas un coffre ou un tonneau d'un camp, ni un coffre double dont une moitié appartient à un camp. Il peut toujours le remplir (c'est un don).
+
+### Traque (G5.6)
+- ✅ **Déclenchement** : la Suspicion atteint 100, quelle qu'en soit la cause. Le joueur voit le titre « Les Gris te traquent » (« Sème-les ou cache-toi ») et entend le cor des raids. Une barre de boss est rouge quand un chasseur le voit, jaune sinon ; elle se remplit vers la victoire.
+- ✅ **Chasseurs** : des PNJ Gris qui apparaissent à 24-32 blocs, hors de vue si possible ; les Gris en patrouille à moins de 48 blocs s'y joignent, puis reprennent leur ronde. Ils courent, encaissent mieux qu'un villageois (vie et armure en plus) et ne paniquent pas quand on les frappe. Quand ils voient le joueur, ils le poursuivent ; sinon, ils fouillent autour de sa dernière position connue (une ronde autour de ce point).
+- ✅ **Tir étourdissant** : le Gris est la Couleur du combat à distance. Un chasseur qui voit le joueur à moins de 20 blocs tire une flèche toutes les 2 secondes ; touché, le joueur est fortement ralenti 2 secondes. Un joueur perché est donc atteint.
+- ✅ **Tuer un chasseur** ne rapporte pas de Soutien (sinon la traque rapporte : −10 / 0 / +10 avec témoin ordinaire, et les autres chasseurs sont des Gris). Un chasseur tué n'est remplacé que par les renforts.
+- ✅ **Gagner** :
+  - **semer les Gris** : 60 secondes de suite sans qu'aucun chasseur ne voie le joueur ;
+  - **se cacher dans une cellule du Rising** (si on y est admis) : sans être vu, victoire immédiate ; sous les yeux d'un chasseur, la cellule est **repérée** (ce qu'il en advient relève de G5.9) et la traque continue (les murs cachent le joueur, il peut y semer les Gris) ;
+  - **abandon au bout de 10 minutes** : victoire seulement si aucun chasseur ne voit le joueur à ce moment ; sinon les Gris se retirent sans que ce soit une victoire (un joueur perché, intouchable, ne gagne pas).
+- ✅ **Perdre : l'arrestation** — un chasseur au contact (2,5 blocs, en le voyant : pas à travers un mur) pendant 3 secondes de suite. L'arrêté est emmené devant le poste de la Société le plus proche (à moins de 500 blocs, sinon sur place) et **interrogé 30 secondes** : tenu sur place, ralenti, aveuglé, et **il ne peut ni subir de dégâts ni mourir**. Rien n'est perdu : ni objets, ni expérience, ni point de réapparition, et ce n'est pas une mort. Loyauté −15.
+- ✅ La traque et l'interrogatoire sont enregistrés sur le joueur : se déconnecter les met en pause, ils reprennent à son retour (de nouveaux chasseurs arrivent). Mourir pendant une traque ne l'arrête pas.
+- 🟡 Valeurs (toutes dans `factions/Traque`, sauf la Loyauté de l'arrestation dans `EffetsActions`) : 3 chasseurs, un renfort par minute jusqu'à 6 ; vue 48 blocs ; tir à 20 blocs toutes les 2 secondes, ralentissement de 2 secondes ; semer en 60 secondes ; abandon à 10 minutes ; interrogatoire de 30 secondes.
+- 🟡 **Suspicion après la traque** (tous restent au palier de contrôle) :
+
+| Issue | Suspicion | Autres effets |
+|---|---|---|
+| Gagnée (semés, cellule, abandon hors de vue) | 70 | aucun |
+| Retrait des Gris (abandon, toujours vu) | 90 | aucun |
+| Arrêté | 50 | Loyauté −15, 30 s d'interrogatoire, emmené au poste |
+
+- Relèvent d'autres tickets : le sort d'une cellule repérée et ce que l'interrogatoire peut révéler (G5.9) ; les raids sur les cellules et des traques plus dures après certains jalons (G6.3, Triomphe G16.2) ; chasseurs partis des garnisons et prison (G8.1) ; fouille et objets volés confisqués (plus tard) ; traques entre joueurs (multijoueur, plus tard). Pour l'instant, les chasseurs apparaissent en surface (hauteur du terrain) : à revoir pour les mines (G7.2).
 
 ### Conséquences
 - Loyauté haute : accès aux domaines, commerces, équipement de la Société (razor réservé aux Or).

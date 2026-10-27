@@ -9,6 +9,7 @@ import io.github.yusufbyn.redrising.factions.ActionsFaction;
 import io.github.yusufbyn.redrising.factions.Camp;
 import io.github.yusufbyn.redrising.factions.JaugesJoueur;
 import io.github.yusufbyn.redrising.pnj.PnjCouleur;
+import io.github.yusufbyn.redrising.pnj.TraqueGris;
 import net.fabricmc.fabric.api.attachment.v1.AttachmentRegistry;
 import net.fabricmc.fabric.api.attachment.v1.AttachmentType;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
@@ -66,12 +67,14 @@ public final class CelluleRising {
      * @param interieur la salle (sans les murs)
      * @param entree    moitié basse de l'entrée cachée (l'autre moitié est au-dessus)
      * @param versSalle direction de la salle vue de l'entrée, depuis dehors
+     * @param reperee   un chasseur a vu un joueur traqué y entrer (G5.6) ; ce qu'il en advient relève de G5.9
      */
-    public record Cellule(BoundingBox interieur, BlockPos entree, Direction versSalle) {
+    public record Cellule(BoundingBox interieur, BlockPos entree, Direction versSalle, boolean reperee) {
         public static final Codec<Cellule> CODEC = RecordCodecBuilder.create(instance -> instance.group(
                 BoundingBox.CODEC.fieldOf("interieur").forGetter(Cellule::interieur),
                 BlockPos.CODEC.fieldOf("entree").forGetter(Cellule::entree),
-                Direction.CODEC.fieldOf("vers_salle").forGetter(Cellule::versSalle)
+                Direction.CODEC.fieldOf("vers_salle").forGetter(Cellule::versSalle),
+                Codec.BOOL.optionalFieldOf("reperee", false).forGetter(Cellule::reperee)
         ).apply(instance, Cellule::new));
 
         public boolean estLEntree(BlockPos pos) {
@@ -141,6 +144,7 @@ public final class CelluleRising {
                 // Silencieux : le joueur refusé ne doit pas apprendre qu'il y a une cellule
                 return InteractionResult.PASS;
             }
+            TraqueGris.entreDansCellule(serveur, cellule);
             entrer(serveur, cellule);
             return InteractionResult.SUCCESS;
         });
@@ -263,7 +267,7 @@ public final class CelluleRising {
 
         BoundingBox interieur = BoundingBox.fromCorners(local(entree, droite, versSalle, -DEMI_LARGEUR, 0, 1),
                 local(entree, droite, versSalle, DEMI_LARGEUR, HAUTEUR - 1, PROFONDEUR));
-        Cellule cellule = new Cellule(interieur, entree, versSalle);
+        Cellule cellule = new Cellule(interieur, entree, versSalle, false);
         List<Cellule> cellules = new ArrayList<>(cellules(monde.getServer()));
         cellules.add(cellule);
         monde.getServer().globalAttachments().setAttached(CELLULES, cellules);
@@ -273,6 +277,13 @@ public final class CelluleRising {
 
     private static BlockPos local(BlockPos entree, Direction droite, Direction fond, int a, int h, int p) {
         return entree.relative(droite, a).above(h).relative(fond, p);
+    }
+
+    /** Un chasseur a vu un joueur traqué entrer dans cette cellule (G5.6). */
+    public static void marquerReperee(MinecraftServer server, Cellule cellule) {
+        List<Cellule> cellules = new ArrayList<>(cellules(server));
+        cellules.replaceAll(c -> c.entree().equals(cellule.entree()) ? new Cellule(c.interieur(), c.entree(), c.versSalle(), true) : c);
+        server.globalAttachments().setAttached(CELLULES, cellules);
     }
 
     /** Oublie la cellule qui contient cette position (les blocs restent). Renvoie {@code false} s'il n'y en a pas. */

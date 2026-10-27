@@ -10,34 +10,53 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ControleTest {
     @Test
     void obeiApresLaDureeDuControle() {
-        Controle controle = new Controle(0);
+        Controle controle = new Controle(Controle.CONTROLE, 0);
         assertEquals(Controle.Issue.EN_COURS, controle.suivre(Controle.DETECTION, 0));
         assertEquals(Controle.Issue.EN_COURS, controle.suivre(2, 40));
         assertTrue(controle.controleurArrive());
-        assertEquals(Controle.Issue.EN_COURS, controle.suivre(3, 40 + Controle.DUREE - 1));
-        assertEquals(Controle.Issue.OBEI, controle.suivre(3, 40 + Controle.DUREE));
+        assertEquals(Controle.Issue.EN_COURS, controle.suivre(3, 40 + Controle.CONTROLE.duree() - 1));
+        assertEquals(Controle.Issue.ABOUTI, controle.suivre(3, 40 + Controle.CONTROLE.duree()));
     }
 
     @Test
     void fuiteDesLeHaltePendantLApproche() {
-        Controle controle = new Controle(0);
-        assertEquals(Controle.Issue.EN_COURS, controle.suivre(Controle.DISTANCE_FUITE, 10));
-        assertEquals(Controle.Issue.FUITE, controle.suivre(Controle.DISTANCE_FUITE + 0.5, 20));
+        Controle controle = new Controle(Controle.CONTROLE, 0);
+        assertEquals(Controle.Issue.EN_COURS, controle.suivre(Controle.CONTROLE.distanceFuite(), 10));
+        assertEquals(Controle.Issue.FUITE, controle.suivre(Controle.CONTROLE.distanceFuite() + 0.5, 20));
         assertFalse(controle.controleurArrive());
     }
 
     @Test
     void fuitePendantLeControle() {
-        Controle controle = new Controle(0);
+        Controle controle = new Controle(Controle.CONTROLE, 0);
         controle.suivre(1, 10);
-        assertEquals(Controle.Issue.FUITE, controle.suivre(Controle.DISTANCE_FUITE + 1, 20));
+        assertEquals(Controle.Issue.FUITE, controle.suivre(Controle.CONTROLE.distanceFuite() + 1, 20));
     }
 
     @Test
     void abandonSiLeControleurNArrivePas() {
-        Controle controle = new Controle(0);
-        assertEquals(Controle.Issue.EN_COURS, controle.suivre(8, Controle.APPROCHE_MAX - 1));
-        assertEquals(Controle.Issue.ABANDON, controle.suivre(8, Controle.APPROCHE_MAX));
+        Controle controle = new Controle(Controle.CONTROLE, 0);
+        assertEquals(Controle.Issue.EN_COURS, controle.suivre(8, Controle.CONTROLE.approcheMax() - 1));
+        assertEquals(Controle.Issue.ABANDON, controle.suivre(8, Controle.CONTROLE.approcheMax()));
+    }
+
+    @Test
+    void arrestationContactTenuSansInterruption() {
+        Controle arret = new Controle(Traque.ARRESTATION, 0);
+        assertEquals(Controle.Issue.EN_COURS, arret.suivre(2, 10));
+        // Le joueur s'éloigne un instant : le compte repart de zéro
+        assertEquals(Controle.Issue.EN_COURS, arret.suivre(4, 50));
+        assertFalse(arret.controleurArrive());
+        assertEquals(Controle.Issue.EN_COURS, arret.suivre(2, 60));
+        assertEquals(Controle.Issue.EN_COURS, arret.suivre(2, 60 + Traque.ARRESTATION.duree() - 1));
+        assertEquals(Controle.Issue.ABOUTI, arret.suivre(2, 60 + Traque.ARRESTATION.duree()));
+    }
+
+    @Test
+    void arrestationSansFuiteNiAbandon() {
+        Controle arret = new Controle(Traque.ARRESTATION, 0);
+        // Un joueur perché, hors d'atteinte, reste « en cours » aussi longtemps que dure la traque
+        assertEquals(Controle.Issue.EN_COURS, arret.suivre(500, 1_000_000));
     }
 
     @Test

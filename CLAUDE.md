@@ -77,6 +77,9 @@ Mod Fabric fan-made, solo, gratuit et non commercial, dans l'univers Red Rising 
 - Témoins (G5.5) : une action qui dépend de qui l'a vue passe par `ActionsFaction.agirDevantTemoins` (témoin calculé, puis `EffetsActions.selonTemoins`). Les tests qui ne portent pas sur les témoins attendent `selonTemoins(..., Temoin.AUCUN)` et retirent les PNJ qui verraient le joueur.
 - Faire marcher un villageois (patrouille) : donner sa destination au cerveau (`brain.setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(...))`) toutes les demi-secondes ; ses comportements libres ne la remplacent que si elle est absente. Les PNJ en patrouille chargés sont suivis par `ServerEntityEvents.ENTITY_LOAD`/`ENTITY_UNLOAD` (voir `PatrouillePnj`).
 - `ServerPlayConnectionEvents.DISCONNECT` peut tourner sur le fil réseau (`Netty Local IO` en solo), pas sur celui du serveur : n'y modifier ni jauges ni attachments. Pour punir une déconnexion, poser un attachment persistant pendant l'action et le traiter à `JOIN` (voir `PatrouillePnj.CONTROLE_EN_COURS`).
+- `ServerLivingEntityEvents.ALLOW_DAMAGE` est appelé après le test d'invulnérabilité : rien pour un joueur en créatif. Tests de dégâts : `gamemode survival`, et l'effet Résistance V pour ne pas mourir (l'événement est appelé avant la réduction des dégâts). Voir `TraqueTest`.
+- PNJ qui ne doivent pas fuir quand on les frappe (chasseurs) : effacer les mémoires `HURT_BY` et `HURT_BY_ENTITY` de leur cerveau à chaque tick, sinon les villageois paniquent.
+- Durées longues (traque, interrogatoire) : compter le temps de jeu écoulé entre deux passages (`getGameTime`), joueur connecté seulement ; un test peut alors avancer l'horloge du monde au lieu d'attendre.
 
 ## CI
 

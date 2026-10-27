@@ -27,7 +27,9 @@ import io.github.yusufbyn.redrising.jalons.Issue;
 import io.github.yusufbyn.redrising.monde.CelluleRising;
 import io.github.yusufbyn.redrising.monde.PosteSociete;
 import io.github.yusufbyn.redrising.factions.Ronde;
+import io.github.yusufbyn.redrising.factions.Traque;
 import io.github.yusufbyn.redrising.pnj.PatrouillePnj;
+import io.github.yusufbyn.redrising.pnj.TraqueGris;
 import io.github.yusufbyn.redrising.pnj.PnjCouleur;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.minecraft.commands.CommandSourceStack;
@@ -145,6 +147,15 @@ public final class CommandesDebug {
                                 .then(argJoueur(CommandesDebug::lireControle)))
                         .then(Commands.literal("reset").executes(ctx -> effacerControle(ctx, ctx.getSource().getPlayerOrException()))
                                 .then(argJoueur(CommandesDebug::effacerControle))))
+                .then(Commands.literal("traque")
+                        .then(Commands.literal("get").executes(ctx -> lireTraque(ctx, ctx.getSource().getPlayerOrException()))
+                                .then(argJoueur(CommandesDebug::lireTraque)))
+                        .then(Commands.literal("start").executes(ctx -> lancerTraque(ctx, ctx.getSource().getPlayerOrException()))
+                                .then(argJoueur(CommandesDebug::lancerTraque)))
+                        .then(Commands.literal("stop").executes(ctx -> arreterTraque(ctx, ctx.getSource().getPlayerOrException()))
+                                .then(argJoueur(CommandesDebug::arreterTraque)))
+                        .then(Commands.literal("arreter").executes(ctx -> arreterJoueur(ctx, ctx.getSource().getPlayerOrException()))
+                                .then(argJoueur(CommandesDebug::arreterJoueur))))
                 .then(Commands.literal("coffre")
                         .then(Commands.literal("get")
                                 .then(Commands.argument("pos", BlockPosArgument.blockPos()).executes(CommandesDebug::lireCoffre)))
@@ -377,6 +388,47 @@ public final class CommandesDebug {
     private static int effacerControle(CommandContext<CommandSourceStack> ctx, ServerPlayer joueur) {
         joueur.removeAttached(PatrouillePnj.SUIVI_CONTROLE);
         ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.controle.reset", joueur.getDisplayName()), true);
+        return Command.SINGLE_SUCCESS;
+    }
+
+    // --- Traque (G5.6) ---
+
+    private static int lireTraque(CommandContext<CommandSourceStack> ctx, ServerPlayer joueur) {
+        TraqueGris.Interrogatoire interrogatoire = joueur.getAttached(TraqueGris.INTERROGATOIRE);
+        Traque traque = joueur.getAttached(TraqueGris.TRAQUE);
+        Component message;
+        if (interrogatoire != null) {
+            message = Component.translatable("commande.redrising.traque.interrogatoire", joueur.getDisplayName(), interrogatoire.restant() / 20);
+        } else if (traque != null) {
+            message = Component.translatable("commande.redrising.traque.en_cours", joueur.getDisplayName(), traque.duree() / 20,
+                    traque.horsDeVue() / 20, TraqueGris.nombreDeChasseurs(joueur), traque.tues());
+        } else {
+            message = Component.translatable("commande.redrising.traque.aucune", joueur.getDisplayName());
+        }
+        ctx.getSource().sendSuccess(() -> message, false);
+        return traque != null || interrogatoire != null ? 1 : 0;
+    }
+
+    /** Suspicion au maximum, et la traque commence tout de suite. */
+    private static int lancerTraque(CommandContext<CommandSourceStack> ctx, ServerPlayer joueur) {
+        TraqueGris.annuler(joueur);
+        JaugesJoueur.set(joueur, Jauge.SUSPICION, Acces.SEUIL_TRAQUE);
+        TraqueGris.commencer(joueur);
+        ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.traque.start", joueur.getDisplayName()), true);
+        return Command.SINGLE_SUCCESS;
+    }
+
+    /** Fin de la traque (ou de l'interrogatoire), Suspicion ramenée à celle d'un retrait des Gris pour qu'elle ne reparte pas. */
+    private static int arreterTraque(CommandContext<CommandSourceStack> ctx, ServerPlayer joueur) {
+        TraqueGris.annuler(joueur);
+        JaugesJoueur.set(joueur, Jauge.SUSPICION, Traque.SUSPICION_RETRAIT);
+        ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.traque.stop", joueur.getDisplayName(), Traque.SUSPICION_RETRAIT), true);
+        return Command.SINGLE_SUCCESS;
+    }
+
+    private static int arreterJoueur(CommandContext<CommandSourceStack> ctx, ServerPlayer joueur) {
+        TraqueGris.arreter(joueur);
+        ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.traque.arreter", joueur.getDisplayName()), true);
         return Command.SINGLE_SUCCESS;
     }
 

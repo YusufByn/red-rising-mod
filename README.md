@@ -51,6 +51,7 @@ Réservées aux ops (ou à la triche activée en solo). `[joueur]` est optionnel
 - `/rr pnj camp <pnj> <societe|rising|aucun>` (camp secret d'un PNJ), `/rr coffre get|set|clear <pos> [camp]` (coffre ou tonneau d'un camp)
 - `/rr patrouille creer <pos1> <pos2> [pos3] [pos4]` (un PNJ Gris qui fait la ronde entre ces points), `/rr patrouille get <pnj>`, `/rr patrouille clear <pnj>`
 - `/rr controle get [joueur]` (dernier contrôle subi, dernier jour où un contrôle obéi a fait baisser la Suspicion), `/rr controle reset [joueur]`
+- `/rr traque get [joueur]`, `/rr traque start [joueur]` (Suspicion au maximum et traque tout de suite), `/rr traque stop [joueur]` (fin de la traque ou de l'interrogatoire, Suspicion à 90), `/rr traque arreter [joueur]` (arrestation et interrogatoire tout de suite)
 - `/rr structure poste <pos>` (poste de la Société, coin nord-ouest du sol, porte au nord), `/rr structure cellule <pos> <north|south|east|west>` (cellule du Rising : moitié basse de l'entrée cachée, salle dans la direction donnée), `/rr structure list`, `/rr structure oublier <pos>` (poste ou cellule)
 - `/rr naissance get [joueur]` (Couleur, ou test en cours : résultat en attente, relance), `/rr naissance reset [joueur]` (efface Couleur et test, et relance la naissance)
 - `/rr etat`, `/rr etat naissance <test|choix_libre>`, `/rr etat epoque <epoque>`, `/rr etat zone set <zone> <camp>`, `/rr etat zone clear <zone>`

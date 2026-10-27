@@ -4,6 +4,7 @@ import com.mojang.serialization.Codec;
 import io.github.yusufbyn.redrising.RedRising;
 import io.github.yusufbyn.redrising.couleur.Couleur;
 import io.github.yusufbyn.redrising.pnj.PnjCouleur;
+import io.github.yusufbyn.redrising.pnj.TraqueGris;
 import net.fabricmc.fabric.api.attachment.v1.AttachmentRegistry;
 import net.fabricmc.fabric.api.attachment.v1.AttachmentType;
 import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents;
@@ -78,7 +79,10 @@ public final class ActionsFaction {
             if (entite instanceof Villager pnj && source.getEntity() instanceof ServerPlayer joueur) {
                 Couleur couleur = PnjCouleur.couleur(pnj);
                 if (couleur != null) {
-                    agirDevantTemoins(joueur, "tue un PNJ " + couleur.getSerializedName(), EffetsActions.tuer(couleur), pnj);
+                    // Un chasseur tué pendant une traque ne rapporte pas de Soutien (G5.6)
+                    boolean chasseur = pnj.hasAttached(TraqueGris.CHASSEUR);
+                    agirDevantTemoins(joueur, chasseur ? "tue un chasseur" : "tue un PNJ " + couleur.getSerializedName(),
+                            chasseur ? EffetsActions.tuerChasseur() : EffetsActions.tuer(couleur), pnj);
                 }
             }
         });

@@ -65,6 +65,17 @@ public final class EffetsActions {
         return new Variation(0, 0, -5);
     }
 
+    /** Le joueur a tué un chasseur pendant une traque (G5.6) : comme un Gris, mais sans Soutien (sinon la traque rapporte). */
+    public static Variation tuerChasseur() {
+        Variation gris = tuer(Couleur.GRIS);
+        return new Variation(gris.loyaute(), 0, gris.suspicion());
+    }
+
+    /** Le joueur a été arrêté au bout d'une traque (G5.6). La Suspicion est ensuite fixée par {@code Traque.SUSPICION_ARRETE}. */
+    public static Variation arrestation() {
+        return new Variation(-15, 0, 0);
+    }
+
     /** Le joueur a fui un contrôle. */
     public static Variation fuiteControle() {
         return new Variation(-5, 0, 10);
