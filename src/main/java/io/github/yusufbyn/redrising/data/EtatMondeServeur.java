@@ -7,6 +7,8 @@ import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 
+import java.util.function.UnaryOperator;
+
 /**
  * Stockage de l'{@link EtatMonde} avec le monde (G2.4).
  *
@@ -30,6 +32,10 @@ public final class EtatMondeServeur {
         server.globalAttachments().setAttached(ETAT, etat);
     }
 
+    public static void modifier(MinecraftServer server, UnaryOperator<EtatMonde> modification) {
+        set(server, modification.apply(get(server)));
+    }
+
     /** Appelé depuis {@link RedRising#onInitialize()}. */
     public static void init() {
         ServerLifecycleEvents.SERVER_STARTED.register(server -> {
@@ -39,8 +45,8 @@ public final class EtatMondeServeur {
                 set(server, EtatMonde.NOUVEAU);
                 RedRising.LOGGER.info("État du monde : nouveau, schéma v{}", EtatMonde.VERSION_SCHEMA);
             } else {
-                RedRising.LOGGER.info("État du monde : chargé (schéma v{}, époque {}, {} jalon(s), {} zone(s))",
-                        etat.schemaVersion(), etat.epoque().getSerializedName(), etat.jalons().size(), etat.zones().size());
+                RedRising.LOGGER.info("État du monde : chargé (schéma v{}, époque {}, {} jalon(s), {} zone(s), {})",
+                        etat.schemaVersion(), etat.epoque().getSerializedName(), etat.jalons().size(), etat.zones().size(), etat.horloge());
             }
         });
     }

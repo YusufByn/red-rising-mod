@@ -3,7 +3,9 @@ package io.github.yusufbyn.redrising.commande;
 import com.mojang.brigadier.Command;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
+import com.mojang.brigadier.arguments.LongArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.builder.RequiredArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
@@ -29,7 +31,10 @@ import io.github.yusufbyn.redrising.factions.Jauges;
 import io.github.yusufbyn.redrising.factions.JaugesJoueur;
 import io.github.yusufbyn.redrising.factions.Nuage;
 import io.github.yusufbyn.redrising.factions.RegistreChausseTrappes;
+import io.github.yusufbyn.redrising.jalons.ContributionDuJour;
 import io.github.yusufbyn.redrising.jalons.Epoque;
+import io.github.yusufbyn.redrising.jalons.Horloge;
+import io.github.yusufbyn.redrising.jalons.HorlogeMonde;
 import io.github.yusufbyn.redrising.jalons.Issue;
 import io.github.yusufbyn.redrising.monde.CelluleRising;
 import io.github.yusufbyn.redrising.monde.PosteSociete;
@@ -238,7 +243,30 @@ public final class CommandesDebug {
                                         .then(Commands.argument("zone", StringArgumentType.word())
                                                 .then(argEnum("camp", Camp.values()).executes(CommandesDebug::fixerZone))))
                                 .then(Commands.literal("clear")
-                                        .then(Commands.argument("zone", StringArgumentType.word()).executes(CommandesDebug::effacerZone))))));
+                                        .then(Commands.argument("zone", StringArgumentType.word()).executes(CommandesDebug::effacerZone))))
+                        // Horloge du monde (G6.1)
+                        .then(Commands.literal("temps")
+                                .then(Commands.literal("set")
+                                        .then(Commands.argument("ticks", LongArgumentType.longArg(0)).executes(ctx -> changerTemps(ctx, false))))
+                                .then(Commands.literal("add")
+                                        .then(Commands.argument("ticks", LongArgumentType.longArg()).executes(ctx -> changerTemps(ctx, true)))))
+                        .then(Commands.literal("soutien")
+                                .then(compteurSoutien("aide"))
+                                .then(compteurSoutien("tort")))
+                        .then(Commands.literal("contribution")
+                                .then(Commands.literal("get").executes(ctx -> lireContribution(ctx, ctx.getSource().getPlayerOrException()))
+                                        .then(argJoueur(CommandesDebug::lireContribution)))
+                                .then(Commands.literal("reset").executes(ctx -> effacerContribution(ctx, ctx.getSource().getPlayerOrException()))
+                                        .then(argJoueur(CommandesDebug::effacerContribution))))));
+    }
+
+    /** {@code soutien aide|tort set|add <n>}. */
+    private static LiteralArgumentBuilder<CommandSourceStack> compteurSoutien(String compteur) {
+        return Commands.literal(compteur)
+                .then(Commands.literal("set")
+                        .then(Commands.argument("valeur", LongArgumentType.longArg(0)).executes(ctx -> changerSoutienCumule(ctx, compteur, false))))
+                .then(Commands.literal("add")
+                        .then(Commands.argument("valeur", LongArgumentType.longArg()).executes(ctx -> changerSoutienCumule(ctx, compteur, true))));
     }
 
     // --- Couleur ---
@@ -401,8 +429,9 @@ public final class CommandesDebug {
         Long blanchi = joueur.getAttached(ActionsFaction.DERNIER_BLANCHIMENT);
         Component fin = CelluleRising.enQuarantaine(joueur) ? Component.literal(String.valueOf(quarantaine)) : Component.translatable("commande.redrising.aucun");
         Component jour = blanchi == null ? Component.translatable("commande.redrising.aucun") : Component.literal(String.valueOf(blanchi));
+        int peines = CelluleRising.peinesEnAttente(ctx.getSource().getServer(), joueur.getUUID());
         ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.denonciation.get", joueur.getDisplayName(),
-                connues.isEmpty() ? Component.translatable("commande.redrising.aucun") : Component.literal(connues), fin, jour), false);
+                connues.isEmpty() ? Component.translatable("commande.redrising.aucun") : Component.literal(connues), fin, jour, peines), false);
         return CelluleRising.connues(joueur).size();
     }
 
@@ -704,13 +733,59 @@ public final class CommandesDebug {
     private static int lireEtat(CommandContext<CommandSourceStack> ctx) {
         EtatMonde etat = EtatMondeServeur.get(ctx.getSource().getServer());
         ModeNaissance mode = Naissance.mode(ctx.getSource().getServer());
+        Horloge horloge = etat.horloge();
         ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.etat",
                 etat.schemaVersion(),
                 mode.getDisplayName(),
                 nom("epoque", etat.epoque()),
                 liste(etat.jalons(), "issue"),
-                liste(etat.zones(), "camp")), false);
+                liste(etat.zones(), "camp"),
+                temps(horloge.temps()),
+                horloge.aide(), horloge.tort(), horloge.net()), false);
         return etat.schemaVersion();
+    }
+
+    /** Temps de jeu en jours et heures de jeu (24 000 et 1 000 ticks), suivi du nombre de ticks. */
+    private static Component temps(long ticks) {
+        return Component.translatable("commande.redrising.etat.temps.duree",
+                ticks / ActionsFaction.TICKS_PAR_JOUR, ticks % ActionsFaction.TICKS_PAR_JOUR / 1000, ticks);
+    }
+
+    private static int changerTemps(CommandContext<CommandSourceStack> ctx, boolean ajouter) {
+        long ticks = LongArgumentType.getLong(ctx, "ticks");
+        MinecraftServer server = ctx.getSource().getServer();
+        HorlogeMonde.modifier(server, horloge -> horloge.avecTemps(ajouter ? horloge.temps() + ticks : ticks));
+        long obtenu = HorlogeMonde.get(server).temps();
+        ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.etat.temps", temps(obtenu)), true);
+        return Command.SINGLE_SUCCESS;
+    }
+
+    private static int changerSoutienCumule(CommandContext<CommandSourceStack> ctx, String compteur, boolean ajouter) {
+        long valeur = LongArgumentType.getLong(ctx, "valeur");
+        MinecraftServer server = ctx.getSource().getServer();
+        boolean aide = compteur.equals("aide");
+        HorlogeMonde.modifier(server, horloge -> {
+            long avant = aide ? horloge.aide() : horloge.tort();
+            long apres = ajouter ? avant + valeur : valeur;
+            return aide ? horloge.avecAide(apres) : horloge.avecTort(apres);
+        });
+        Horloge horloge = HorlogeMonde.get(server);
+        ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.etat.soutien", horloge.aide(), horloge.tort(), horloge.net()), true);
+        return Command.SINGLE_SUCCESS;
+    }
+
+    private static int lireContribution(CommandContext<CommandSourceStack> ctx, ServerPlayer joueur) {
+        long jour = HorlogeMonde.jour(joueur);
+        ContributionDuJour contribution = HorlogeMonde.contribution(joueur);
+        ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.etat.contribution.get", joueur.getDisplayName(), jour,
+                contribution.aide(jour), contribution.tort(jour), ContributionDuJour.PLAFOND), false);
+        return contribution.aide(jour) + contribution.tort(jour);
+    }
+
+    private static int effacerContribution(CommandContext<CommandSourceStack> ctx, ServerPlayer joueur) {
+        joueur.removeAttached(HorlogeMonde.CONTRIBUTION);
+        ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.etat.contribution.reset", joueur.getDisplayName()), true);
+        return Command.SINGLE_SUCCESS;
     }
 
     private static int changerModeNaissance(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {

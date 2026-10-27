@@ -10,12 +10,15 @@ import io.github.yusufbyn.redrising.factions.Jauge;
 import io.github.yusufbyn.redrising.factions.Jauges;
 import io.github.yusufbyn.redrising.factions.JaugesJoueur;
 import io.github.yusufbyn.redrising.factions.Traque;
+import io.github.yusufbyn.redrising.jalons.ContributionDuJour;
+import io.github.yusufbyn.redrising.jalons.HorlogeMonde;
 import io.github.yusufbyn.redrising.monde.CelluleRising;
 import io.github.yusufbyn.redrising.pnj.PnjCouleur;
 import io.github.yusufbyn.redrising.pnj.TraqueGris;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestSingleplayerContext;
+import net.fabricmc.fabric.api.client.gametest.v1.world.TestWorldSave;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
@@ -32,12 +35,14 @@ import net.minecraft.world.phys.Vec3;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.UUID;
 
 /**
  * G5.10 : une cellule dénoncée tombe, avec ses effets sur les jauges. Aussi : la planque (ni vol ni marque), une cellule
  * connue en y entrant ou en y creusant, la dénonciation à mains vides qui épargne les PNJ d'une cellule, la carte sans
  * cellule connue à portée, la quarantaine, une seule baisse de Suspicion par jour, le Fils remplacé, la cellule repérée
- * qui tombe un jour plus tard.
+ * qui tombe un jour plus tard. G6.1 : le tort compté pour le monde (plafond du jour), et la peine d'une descente qui
+ * attend le retour du joueur hors ligne.
  *
  * <p>Cellules vers le sud : entrée en (x, -60, z), salle de x-2 à x+2 et de z+1 à z+5, Fils en (x, -60, z+4),
  * coffre du Rising en (x-2, -60, z+5), planque en (x+2, -60, z+5).</p>
@@ -49,6 +54,7 @@ public class DenonciationTest implements FabricClientGameTest {
 
     @Override
     public void runTest(ClientGameTestContext context) {
+        TestWorldSave sauvegarde;
         try (TestSingleplayerContext monde = OutilsTest.nouveauMonde(context)) {
             OutilsTest.attendreArrivee(context);
             monde.getServer().runCommand("gamemode survival @a[limit=1]");
@@ -69,7 +75,9 @@ public class DenonciationTest implements FabricClientGameTest {
             quarantaine(monde, context);
             remplacant(monde);
             reperee(monde, context);
+            sauvegarde = peineEnAttente(monde);
         }
+        descenteHorsLigne(context, sauvegarde);
         RedRising.LOGGER.info("[G5.10] OK : une cellule dénoncée tombe, avec ses effets sur les jauges");
     }
 
@@ -158,6 +166,9 @@ public class DenonciationTest implements FabricClientGameTest {
 
     /** Carte en main près de la cellule A : elle tombe ; puis une dénonciation de PNJ le même jour ne blanchit plus. */
     private static void denoncer(TestSingleplayerContext monde, ClientGameTestContext context, Villager gris) {
+        // G6.1 : le tort compté pour le monde, plafonné à 30 par jour
+        monde.getServer().runOnServer(server -> OutilsTest.joueur(server).removeAttached(HorlogeMonde.CONTRIBUTION));
+        long tortAvant = tort(monde);
         cliquerLeGris(monde, context, gris, "0.5 -60 34.5", new ItemStack(Items.MAP));
         monde.getServer().waitFor(server -> CelluleRising.cellules(server).size() == 2, 20);
         String etat = monde.getServer().computeOnServer(server -> {
@@ -188,6 +199,7 @@ public class DenonciationTest implements FabricClientGameTest {
             throw new AssertionError("Cellule dénoncée :" + etat);
         }
         verifierJauges(monde, "cellule dénoncée", new Jauges(60, 35, 20));
+        verifierTort(monde, "cellule dénoncée", tortAvant + 25);
         RedRising.LOGGER.info("[G5.10] Carte en main : la cellule tombe (entrée défoncée, Fils arrêté, coffres saisis, carte prise), +10 / -25 / -10");
         // Ce que voit un joueur qui revient : un trou dans la roche, une salle vide et sombre
         monde.getServer().runCommand("tp @a 0.5 -60 37.5 0 5");
@@ -204,6 +216,9 @@ public class DenonciationTest implements FabricClientGameTest {
         cliquerLeGris(monde, context, gris, "0.5 -60 34.5", ItemStack.EMPTY);
         monde.getServer().waitFor(server -> rebelle.isRemoved(), 20);
         verifierJauges(monde, "deuxième dénonciation du jour", new Jauges(65, 25, 20));
+        // -25 puis -10 : seulement 30 comptés pour le monde ce jour-là (la jauge, elle, perd bien 35)
+        verifierTort(monde, "deuxième dénonciation du jour (plafond)", tortAvant + ContributionDuJour.PLAFOND);
+        RedRising.LOGGER.info("[G6.1] Tort compté pour le monde : 25 puis 5 (plafond de {} par jour)", ContributionDuJour.PLAFOND);
         monde.getServer().runOnServer(server -> gris.discard());
         RedRising.LOGGER.info("[G5.10] Deuxième dénonciation du jour : la Suspicion ne baisse plus");
     }
@@ -259,6 +274,7 @@ public class DenonciationTest implements FabricClientGameTest {
         if (monde.getServer().computeOnServer(server -> CelluleRising.cellules(server).size()) != 2) {
             throw new AssertionError("La cellule repérée est tombée trop tôt");
         }
+        long tortAvant = tort(monde);
         avancerLHorloge(monde, CelluleRising.DELAI_DESCENTE);
         monde.getServer().waitFor(server -> CelluleRising.contenant(server, C) == null, 250);
         if (monde.getServer().computeOnServer(server -> fils(server, C)) != null) {
@@ -268,10 +284,63 @@ public class DenonciationTest implements FabricClientGameTest {
         if (soutien != 30) {
             throw new AssertionError("Descente sur la cellule repérée : Soutien " + soutien + " (attendu 30)");
         }
+        // Plusieurs jours après les dénonciations : le plafond est rouvert, les 10 comptent en entier
+        verifierTort(monde, "descente, jours plus tard", tortAvant + 10);
         RedRising.LOGGER.info("[G5.10] Cellule repérée : descente de la Société un jour de jeu plus tard, et Soutien -10 à ce moment");
     }
 
+    // --- Descente pendant que le joueur est hors ligne (G6.1) ---
+
+    /**
+     * Le joueur qui a fait repérer une cellule est hors ligne au moment de la descente : la peine l'attend. En solo, le
+     * serveur s'arrête avec le joueur et la descente ne peut pas avoir lieu pendant son absence : on pose la peine par la
+     * fonction qu'appelle la descente dans ce cas.
+     */
+    private static TestWorldSave peineEnAttente(TestSingleplayerContext monde) {
+        jauges(monde, 50, 40, 0);
+        int peines = monde.getServer().computeOnServer(server -> {
+            UUID id = OutilsTest.joueur(server).getUUID();
+            CelluleRising.mettreEnAttente(server, id);
+            return CelluleRising.peinesEnAttente(server, id);
+        });
+        if (peines != 1) {
+            throw new AssertionError("Peine de descente en attente : " + peines + " (attendu 1)");
+        }
+        verifierJauges(monde, "peine en attente, pas encore appliquée", new Jauges(50, 40, 0));
+        return monde.getWorldSave();
+    }
+
+    /** À son retour, le joueur perd ses 10 de Soutien, une seule fois (pas de nouveau au rechargement suivant). */
+    private static void descenteHorsLigne(ClientGameTestContext context, TestWorldSave sauvegarde) {
+        try (TestSingleplayerContext monde = sauvegarde.open()) {
+            monde.getServer().waitFor(server -> !server.getPlayerList().getPlayers().isEmpty()
+                    && JaugesJoueur.get(OutilsTest.joueur(server)).soutien() == 30, 100);
+            verifierJauges(monde, "retour après une descente", new Jauges(50, 30, 0));
+            int peines = monde.getServer().computeOnServer(server -> CelluleRising.peinesEnAttente(server, OutilsTest.joueur(server).getUUID()));
+            if (peines != 0) {
+                throw new AssertionError("Peine de descente toujours en attente après le retour : " + peines);
+            }
+        }
+        try (TestSingleplayerContext monde = sauvegarde.open()) {
+            monde.getServer().waitFor(server -> !server.getPlayerList().getPlayers().isEmpty(), 100);
+            context.waitTicks(40);
+            verifierJauges(monde, "deuxième retour (la peine ne compte qu'une fois)", new Jauges(50, 30, 0));
+        }
+        RedRising.LOGGER.info("[G6.1] Descente pendant l'absence du joueur : -10 de Soutien à son retour, une seule fois");
+    }
+
     // --- Outils ---
+
+    private static long tort(TestSingleplayerContext monde) {
+        return monde.getServer().computeOnServer(server -> HorlogeMonde.get(server).tort());
+    }
+
+    private static void verifierTort(TestSingleplayerContext monde, String cas, long attendu) {
+        long tort = tort(monde);
+        if (tort != attendu) {
+            throw new AssertionError(cas + " : tort au Rising compté pour le monde " + tort + ", attendu " + attendu);
+        }
+    }
 
     private static BlockPos coffreRising(BlockPos entree) {
         return entree.offset(-2, 0, 5);

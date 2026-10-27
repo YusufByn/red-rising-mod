@@ -127,6 +127,11 @@ public class PatrouilleGrisTest implements FabricClientGameTest {
         BlockPos posTemoin = new BlockPos(-40, -60, -8);
         UUID pnj = monde.getServer().computeOnServer(server -> {
             ServerLevel niveau = server.overworld();
+            // Un coffre neuf à chaque cas : le Soutien d'un vol ne compte qu'une fois par coffre et par jour (G6.1)
+            if (niveau.getBlockEntity(COFFRE) instanceof ChestBlockEntity ancien) {
+                ancien.clearContent();
+            }
+            niveau.setBlockAndUpdate(COFFRE, Blocks.AIR.defaultBlockState());
             niveau.setBlockAndUpdate(COFFRE, Blocks.CHEST.defaultBlockState());
             ChestBlockEntity coffre = (ChestBlockEntity) Objects.requireNonNull(niveau.getBlockEntity(COFFRE));
             coffre.setItem(0, new ItemStack(Items.DIAMOND, 5));

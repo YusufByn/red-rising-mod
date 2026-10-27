@@ -29,7 +29,7 @@
   "commande.redrising.jalon.set": "Jalon %s : %s",
   "commande.redrising.jalon.clear": "Jalon %s effacé",
   "commande.redrising.jalon.absent": "Aucune issue enregistrée pour le jalon %s",
-  "commande.redrising.etat": "État du monde (schéma v%s) : naissance %s ; époque %s ; jalons : %s ; zones : %s",
+  "commande.redrising.etat": "État du monde (schéma v%s) : naissance %s ; époque %s ; jalons : %s ; zones : %s ; temps de jeu %s ; Soutien Rising cumulé : aide %s, tort %s (net %s)",
   "commande.redrising.etat.epoque": "Époque changée en %s",
   "commande.redrising.etat.zone.set": "Zone %s contrôlée par : %s",
   "commande.redrising.etat.zone.clear": "Zone %s libérée",
@@ -186,6 +186,12 @@
   "commande.redrising.boutique.achats.reset": "Échanges du jour de %s remis à zéro",
   "faction.redrising.denonce.cellule": "Le Gris prend la carte : la cellule tombe",
   "commande.redrising.structure.tomber": "Cellule en %s tombée",
-  "commande.redrising.denonciation.get": "%s : cellules connues %s ; quarantaine du Rising jusqu'au tick %s ; dernière baisse de Suspicion par dénonciation le jour %s",
-  "commande.redrising.denonciation.reset": "Cellules connues, quarantaine et blanchiment de %s remis à zéro"
+  "commande.redrising.denonciation.get": "%s : cellules connues %s ; quarantaine du Rising jusqu'au tick %s ; dernière baisse de Suspicion par dénonciation le jour %s ; peines de descente en attente : %s",
+  "commande.redrising.denonciation.reset": "Cellules connues, quarantaine et blanchiment de %s remis à zéro",
+  "commande.redrising.etat.temps.duree": "%s j %s h (%s ticks)",
+  "commande.redrising.etat.temps": "Temps de jeu du monde : %s",
+  "commande.redrising.etat.soutien": "Soutien Rising cumulé : aide %s, tort %s (net %s)",
+  "commande.redrising.etat.contribution.get": "%s, jour %s : %s d'aide et %s de tort comptés pour le monde (plafond %s chacun)",
+  "commande.redrising.etat.contribution.reset": "Contribution du jour de %s remise à zéro",
+  "faction.redrising.cellule.tombee_absent": "Pendant ton absence, une cellule où tu avais mené les Gris est tombée. Le Rising ne l'oublie pas."
 }

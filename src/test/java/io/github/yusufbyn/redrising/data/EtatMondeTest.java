@@ -6,6 +6,7 @@ import com.mojang.serialization.DataResult;
 import com.mojang.serialization.JsonOps;
 import io.github.yusufbyn.redrising.factions.Camp;
 import io.github.yusufbyn.redrising.jalons.Epoque;
+import io.github.yusufbyn.redrising.jalons.Horloge;
 import io.github.yusufbyn.redrising.jalons.Issue;
 import org.junit.jupiter.api.Test;
 
@@ -25,7 +26,8 @@ class EtatMondeTest {
         EtatMonde etat = EtatMonde.NOUVEAU
                 .avecEpoque(Epoque.GOLDEN_SON)
                 .avecIssue("pendaison_eo", Issue.CANON)
-                .avecZone("lykos", Camp.RISING);
+                .avecZone("lykos", Camp.RISING)
+                .avecHorloge(new Horloge(48_000, 30, 12));
         JsonElement json = EtatMonde.CODEC.encodeStart(JsonOps.INSTANCE, etat).getOrThrow();
         assertEquals(etat, EtatMonde.CODEC.parse(JsonOps.INSTANCE, json).getOrThrow());
     }
@@ -38,12 +40,30 @@ class EtatMondeTest {
 
     @Test
     void numeroDeVersionLu() {
-        EtatMonde lu = lire("{\"schemaVersion\": 1, \"epoque\": \"morning_star\", \"jalons\": {\"pendaison_eo\": \"divergente\"}}").getOrThrow();
-        assertEquals(1, lu.schemaVersion());
+        EtatMonde lu = lire("{\"schemaVersion\": 2, \"epoque\": \"morning_star\", \"jalons\": {\"pendaison_eo\": \"divergente\"},"
+                + " \"horloge\": {\"temps\": 24000, \"aide\": 7, \"tort\": 3}}").getOrThrow();
+        assertEquals(2, lu.schemaVersion());
         assertEquals(Epoque.MORNING_STAR, lu.epoque());
         assertEquals(Map.of("pendaison_eo", Issue.DIVERGENTE), lu.jalons());
+        assertEquals(new Horloge(24_000, 7, 3), lu.horloge());
         // Champ absent : valeur par défaut
         assertEquals(Map.of(), lu.zones());
+    }
+
+    /** Un état du monde v1, tel que G2.4 l'écrivait : migré en v2, avec une horloge à zéro, le reste intact. */
+    @Test
+    void mondeV1Migre() {
+        EtatMonde lu = lire("{\"schemaVersion\": 1, \"epoque\": \"golden_son\", \"jalons\": {\"pendaison_eo\": \"canon\"},"
+                + " \"zones\": {\"lykos\": \"rising\"}}").getOrThrow();
+        assertEquals(2, lu.schemaVersion());
+        assertEquals(Epoque.GOLDEN_SON, lu.epoque());
+        assertEquals(Map.of("pendaison_eo", Issue.CANON), lu.jalons());
+        assertEquals(Map.of("lykos", Camp.RISING), lu.zones());
+        assertEquals(Horloge.ZERO, lu.horloge());
+        // Réécrit au format actuel
+        JsonElement json = EtatMonde.CODEC.encodeStart(JsonOps.INSTANCE, lu).getOrThrow();
+        assertEquals(2, json.getAsJsonObject().get("schemaVersion").getAsInt());
+        assertTrue(json.getAsJsonObject().has("horloge"));
     }
 
     @Test

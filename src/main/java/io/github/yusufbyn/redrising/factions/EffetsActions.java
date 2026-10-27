@@ -47,6 +47,14 @@ public final class EffetsActions {
         };
     }
 
+    /**
+     * Un vol dans un coffre où le Soutien a déjà été compté aujourd'hui pour ce joueur (G6.1) : Loyauté et Suspicion
+     * seulement, pour que reprendre ses propres objets dans un coffre d'un camp ne soit pas une ferme à Soutien.
+     */
+    public static Variation volSansSoutien(Variation vol) {
+        return new Variation(vol.loyaute(), 0, vol.suspicion());
+    }
+
     /** Le joueur a dénoncé un PNJ du Rising à un Gris. */
     public static Variation denoncer() {
         return new Variation(5, -10, -5);

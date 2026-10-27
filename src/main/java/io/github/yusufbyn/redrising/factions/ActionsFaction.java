@@ -3,6 +3,7 @@ package io.github.yusufbyn.redrising.factions;
 import com.mojang.serialization.Codec;
 import io.github.yusufbyn.redrising.RedRising;
 import io.github.yusufbyn.redrising.couleur.Couleur;
+import io.github.yusufbyn.redrising.jalons.HorlogeMonde;
 import io.github.yusufbyn.redrising.monde.CelluleRising;
 import io.github.yusufbyn.redrising.monde.Vue;
 import io.github.yusufbyn.redrising.pnj.PnjCouleur;
@@ -36,12 +37,12 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.ChestType;
 import org.jspecify.annotations.Nullable;
 
+import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.EnumSet;
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -53,7 +54,9 @@ import java.util.UUID;
  *     <li><b>Aider</b> : accroupi, clic droit sur un PNJ de Couleur avec de la nourriture en main ; elle lui est donnée.
  *     Une fois par PNJ et par jour de jeu.</li>
  *     <li><b>Voler</b> : prendre des objets dans un coffre (ou un tonneau) d'un camp ; compté une fois par ouverture.
- *     Casser un coffre d'un camp compte aussi comme un vol (sinon on viderait un poste en perçant un mur).</li>
+ *     Casser un coffre d'un camp compte aussi comme un vol (sinon on viderait un poste en perçant un mur). Le Soutien
+ *     d'un vol ne compte qu'une fois par coffre et par jour de jeu, pour chaque joueur (G6.1) ; Loyauté et Suspicion,
+ *     à chaque vol.</li>
  *     <li><b>Dénoncer</b> : accroupi, clic droit à mains vides sur un PNJ Gris ; le PNJ du Rising le plus proche
  *     (à moins de {@value EffetsActions#PORTEE_DENONCIATION} blocs, hors des cellules) est arrêté. Avec une carte en main :
  *     la cellule connue la plus proche du Gris tombe (G5.10). La baisse de Suspicion ne compte qu'une fois par jour.</li>
@@ -70,15 +73,21 @@ public final class ActionsFaction {
             builder -> builder.persistent(Camp.CODEC)
     );
 
-    /** Sur un PNJ : jour de jeu où chaque joueur l'a aidé pour la dernière fois. */
     /** Sur le joueur : jour de jeu de la dernière dénonciation qui a fait baisser sa Suspicion (une par jour, G5.10). */
     public static final AttachmentType<Long> DERNIER_BLANCHIMENT = AttachmentRegistry.create(
             Identifier.fromNamespaceAndPath(RedRising.MOD_ID, "dernier_blanchiment"),
             builder -> builder.persistent(Codec.LONG).copyOnDeath()
     );
 
+    /** Sur un PNJ : jour de jeu où chaque joueur l'a aidé pour la dernière fois. */
     private static final AttachmentType<Map<UUID, Long>> AIDE_LE = AttachmentRegistry.create(
             Identifier.fromNamespaceAndPath(RedRising.MOD_ID, "aide_le"),
+            builder -> builder.persistent(Codec.unboundedMap(UUIDUtil.STRING_CODEC, Codec.LONG))
+    );
+
+    /** Sur un coffre d'un camp : jour de jeu où le Soutien d'un vol y a été compté pour chaque joueur (G6.1). */
+    private static final AttachmentType<Map<UUID, Long>> VOL_COMPTE_LE = AttachmentRegistry.create(
+            Identifier.fromNamespaceAndPath(RedRising.MOD_ID, "vol_compte_le"),
             builder -> builder.persistent(Codec.unboundedMap(UUIDUtil.STRING_CODEC, Codec.LONG))
     );
 
@@ -136,7 +145,7 @@ public final class ActionsFaction {
         PlayerBlockBreakEvents.AFTER.register((monde, joueur, pos, etat, bloc) -> {
             Camp camp = bloc == null ? null : bloc.getAttached(CAMP);
             if (camp != null && joueur instanceof ServerPlayer serveur) {
-                agirDevantTemoins(serveur, "casse un coffre " + camp.getSerializedName(), EffetsActions.voler(camp), null);
+                agirDevantTemoins(serveur, "casse un coffre " + camp.getSerializedName(), volDuJour(serveur, List.of(bloc), EffetsActions.voler(camp)), null);
             }
         });
 
@@ -150,7 +159,7 @@ public final class ActionsFaction {
     }
 
     private static void aider(ServerPlayer joueur, Villager pnj, Couleur couleur, ItemStack nourriture) {
-        long jour = joueur.level().getGameTime() / TICKS_PAR_JOUR;
+        long jour = jour(joueur);
         Map<UUID, Long> aides = pnj.getAttachedOrElse(AIDE_LE, Map.of());
         if (aides.getOrDefault(joueur.getUUID(), -1L) == jour) {
             joueur.sendOverlayMessage(Component.translatable("faction.redrising.aide.deja"));
@@ -201,7 +210,7 @@ public final class ActionsFaction {
 
     /** La baisse de Suspicion d'une dénonciation : une fois par jour de jeu, jamais pendant une traque. */
     private static Variation denonciation(ServerPlayer joueur, Variation variation) {
-        long jour = joueur.level().getServer().overworld().getGameTime() / TICKS_PAR_JOUR;
+        long jour = jour(joueur);
         if (joueur.hasAttached(TraqueGris.TRAQUE) || Long.valueOf(jour).equals(joueur.getAttached(DERNIER_BLANCHIMENT))) {
             return EffetsActions.denonciationSansBlanchiment(variation);
         }
@@ -247,8 +256,36 @@ public final class ActionsFaction {
     public static void coffreFerme(Player joueur, Container coffre, int objetsAOuverture) {
         Camp camp = campDuCoffre(coffre);
         if (camp != null && joueur instanceof ServerPlayer serveur && nombreObjets(coffre) < objetsAOuverture) {
-            agirDevantTemoins(serveur, "vole un coffre " + camp.getSerializedName(), EffetsActions.voler(camp), null);
+            agirDevantTemoins(serveur, "vole un coffre " + camp.getSerializedName(),
+                    volDuJour(serveur, List.of((BlockEntity) coffre), EffetsActions.voler(camp)), null);
         }
+    }
+
+    /**
+     * Le Soutien d'un vol ne compte qu'une fois par coffre et par jour de jeu, pour chaque joueur (G6.1), comme l'aide :
+     * sinon déposer ses propres objets dans un coffre d'un camp et les reprendre serait une ferme à Soutien. La Loyauté
+     * et la Suspicion s'appliquent à chaque vol : voler reste risqué. Pour plusieurs coffres (explosion), le Soutien
+     * compte si l'un d'eux ne l'a pas encore été aujourd'hui.
+     */
+    private static Variation volDuJour(ServerPlayer joueur, List<BlockEntity> coffres, Variation variation) {
+        long jour = jour(joueur);
+        boolean nouveau = false;
+        for (BlockEntity coffre : coffres) {
+            Map<UUID, Long> comptes = coffre.getAttachedOrElse(VOL_COMPTE_LE, Map.of());
+            if (comptes.getOrDefault(joueur.getUUID(), -1L) != jour) {
+                Map<UUID, Long> copie = new HashMap<>(comptes);
+                copie.put(joueur.getUUID(), jour);
+                coffre.setAttached(VOL_COMPTE_LE, copie);
+                coffre.setChanged();
+                nouveau = true;
+            }
+        }
+        return nouveau ? variation : EffetsActions.volSansSoutien(variation);
+    }
+
+    /** Jour de jeu (horloge de l'Overworld) : celui des règles « une fois par jour ». */
+    private static long jour(ServerPlayer joueur) {
+        return joueur.level().getServer().overworld().getGameTime() / TICKS_PAR_JOUR;
     }
 
     /** Le joueur est reconduit hors d'un poste de la Société où il était entré sans y être admis ({@code PosteSociete}). */
@@ -290,16 +327,15 @@ public final class ActionsFaction {
         if (responsable == null) {
             return;
         }
-        Set<Camp> voles = EnumSet.noneOf(Camp.class);
+        Map<Camp, List<BlockEntity>> voles = new EnumMap<>(Camp.class);
         for (BlockPos pos : detruits) {
             if (explosion.level().getBlockEntity(pos) instanceof Container coffre && coffre instanceof BlockEntity bloc
                     && bloc.getAttached(CAMP) instanceof Camp camp) {
-                voles.add(camp);
+                voles.computeIfAbsent(camp, c -> new ArrayList<>()).add(bloc);
             }
         }
-        for (Camp camp : voles) {
-            agirDevantTemoins(responsable, "fait sauter un coffre " + camp.getSerializedName(), EffetsActions.voler(camp), null);
-        }
+        voles.forEach((camp, coffres) -> agirDevantTemoins(responsable, "fait sauter un coffre " + camp.getSerializedName(),
+                volDuJour(responsable, coffres, EffetsActions.voler(camp)), null));
     }
 
     private static @Nullable ServerPlayer responsable(ServerExplosion explosion) {
@@ -318,8 +354,10 @@ public final class ActionsFaction {
         agir(joueur, action + " (témoin : " + temoin.name().toLowerCase() + ")", EffetsActions.selonTemoins(variation, temoin));
     }
 
+    /** Applique la variation d'une action ; son Soutien compte aussi pour l'horloge du monde (G6.1). */
     public static void agir(ServerPlayer joueur, String action, Variation variation) {
         Jauges apres = JaugesJoueur.appliquer(joueur, variation);
         RedRising.LOGGER.info("{} {} : {} → {}", joueur.getPlainTextName(), action, variation, apres);
+        HorlogeMonde.compterSoutien(joueur, variation.soutien());
     }
 }

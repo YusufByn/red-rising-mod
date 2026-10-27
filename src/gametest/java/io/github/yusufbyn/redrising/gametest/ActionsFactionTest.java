@@ -31,7 +31,7 @@ import java.util.Objects;
 import java.util.UUID;
 
 /**
- * G5.2 : chaque action modifie les bonnes jauges. Aider et dénoncer passent par de vrais clics (accroupi, clic droit) ;
+ * G5.2 : chaque action modifie les bonnes jauges. G6.1 : le Soutien d'un vol ne compte qu'une fois par coffre et par jour. Aider et dénoncer passent par de vrais clics (accroupi, clic droit) ;
  * tuer et voler sont joués côté serveur (coup du joueur, coffre ouvert puis refermé par lui), sans témoin
  * (les témoins de G5.5 sont vérifiés par {@code PatrouilleGrisTest}).
  */
@@ -99,6 +99,13 @@ public class ActionsFactionTest implements FabricClientGameTest {
             voler(monde, new BlockPos(5, -60, -3), "rising", true, sansTemoin(EffetsActions.voler(Camp.RISING)));
             voler(monde, new BlockPos(7, -60, -3), "societe", false, Variation.AUCUNE);
 
+            // --- G6.1 : la ferme à Soutien. Déposer son charbon dans le même coffre, le reprendre : vol sans Soutien ---
+            BlockPos coffreSociete = new BlockPos(3, -60, -3);
+            BlockPos coffreRising = new BlockPos(5, -60, -3);
+            reprendreSonCharbon(monde, coffreSociete, "societe", sansTemoin(EffetsActions.volSansSoutien(EffetsActions.voler(Camp.SOCIETE))));
+            // Même règle pour le tort d'un vol au Rising
+            reprendreSonCharbon(monde, coffreRising, "rising", Variation.AUCUNE);
+
             // --- Un jour de jeu passe : la Suspicion retombe ---
             // Dans un test client, le serveur avance au pas du client (/tick sprint n'accélère rien) :
             // on avance l'horloge du monde jusqu'à 20 ticks de la fin du jour, puis on laisse passer la fin du jour.
@@ -110,6 +117,10 @@ public class ActionsFactionTest implements FabricClientGameTest {
             });
             attendre(monde, "un jour de jeu", EffetsActions.jourPasse(), () ->
                     monde.getServer().waitFor(server -> server.overworld().getGameTime() > finDuJour + 2, 100));
+
+            // --- Le lendemain, le même coffre rapporte de nouveau du Soutien (et en coûte, pour le Rising) ---
+            reprendreSonCharbon(monde, coffreSociete, "societe", sansTemoin(EffetsActions.voler(Camp.SOCIETE)));
+            reprendreSonCharbon(monde, coffreRising, "rising", sansTemoin(EffetsActions.voler(Camp.RISING)));
         }
         RedRising.LOGGER.info("[G5.2] OK : tuer, aider, dénoncer, voler et le déclin de la Suspicion modifient les bonnes jauges");
     }
@@ -189,6 +200,25 @@ public class ActionsFactionTest implements FabricClientGameTest {
             if (prendre) {
                 joueur.getInventory().add(joueur.containerMenu.getSlot(0).remove(2));
             }
+            joueur.closeContainer();
+        }));
+    }
+
+    /**
+     * La boucle signalée en G6.1 : le joueur dépose son propre charbon dans un coffre d'un camp et le referme (rien de
+     * pris : rien ne compte), puis le rouvre et reprend son charbon (un vol, avec la variation attendue).
+     */
+    private static void reprendreSonCharbon(TestSingleplayerContext monde, BlockPos pos, String camp, Variation attendue) {
+        attendre(monde, "déposer son charbon dans un coffre " + camp, Variation.AUCUNE, () -> monde.getServer().runOnServer(server -> {
+            ServerPlayer joueur = OutilsTest.joueur(server);
+            joueur.openMenu((ChestBlockEntity) Objects.requireNonNull(server.overworld().getBlockEntity(pos)));
+            joueur.containerMenu.getSlot(1).set(new ItemStack(Items.COAL, 8));
+            joueur.closeContainer();
+        }));
+        attendre(monde, "reprendre son charbon dans un coffre " + camp, attendue, () -> monde.getServer().runOnServer(server -> {
+            ServerPlayer joueur = OutilsTest.joueur(server);
+            joueur.openMenu((ChestBlockEntity) Objects.requireNonNull(server.overworld().getBlockEntity(pos)));
+            joueur.getInventory().add(joueur.containerMenu.getSlot(1).remove(8));
             joueur.closeContainer();
         }));
     }

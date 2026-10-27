@@ -10,6 +10,7 @@
       "io.github.yusufbyn.redrising.gametest.JaugesPersistanceTest",
       "io.github.yusufbyn.redrising.gametest.SyncClientTest",
       "io.github.yusufbyn.redrising.gametest.EtatMondePersistanceTest",
+      "io.github.yusufbyn.redrising.gametest.HorlogeMondeTest",
       "io.github.yusufbyn.redrising.gametest.CommandesDebugTest",
       "io.github.yusufbyn.redrising.gametest.HudJaugesTest",
       "io.github.yusufbyn.redrising.gametest.ApparenceCouleurTest",

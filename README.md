@@ -59,9 +59,10 @@ Réservées aux ops (ou à la triche activée en solo). `[joueur]` est optionnel
 - `/rr chausse_trappes list [joueur]`, `/rr chausse_trappes clear [joueur]` (sans joueur : toutes)
 - `/rr contrebande get [joueur]` (dernier repérage par un Gris), `/rr contrebande reset [joueur]`
 - `/rr structure poste <pos>` (poste de la Société, coin nord-ouest du sol, porte au nord), `/rr structure cellule <pos> <north|south|east|west>` (cellule du Rising : moitié basse de l'entrée cachée, salle dans la direction donnée), `/rr structure list`, `/rr structure oublier <pos>` (poste ou cellule), `/rr structure tomber <pos>` (la cellule tombe, sans effet sur les jauges)
-- `/rr denonciation get [joueur]` (cellules connues, quarantaine, dernier jour de blanchiment), `/rr denonciation reset [joueur]`
+- `/rr denonciation get [joueur]` (cellules connues, quarantaine, dernier jour de blanchiment, peines de descente en attente), `/rr denonciation reset [joueur]`
 - `/rr naissance get [joueur]` (Couleur, ou test en cours : résultat en attente, relance), `/rr naissance reset [joueur]` (efface Couleur et test, et relance la naissance)
 - `/rr etat`, `/rr etat naissance <test|choix_libre>`, `/rr etat epoque <epoque>`, `/rr etat zone set <zone> <camp>`, `/rr etat zone clear <zone>`
+- `/rr etat temps set|add <ticks>` (temps de jeu du monde), `/rr etat soutien aide|tort set|add <n>` (Soutien Rising cumulé), `/rr etat contribution get|reset [joueur]` (plafond du jour)
 
 ## Outils
 

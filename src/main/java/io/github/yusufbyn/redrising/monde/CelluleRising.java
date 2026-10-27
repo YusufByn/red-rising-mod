@@ -16,6 +16,7 @@ import io.github.yusufbyn.redrising.pnj.TraqueGris;
 import net.fabricmc.fabric.api.attachment.v1.AttachmentRegistry;
 import net.fabricmc.fabric.api.attachment.v1.AttachmentType;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.fabricmc.fabric.api.event.player.UseBlockCallback;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -142,6 +143,15 @@ public final class CelluleRising {
             builder -> builder.persistent(Codec.BOOL)
     );
 
+    /**
+     * Joueurs hors ligne au moment d'une descente sur une cellule qu'ils avaient fait repérer : nombre de peines dues,
+     * appliquées à leur retour (on ne peut rien attacher à un joueur absent).
+     */
+    private static final AttachmentType<Map<UUID, Integer>> PEINES_EN_ATTENTE = AttachmentRegistry.create(
+            Identifier.fromNamespaceAndPath(RedRising.MOD_ID, "peines_descente"),
+            builder -> builder.persistent(Codec.unboundedMap(UUIDUtil.STRING_CODEC, Codec.INT))
+    );
+
     /** 🟡 Descente de la Société sur une cellule repérée : un jour de jeu plus tard. */
     public static final long DELAI_DESCENTE = ActionsFaction.TICKS_PAR_JOUR;
     /** 🟡 Quarantaine du dénonciateur : 3 jours de jeu. */
@@ -201,6 +211,22 @@ public final class CelluleRising {
             TraqueGris.entreDansCellule(serveur, cellule);
             entrer(serveur, cellule);
             return InteractionResult.SUCCESS;
+        });
+
+        // Revenu après une descente sur une cellule qu'il avait fait repérer
+        ServerPlayConnectionEvents.JOIN.register((connexion, envoi, server) -> {
+            ServerPlayer joueur = connexion.getPlayer();
+            int peines = peinesEnAttente(server, joueur.getUUID());
+            if (peines == 0) {
+                return;
+            }
+            Map<UUID, Integer> attente = new HashMap<>(server.globalAttachments().getAttachedOrElse(PEINES_EN_ATTENTE, Map.of()));
+            attente.remove(joueur.getUUID());
+            server.globalAttachments().setAttached(PEINES_EN_ATTENTE, attente);
+            joueur.sendOverlayMessage(Component.translatable("faction.redrising.cellule.tombee_absent"));
+            for (int i = 0; i < peines; i++) {
+                ActionsFaction.agir(joueur, "a mené les Gris à une cellule (tombée en son absence)", EffetsActions.celluleReperee());
+            }
         });
 
         ServerTickEvents.END_SERVER_TICK.register(server -> {
@@ -454,15 +480,37 @@ public final class CelluleRising {
         RedRising.LOGGER.info("Cellule du Rising en {} tombée ({})", cellule.entree().toShortString(), cause);
     }
 
+    /** Celui qui a mené les Gris à une cellule tombée perd du Soutien : tout de suite s'il est là, sinon à son retour. */
+    private static void punirReperePar(MinecraftServer server, UUID id) {
+        ServerPlayer joueur = server.getPlayerList().getPlayer(id);
+        if (joueur != null) {
+            ActionsFaction.agir(joueur, "a mené les Gris à une cellule", EffetsActions.celluleReperee());
+        } else {
+            mettreEnAttente(server, id);
+        }
+    }
+
+    /** Une peine de descente due à ce joueur hors ligne, appliquée à son retour (public pour le test : en solo, le joueur ne peut pas être absent). */
+    public static void mettreEnAttente(MinecraftServer server, UUID id) {
+        Map<UUID, Integer> attente = new HashMap<>(server.globalAttachments().getAttachedOrElse(PEINES_EN_ATTENTE, Map.of()));
+        attente.merge(id, 1, Integer::sum);
+        server.globalAttachments().setAttached(PEINES_EN_ATTENTE, attente);
+        RedRising.LOGGER.info("Descente : {} est hors ligne, peine due à son retour", id);
+    }
+
+    /** Nombre de peines de descente dues à ce joueur, appliquées à son retour. */
+    public static int peinesEnAttente(MinecraftServer server, UUID id) {
+        return server.globalAttachments().getAttachedOrElse(PEINES_EN_ATTENTE, Map.of()).getOrDefault(id, 0);
+    }
+
     /** Toutes les 10 secondes : descentes dues, et Fils remplacé après {@link #DELAI_REMPLACANT} sans Fils. */
     private static void entretenir(ServerLevel monde, List<Cellule> cellules) {
         long maintenant = monde.getGameTime();
         for (Cellule cellule : cellules) {
             if (cellule.descente() >= 0 && maintenant >= cellule.descente()) {
                 tomber(monde, cellule, "descente de la Société");
-                // Celui qui a mené les Gris à la cellule : le Rising le sait (s'il est hors ligne, il y échappe : limite connue)
-                cellule.reperePar().map(id -> monde.getServer().getPlayerList().getPlayer(id))
-                        .ifPresent(joueur -> ActionsFaction.agir(joueur, "a mené les Gris à une cellule", EffetsActions.celluleReperee()));
+                // Celui qui a mené les Gris à la cellule : le Rising le sait, tout de suite ou à son retour
+                cellule.reperePar().ifPresent(id -> punirReperePar(monde.getServer(), id));
                 continue;
             }
             // Seulement si les PNJ de la salle sont chargés : sinon on ne sait pas si le Fils est là

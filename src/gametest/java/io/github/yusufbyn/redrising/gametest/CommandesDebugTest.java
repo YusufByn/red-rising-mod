@@ -10,6 +10,7 @@ import io.github.yusufbyn.redrising.factions.Camp;
 import io.github.yusufbyn.redrising.factions.Jauges;
 import io.github.yusufbyn.redrising.factions.JaugesJoueur;
 import io.github.yusufbyn.redrising.jalons.Epoque;
+import io.github.yusufbyn.redrising.jalons.Horloge;
 import io.github.yusufbyn.redrising.jalons.Issue;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
@@ -69,7 +70,21 @@ public class CommandesDebugTest implements FabricClientGameTest {
                 attendreMessage(server, "rr etat", "commande.redrising.etat");
                 verifier("État du monde",
                         EtatMonde.NOUVEAU.avecEpoque(Epoque.GOLDEN_SON).avecIssue("pendaison_eo", Issue.DIVERGENTE).avecZone("lykos", Camp.RISING),
-                        EtatMondeServeur.get(server));
+                        EtatMondeServeur.get(server).avecHorloge(Horloge.ZERO));
+
+                // Horloge du monde (G6.1)
+                executer(server, "rr etat temps set 48000");
+                executer(server, "rr etat temps add 1000");
+                executer(server, "rr etat soutien aide set 40");
+                executer(server, "rr etat soutien aide add 2");
+                executer(server, "rr etat soutien tort set 5");
+                verifier("Soutien cumulé", new Horloge(49_000, 42, 5), EtatMondeServeur.get(server).horloge().avecTemps(49_000));
+                long temps = EtatMondeServeur.get(server).horloge().temps();
+                if (temps < 49_000 || temps > 49_040) {
+                    throw new AssertionError("Temps de jeu après /rr etat temps : " + temps + " (attendu 49000)");
+                }
+                attendreMessage(server, "rr etat contribution get", "commande.redrising.etat.contribution.get");
+                executer(server, "rr etat contribution reset");
 
                 // Cible explicite, depuis la console du serveur
                 executerConsole(server, "rr couleur set vert " + OutilsTest.joueur(server).getPlainTextName());

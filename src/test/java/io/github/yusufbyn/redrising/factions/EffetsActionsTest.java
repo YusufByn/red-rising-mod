@@ -83,6 +83,13 @@ class EffetsActionsTest {
     }
 
     @Test
+    void volDejaCompteAujourdhui() {
+        // Loyauté et Suspicion à chaque vol, le Soutien (gain ou perte) une fois par coffre et par jour
+        assertEquals(new Variation(-5, 0, 5), EffetsActions.volSansSoutien(EffetsActions.voler(Camp.SOCIETE)));
+        assertEquals(Variation.AUCUNE, EffetsActions.volSansSoutien(EffetsActions.voler(Camp.RISING)));
+    }
+
+    @Test
     void contrebande() {
         assertEquals(new Variation(0, 0, 5), EffetsActions.contrebandeVue());
     }

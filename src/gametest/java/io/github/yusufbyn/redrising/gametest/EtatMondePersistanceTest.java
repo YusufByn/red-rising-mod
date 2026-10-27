@@ -5,6 +5,7 @@ import io.github.yusufbyn.redrising.data.EtatMonde;
 import io.github.yusufbyn.redrising.data.EtatMondeServeur;
 import io.github.yusufbyn.redrising.factions.Camp;
 import io.github.yusufbyn.redrising.jalons.Epoque;
+import io.github.yusufbyn.redrising.jalons.Horloge;
 import io.github.yusufbyn.redrising.jalons.Issue;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
@@ -66,8 +67,9 @@ public class EtatMondePersistanceTest implements FabricClientGameTest {
         RedRising.LOGGER.info("[G2.4] Fichier {} : {}", dossierMonde.relativize(fichier), contenu);
     }
 
+    /** L'horloge (G6.1) avance dès que le joueur est là : elle est vérifiée par {@code HorlogeMondeTest}, pas ici. */
     private static void verifier(String moment, EtatMonde attendu, EtatMonde obtenu) {
-        if (!attendu.equals(obtenu)) {
+        if (!attendu.avecHorloge(Horloge.ZERO).equals(obtenu.avecHorloge(Horloge.ZERO))) {
             throw new AssertionError("État du monde " + moment + " : attendu " + attendu + ", obtenu " + obtenu);
         }
         RedRising.LOGGER.info("[G2.4] État du monde {} : {}", moment, obtenu);

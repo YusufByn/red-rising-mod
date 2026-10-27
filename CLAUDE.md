@@ -90,6 +90,8 @@ Mod Fabric fan-made, solo, gratuit et non commercial, dans l'univers Red Rising 
 - Ce qu'un PNJ voit : toujours `monde/Vue.voit(pnj, joueur)` (murs et fumée), jamais `hasLineOfSight` directement.
 - Tests unitaires : une classe qui charge `Level` (`Level.RESOURCE_KEY_CODEC`, `Level.OVERWORLD`) plante sans Minecraft démarré. Pour un codec de dimension : `ResourceKey.codec(Registries.DIMENSION)`.
 - Tests client de traque : un chasseur téléporté loin sort des chunks chargés, il est oublié et la traque en fait apparaître un autre. Pour en garder un seul, tuer les autres (un chasseur tué n'est remplacé que par les renforts).
+- Horloge du monde (G6.1) : le temps de jeu du mod (`jalons/HorlogeMonde`) n'est pas `gameTime`. Les règles « une fois par jour » restent sur les jours de `gameTime` ; avancer `gameTime` dans un test ne fait pas avancer le temps de jeu (`/rr etat temps add`). Le Soutien cumulé se compte dans `ActionsFaction.agir` : toute action qui bouge le Soutien doit passer par là. Comparer un `EtatMonde` dans un test : neutraliser l'horloge (`avecHorloge(Horloge.ZERO)`), elle avance dès qu'un joueur est là.
+- Punir un joueur hors ligne (on ne peut rien attacher à un joueur absent) : attachment global joueur → peine, appliqué à `JOIN` (voir `CelluleRising.PEINES_EN_ATTENTE`). En solo, le serveur s'arrête avec le joueur : le test pose la peine directement.
 - Durées longues (traque, interrogatoire) : compter le temps de jeu écoulé entre deux passages (`getGameTime`), joueur connecté seulement ; un test peut alors avancer l'horloge du monde au lieu d'attendre.
 
 ## CI

@@ -12,6 +12,7 @@ import io.github.yusufbyn.redrising.factions.Boutiques;
 import io.github.yusufbyn.redrising.factions.Contrebande;
 import io.github.yusufbyn.redrising.factions.JaugesJoueur;
 import io.github.yusufbyn.redrising.factions.ObjetsRebelles;
+import io.github.yusufbyn.redrising.jalons.HorlogeMonde;
 import io.github.yusufbyn.redrising.monde.CelluleRising;
 import io.github.yusufbyn.redrising.monde.PosteSociete;
 import io.github.yusufbyn.redrising.monde.Vue;
@@ -45,6 +46,7 @@ public class RedRising implements ModInitializer {
         Vue.init();
         Contrebande.init();
         EtatMondeServeur.init();
+        HorlogeMonde.init();
         CommandesDebug.init();
     }
 }
