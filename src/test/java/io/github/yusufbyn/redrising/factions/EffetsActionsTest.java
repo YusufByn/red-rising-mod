@@ -74,6 +74,15 @@ class EffetsActionsTest {
     }
 
     @Test
+    void denonciations() {
+        assertEquals(new Variation(10, -25, -10), EffetsActions.denoncerCellule());
+        assertEquals(new Variation(0, -10, 0), EffetsActions.celluleReperee());
+        // Déjà blanchi aujourd'hui (ou en traque) : Loyauté et Soutien restent, la Suspicion ne baisse plus
+        assertEquals(new Variation(10, -25, 0), EffetsActions.denonciationSansBlanchiment(EffetsActions.denoncerCellule()));
+        assertEquals(new Variation(5, -10, 0), EffetsActions.denonciationSansBlanchiment(EffetsActions.denoncer()));
+    }
+
+    @Test
     void contrebande() {
         assertEquals(new Variation(0, 0, 5), EffetsActions.contrebandeVue());
     }

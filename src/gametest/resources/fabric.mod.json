@@ -27,6 +27,7 @@
       "io.github.yusufbyn.redrising.gametest.TraqueTest",
       "io.github.yusufbyn.redrising.gametest.ObjetsRebellesTest",
       "io.github.yusufbyn.redrising.gametest.BoutiqueTest",
+      "io.github.yusufbyn.redrising.gametest.DenonciationTest",
       "io.github.yusufbyn.redrising.gametest.CapacitesPassivesTest"
     ]
   },

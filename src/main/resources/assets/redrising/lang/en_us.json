@@ -183,5 +183,9 @@
   "commande.redrising.boutique.get": "%s: shop %s",
   "commande.redrising.boutique.set": "Shop of %s: %s",
   "commande.redrising.boutique.achats.get": "Trades of %s (day %s): %s",
-  "commande.redrising.boutique.achats.reset": "Daily trades of %s reset"
+  "commande.redrising.boutique.achats.reset": "Daily trades of %s reset",
+  "faction.redrising.denonce.cellule": "The Gray takes the map: the cell falls",
+  "commande.redrising.structure.tomber": "Cell at %s has fallen",
+  "commande.redrising.denonciation.get": "%s: known cells %s; Rising quarantine until tick %s; last Suspicion drop from denouncing on day %s",
+  "commande.redrising.denonciation.reset": "Known cells, quarantine and laundering of %s reset"
 }

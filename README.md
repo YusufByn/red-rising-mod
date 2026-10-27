@@ -36,7 +36,7 @@ Code commun dans `src/main`, code client uniquement (HUD, écrans, rendu) dans `
 ## Contrôles
 
 - `R` (modifiable, catégorie « Red Rising ») : capacité active de sa Couleur.
-- Accroupi + clic droit sur un PNJ de Couleur avec de la nourriture : l'aider. À mains vides sur un PNJ Gris : dénoncer le PNJ du Rising le plus proche.
+- Accroupi + clic droit sur un PNJ de Couleur avec de la nourriture : l'aider. À mains vides sur un PNJ Gris : dénoncer le PNJ du Rising le plus proche (hors des cellules). Avec une carte en main sur un PNJ Gris : dénoncer la cellule connue la plus proche (G5.10).
 - Accroupi + clic droit à main vide sur l'entrée cachée d'une cellule du Rising (repérée par des particules rouges, visibles à partir de 20 de Soutien) : entrer, puis sortir de la même façon.
 - Clic droit (debout) sur le commis Cuivre d'un poste ou le Fils d'une cellule : leur boutique (G5.9), en crédits pour la Société, en troc pour le Rising, selon son palier de Loyauté ou de Soutien.
 - Objets rebelles (G5.8) : fumigène (clic droit pour le lancer : nuage de fumée de 10 s qui coupe la vue des PNJ), chausse-trappe (se pose comme un bloc ; 3 par joueur au plus, la casser rend la sienne). Pas de recette : la boutique du Rising, ou `/give @s redrising:fumigene` (`redrising:chausse_trappe`, `redrising:credit`), ou l'onglet « Red Rising » de l'inventaire créatif.
@@ -58,7 +58,8 @@ Réservées aux ops (ou à la triche activée en solo). `[joueur]` est optionnel
 - `/rr fumee <pos>` (nuage de fumée sans rien lancer), `/rr fumee list`, `/rr fumee clear` (nuages du monde où l'on est)
 - `/rr chausse_trappes list [joueur]`, `/rr chausse_trappes clear [joueur]` (sans joueur : toutes)
 - `/rr contrebande get [joueur]` (dernier repérage par un Gris), `/rr contrebande reset [joueur]`
-- `/rr structure poste <pos>` (poste de la Société, coin nord-ouest du sol, porte au nord), `/rr structure cellule <pos> <north|south|east|west>` (cellule du Rising : moitié basse de l'entrée cachée, salle dans la direction donnée), `/rr structure list`, `/rr structure oublier <pos>` (poste ou cellule)
+- `/rr structure poste <pos>` (poste de la Société, coin nord-ouest du sol, porte au nord), `/rr structure cellule <pos> <north|south|east|west>` (cellule du Rising : moitié basse de l'entrée cachée, salle dans la direction donnée), `/rr structure list`, `/rr structure oublier <pos>` (poste ou cellule), `/rr structure tomber <pos>` (la cellule tombe, sans effet sur les jauges)
+- `/rr denonciation get [joueur]` (cellules connues, quarantaine, dernier jour de blanchiment), `/rr denonciation reset [joueur]`
 - `/rr naissance get [joueur]` (Couleur, ou test en cours : résultat en attente, relance), `/rr naissance reset [joueur]` (efface Couleur et test, et relance la naissance)
 - `/rr etat`, `/rr etat naissance <test|choix_libre>`, `/rr etat epoque <epoque>`, `/rr etat zone set <zone> <camp>`, `/rr etat zone clear <zone>`
 

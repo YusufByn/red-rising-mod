@@ -9,6 +9,7 @@ import io.github.yusufbyn.redrising.factions.ActionsFaction;
 import io.github.yusufbyn.redrising.factions.Boutique;
 import io.github.yusufbyn.redrising.factions.Boutiques;
 import io.github.yusufbyn.redrising.factions.Camp;
+import io.github.yusufbyn.redrising.factions.EffetsActions;
 import io.github.yusufbyn.redrising.factions.JaugesJoueur;
 import io.github.yusufbyn.redrising.pnj.PnjCouleur;
 import io.github.yusufbyn.redrising.pnj.TraqueGris;
@@ -18,6 +19,7 @@ import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.event.player.UseBlockCallback;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.UUIDUtil;
 import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
@@ -26,6 +28,8 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
+import net.minecraft.world.Container;
+import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.npc.villager.Villager;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
@@ -35,14 +39,18 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.level.portal.TeleportTransition;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
+import java.util.function.UnaryOperator;
 
 /**
  * Cellule du Rising (G5.4) : une salle cachée derrière un mur de pierre ordinaire, avec un PNJ Rouge et un coffre du Rising.
@@ -56,6 +64,12 @@ import java.util.UUID;
  *     <li><b>Sortie</b> : même geste depuis l'intérieur, quel que soit le Soutien.</li>
  *     <li><b>Intérieur surveillé</b> : un joueur refusé qui s'y trouve (Soutien tombé une fois dedans, mur percé)
  *     est mis dehors, devant l'entrée. Il connaît déjà la cellule : là, un message le lui dit.</li>
+ *     <li><b>Planque</b> (G5.10) : un second coffre, sans camp, pour les affaires du joueur : ni marque, ni vol.</li>
+ *     <li><b>Cellule connue</b> (G5.10) : un joueur qui s'est trouvé dans la salle (par l'entrée ou en creusant) la connaît ;
+ *     il peut la dénoncer à un Gris, carte en main. Elle <b>tombe</b> alors ({@link #tomber}), et le Rising met le
+ *     dénonciateur en <b>quarantaine</b> : aucune cellule ne l'accepte pendant 3 jours de jeu.</li>
+ *     <li><b>Cellule repérée</b> pendant une traque : la Société y fait une descente un jour de jeu plus tard.</li>
+ *     <li><b>Fils tué</b> : un remplaçant arrive au bout de 3 jours de jeu sans Fils.</li>
  * </ul>
  *
  * <p>La salle est une vraie salle du monde : la trouver en creusant est permis (dénoncer une cellule, raids : G5.5 et suivants).
@@ -69,15 +83,26 @@ public final class CelluleRising {
      * @param interieur la salle (sans les murs)
      * @param entree    moitié basse de l'entrée cachée (l'autre moitié est au-dessus)
      * @param versSalle direction de la salle vue de l'entrée, depuis dehors
-     * @param reperee   un chasseur a vu un joueur traqué y entrer (G5.6) ; ce qu'il en advient relève de G5.10
+     * @param reperee   un chasseur a vu un joueur traqué y entrer (G5.6)
+     * @param descente  tick de jeu de la descente de la Société sur une cellule repérée (G5.10), -1 sinon
+     * @param sansFils  tick de jeu depuis lequel la cellule n'a plus de Fils (tué), -1 s'il est là
+     * @param reperePar le joueur qui a mené les Gris à la cellule : il perd du Soutien à la descente
      */
-    public record Cellule(BoundingBox interieur, BlockPos entree, Direction versSalle, boolean reperee) {
+    public record Cellule(BoundingBox interieur, BlockPos entree, Direction versSalle, boolean reperee, long descente, long sansFils,
+                          Optional<UUID> reperePar) {
         public static final Codec<Cellule> CODEC = RecordCodecBuilder.create(instance -> instance.group(
                 BoundingBox.CODEC.fieldOf("interieur").forGetter(Cellule::interieur),
                 BlockPos.CODEC.fieldOf("entree").forGetter(Cellule::entree),
                 Direction.CODEC.fieldOf("vers_salle").forGetter(Cellule::versSalle),
-                Codec.BOOL.optionalFieldOf("reperee", false).forGetter(Cellule::reperee)
+                Codec.BOOL.optionalFieldOf("reperee", false).forGetter(Cellule::reperee),
+                Codec.LONG.optionalFieldOf("descente", -1L).forGetter(Cellule::descente),
+                Codec.LONG.optionalFieldOf("sans_fils", -1L).forGetter(Cellule::sansFils),
+                UUIDUtil.CODEC.optionalFieldOf("repere_par").forGetter(Cellule::reperePar)
         ).apply(instance, Cellule::new));
+
+        public Cellule avecSansFils(long tick) {
+            return new Cellule(interieur, entree, versSalle, reperee, descente, tick, reperePar);
+        }
 
         public boolean estLEntree(BlockPos pos) {
             return pos.equals(entree) || pos.equals(entree.above());
@@ -98,6 +123,33 @@ public final class CelluleRising {
             Identifier.fromNamespaceAndPath(RedRising.MOD_ID, "cellules_rising"),
             builder -> builder.persistent(Cellule.CODEC.listOf())
     );
+
+    /** Sur le joueur : les entrées des cellules qu'il connaît (il s'est trouvé dans la salle). */
+    public static final AttachmentType<List<BlockPos>> CONNUES = AttachmentRegistry.create(
+            Identifier.fromNamespaceAndPath(RedRising.MOD_ID, "cellules_connues"),
+            builder -> builder.persistent(BlockPos.CODEC.listOf()).copyOnDeath()
+    );
+
+    /** Sur le joueur : tick de jeu de la fin de sa quarantaine (il a dénoncé une cellule). */
+    public static final AttachmentType<Long> QUARANTAINE = AttachmentRegistry.create(
+            Identifier.fromNamespaceAndPath(RedRising.MOD_ID, "quarantaine_rising"),
+            builder -> builder.persistent(Codec.LONG).copyOnDeath()
+    );
+
+    /** Sur le coffre de la planque d'une cellule (sans camp) : les entonnoirs ne la vident pas. */
+    public static final AttachmentType<Boolean> PLANQUE = AttachmentRegistry.create(
+            Identifier.fromNamespaceAndPath(RedRising.MOD_ID, "planque"),
+            builder -> builder.persistent(Codec.BOOL)
+    );
+
+    /** 🟡 Descente de la Société sur une cellule repérée : un jour de jeu plus tard. */
+    public static final long DELAI_DESCENTE = ActionsFaction.TICKS_PAR_JOUR;
+    /** 🟡 Quarantaine du dénonciateur : 3 jours de jeu. */
+    public static final long DUREE_QUARANTAINE = 3 * ActionsFaction.TICKS_PAR_JOUR;
+    /** 🟡 Un nouveau Fils arrive après 3 jours de jeu sans Fils. */
+    public static final long DELAI_REMPLACANT = 3 * ActionsFaction.TICKS_PAR_JOUR;
+    /** Descentes et Fils regardés toutes les 10 secondes. */
+    private static final int PERIODE_CELLULES = 200;
 
     /** Salle de 5 blocs de large, 3 de haut, 5 de profondeur ; murs, sol et toit d'un bloc. */
     private static final int DEMI_LARGEUR = 2;
@@ -142,7 +194,7 @@ public final class CelluleRising {
                 sortir(serveur, cellule);
                 return InteractionResult.SUCCESS;
             }
-            if (!Acces.peutEntrerRising(JaugesJoueur.get(serveur))) {
+            if (!admis(serveur)) {
                 // Silencieux : le joueur refusé ne doit pas apprendre qu'il y a une cellule
                 return InteractionResult.PASS;
             }
@@ -168,15 +220,23 @@ public final class CelluleRising {
                 return;
             }
             ServerLevel monde = server.overworld();
+            if (tick % PERIODE_CELLULES == 0) {
+                entretenir(monde, cellules);
+                cellules = cellules(server);
+            }
             for (ServerPlayer joueur : monde.players()) {
                 if (joueur.isSpectator()) {
                     continue;
                 }
-                boolean admis = Acces.peutEntrerRising(JaugesJoueur.get(joueur));
+                boolean admis = admis(joueur);
                 for (Cellule cellule : cellules) {
-                    if (!admis && cellule.interieur().isInside(joueur.blockPosition())) {
-                        mettreDehors(joueur, cellule);
-                        break;
+                    if (cellule.interieur().isInside(joueur.blockPosition())) {
+                        // Par l'entrée ou en creusant : il la connaît désormais
+                        connaitre(joueur, cellule);
+                        if (!admis) {
+                            mettreDehors(joueur, cellule);
+                            break;
+                        }
                     }
                     if (admis && tick % PERIODE_REPERE == 0 && joueur.distanceToSqr(Vec3.atCenterOf(cellule.entree())) <= PORTEE_REPERE * PORTEE_REPERE) {
                         montrerLeRepere(monde, joueur, cellule);
@@ -199,6 +259,7 @@ public final class CelluleRising {
     }
 
     private static void entrer(ServerPlayer joueur, Cellule cellule) {
+        connaitre(joueur, cellule);
         PASSAGES.put(joueur.getUUID(), new Passage(cellule.dedans(), cellule.versSalle()));
         RedRising.LOGGER.info("{} entre dans une cellule du Rising (Soutien {})", joueur.getPlainTextName(), JaugesJoueur.get(joueur).soutien());
     }
@@ -253,6 +314,7 @@ public final class CelluleRising {
         monde.setBlock(local(entree, droite, versSalle, -1, HAUTEUR - 1, 2), lanterne, drapeaux);
         monde.setBlock(local(entree, droite, versSalle, 1, HAUTEUR - 1, PROFONDEUR - 1), lanterne, drapeaux);
 
+        // Au fond : le coffre du Rising à droite, la planque du joueur (sans camp) à gauche
         BlockPos coffre = local(entree, droite, versSalle, DEMI_LARGEUR, 0, PROFONDEUR);
         monde.setBlock(coffre, Blocks.CHEST.defaultBlockState(), Block.UPDATE_ALL);
         BlockEntity blocCoffre = monde.getBlockEntity(coffre);
@@ -260,17 +322,18 @@ public final class CelluleRising {
             blocCoffre.setAttached(ActionsFaction.CAMP, Camp.RISING);
             blocCoffre.setChanged();
         }
-        Villager fils = PnjCouleur.creer(monde, Vec3.atBottomCenterOf(local(entree, droite, versSalle, 0, 0, PROFONDEUR - 1)),
-                versSalle.getOpposite().toYRot(), Couleur.ROUGE);
-        if (fils != null) {
-            fils.setAttached(ActionsFaction.CAMP, Camp.RISING);
-            fils.setAttached(Boutiques.BOUTIQUE, Boutique.RISING);
-            fils.setNoAi(true);
+        BlockPos planque = local(entree, droite, versSalle, -DEMI_LARGEUR, 0, PROFONDEUR);
+        monde.setBlock(planque, Blocks.CHEST.defaultBlockState(), Block.UPDATE_ALL);
+        BlockEntity blocPlanque = monde.getBlockEntity(planque);
+        if (blocPlanque != null) {
+            blocPlanque.setAttached(PLANQUE, true);
+            blocPlanque.setChanged();
         }
 
         BoundingBox interieur = BoundingBox.fromCorners(local(entree, droite, versSalle, -DEMI_LARGEUR, 0, 1),
                 local(entree, droite, versSalle, DEMI_LARGEUR, HAUTEUR - 1, PROFONDEUR));
-        Cellule cellule = new Cellule(interieur, entree, versSalle, false);
+        Cellule cellule = new Cellule(interieur, entree, versSalle, false, -1, -1, Optional.empty());
+        installerLeFils(monde, cellule);
         List<Cellule> cellules = new ArrayList<>(cellules(monde.getServer()));
         cellules.add(cellule);
         monde.getServer().globalAttachments().setAttached(CELLULES, cellules);
@@ -282,11 +345,149 @@ public final class CelluleRising {
         return entree.relative(droite, a).above(h).relative(fond, p);
     }
 
-    /** Un chasseur a vu un joueur traqué entrer dans cette cellule (G5.6). */
-    public static void marquerReperee(MinecraftServer server, Cellule cellule) {
+    /** Le Fils (PNJ Rouge du Rising, qui tient la boutique) au fond de la salle, tourné vers l'entrée. */
+    private static void installerLeFils(ServerLevel monde, Cellule cellule) {
+        Direction droite = cellule.versSalle().getClockWise();
+        Villager fils = PnjCouleur.creer(monde, Vec3.atBottomCenterOf(local(cellule.entree(), droite, cellule.versSalle(), 0, 0, PROFONDEUR - 1)),
+                cellule.versSalle().getOpposite().toYRot(), Couleur.ROUGE);
+        if (fils != null) {
+            fils.setAttached(ActionsFaction.CAMP, Camp.RISING);
+            fils.setAttached(Boutiques.BOUTIQUE, Boutique.RISING);
+            fils.setNoAi(true);
+        }
+    }
+
+    /**
+     * Un chasseur a vu un joueur traqué entrer dans cette cellule (G5.6) : elle est repérée, et la Société y fera une
+     * descente un jour de jeu plus tard (G5.10). Le temps de vider sa planque. Le joueur ne perd son Soutien qu'à la
+     * descente : sur le moment, le Rising ne le met pas dehors, sous les yeux des chasseurs.
+     */
+    public static void marquerReperee(MinecraftServer server, Cellule cellule, ServerPlayer joueur) {
+        long descente = server.overworld().getGameTime() + DELAI_DESCENTE;
+        remplacer(server, cellule, c -> c.reperee() ? c : new Cellule(c.interieur(), c.entree(), c.versSalle(), true,
+                descente, c.sansFils(), Optional.of(joueur.getUUID())));
+    }
+
+    private static void remplacer(MinecraftServer server, Cellule cellule, UnaryOperator<Cellule> changement) {
         List<Cellule> cellules = new ArrayList<>(cellules(server));
-        cellules.replaceAll(c -> c.entree().equals(cellule.entree()) ? new Cellule(c.interieur(), c.entree(), c.versSalle(), true) : c);
+        cellules.replaceAll(c -> c.entree().equals(cellule.entree()) ? changement.apply(c) : c);
         server.globalAttachments().setAttached(CELLULES, cellules);
+    }
+
+    // --- G5.10 : connaître, dénoncer, tomber ---
+
+    /** Admis dans les cellules : assez de Soutien, et pas en quarantaine. */
+    public static boolean admis(ServerPlayer joueur) {
+        return Acces.peutEntrerRising(JaugesJoueur.get(joueur)) && !enQuarantaine(joueur);
+    }
+
+    public static boolean enQuarantaine(ServerPlayer joueur) {
+        Long fin = joueur.getAttached(QUARANTAINE);
+        return fin != null && joueur.level().getServer().overworld().getGameTime() < fin;
+    }
+
+    /** Le Rising refuse ce joueur dans toutes ses cellules (et leurs boutiques) pendant {@link #DUREE_QUARANTAINE}. */
+    public static void mettreEnQuarantaine(ServerPlayer joueur) {
+        joueur.setAttached(QUARANTAINE, joueur.level().getServer().overworld().getGameTime() + DUREE_QUARANTAINE);
+    }
+
+    private static void connaitre(ServerPlayer joueur, Cellule cellule) {
+        List<BlockPos> connues = joueur.getAttachedOrElse(CONNUES, List.of());
+        if (!connues.contains(cellule.entree())) {
+            List<BlockPos> suite = new ArrayList<>(connues);
+            suite.add(cellule.entree());
+            joueur.setAttached(CONNUES, suite);
+            RedRising.LOGGER.info("{} connaît désormais la cellule en {}", joueur.getPlainTextName(), cellule.entree().toShortString());
+        }
+    }
+
+    /** Les cellules (encore debout) que ce joueur connaît. */
+    public static List<Cellule> connues(ServerPlayer joueur) {
+        List<BlockPos> entrees = joueur.getAttachedOrElse(CONNUES, List.of());
+        return cellules(joueur.level().getServer()).stream().filter(cellule -> entrees.contains(cellule.entree())).toList();
+    }
+
+    /** La cellule connue de ce joueur la plus proche de {@code depuis}, à moins de {@code portee} blocs, ou {@code null}. */
+    public static @Nullable Cellule connueLaPlusProche(ServerPlayer joueur, Vec3 depuis, double portee) {
+        if (joueur.level().dimension() != Level.OVERWORLD) {
+            return null;
+        }
+        return connues(joueur).stream()
+                .filter(cellule -> Vec3.atCenterOf(cellule.entree()).distanceTo(depuis) <= portee)
+                .min(Comparator.comparingDouble(cellule -> Vec3.atCenterOf(cellule.entree()).distanceToSqr(depuis)))
+                .orElse(null);
+    }
+
+    /** Ce PNJ se trouve-t-il dans une cellule ? (la dénonciation à mains vides ne l'atteint pas) */
+    public static boolean dansUneCellule(Villager pnj) {
+        return pnj.level().dimension() == Level.OVERWORLD
+                && cellules(pnj.level().getServer()).stream().anyMatch(cellule -> cellule.interieur().isInside(pnj.blockPosition()));
+    }
+
+    /**
+     * La cellule tombe (dénoncée, ou descente sur une cellule repérée) : ses PNJ sont arrêtés (ils disparaissent, la boutique
+     * avec eux), le coffre du Rising et la planque sont saisis (vidés, sans camp), les lanternes retirées, l'entrée défoncée.
+     * Il reste un trou et une salle vide et sombre, où l'on entre librement. La cellule sort de la liste.
+     */
+    public static void tomber(ServerLevel monde, Cellule cellule, String cause) {
+        int drapeaux = Block.UPDATE_ALL;
+        for (Villager pnj : monde.getEntities(EntityTypes.VILLAGER, AABB.of(cellule.interieur()).inflate(0.5), pnj -> true)) {
+            pnj.discard();
+        }
+        BlockPos.betweenClosedStream(cellule.interieur()).forEach(pos -> {
+            BlockEntity bloc = monde.getBlockEntity(pos);
+            if (bloc instanceof Container coffre) {
+                coffre.clearContent();
+                bloc.removeAttached(ActionsFaction.CAMP);
+                bloc.removeAttached(PLANQUE);
+                bloc.setChanged();
+            }
+            if (monde.getBlockState(pos).is(Blocks.LANTERN)) {
+                monde.setBlock(pos, Blocks.AIR.defaultBlockState(), drapeaux);
+            }
+        });
+        monde.setBlock(cellule.entree(), Blocks.AIR.defaultBlockState(), drapeaux);
+        monde.setBlock(cellule.entree().above(), Blocks.AIR.defaultBlockState(), drapeaux);
+        List<Cellule> cellules = new ArrayList<>(cellules(monde.getServer()));
+        cellules.removeIf(c -> c.entree().equals(cellule.entree()));
+        monde.getServer().globalAttachments().setAttached(CELLULES, cellules);
+        RedRising.LOGGER.info("Cellule du Rising en {} tombée ({})", cellule.entree().toShortString(), cause);
+    }
+
+    /** Toutes les 10 secondes : descentes dues, et Fils remplacé après {@link #DELAI_REMPLACANT} sans Fils. */
+    private static void entretenir(ServerLevel monde, List<Cellule> cellules) {
+        long maintenant = monde.getGameTime();
+        for (Cellule cellule : cellules) {
+            if (cellule.descente() >= 0 && maintenant >= cellule.descente()) {
+                tomber(monde, cellule, "descente de la Société");
+                // Celui qui a mené les Gris à la cellule : le Rising le sait (s'il est hors ligne, il y échappe : limite connue)
+                cellule.reperePar().map(id -> monde.getServer().getPlayerList().getPlayer(id))
+                        .ifPresent(joueur -> ActionsFaction.agir(joueur, "a mené les Gris à une cellule", EffetsActions.celluleReperee()));
+                continue;
+            }
+            // Seulement si les PNJ de la salle sont chargés : sinon on ne sait pas si le Fils est là
+            if (!monde.isPositionEntityTicking(cellule.dedans())) {
+                continue;
+            }
+            boolean filsLa = !monde.getEntities(EntityTypes.VILLAGER, AABB.of(cellule.interieur()).inflate(0.5),
+                    pnj -> pnj.isAlive() && pnj.getAttached(Boutiques.BOUTIQUE) == Boutique.RISING).isEmpty();
+            if (filsLa) {
+                if (cellule.sansFils() >= 0) {
+                    remplacer(monde.getServer(), cellule, c -> c.avecSansFils(-1));
+                }
+            } else if (cellule.sansFils() < 0) {
+                remplacer(monde.getServer(), cellule, c -> c.avecSansFils(maintenant));
+            } else if (maintenant - cellule.sansFils() >= DELAI_REMPLACANT) {
+                installerLeFils(monde, cellule);
+                remplacer(monde.getServer(), cellule, c -> c.avecSansFils(-1));
+                RedRising.LOGGER.info("Cellule en {} : un nouveau Fils est arrivé", cellule.entree().toShortString());
+            }
+        }
+    }
+
+    /** La cellule qui contient cette position (salle et murs), ou {@code null}. */
+    public static @Nullable Cellule contenant(MinecraftServer server, BlockPos pos) {
+        return cellules(server).stream().filter(cellule -> cellule.interieur().inflatedBy(1).isInside(pos)).findFirst().orElse(null);
     }
 
     /** Oublie la cellule qui contient cette position (les blocs restent). Renvoie {@code false} s'il n'y en a pas. */

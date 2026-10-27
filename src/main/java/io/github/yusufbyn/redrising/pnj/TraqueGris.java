@@ -422,14 +422,15 @@ public final class TraqueGris {
 
     /**
      * Le joueur traqué entre dans une cellule du Rising ({@code CelluleRising}). Sans être vu : la traque est gagnée.
-     * Sous les yeux d'un chasseur : la cellule est repérée (G5.10), et la traque continue.
+     * Sous les yeux d'un chasseur : la cellule est repérée (descente un jour plus tard, et Soutien −10 à ce moment : G5.10), et la traque continue.
      */
     public static void entreDansCellule(ServerPlayer joueur, CelluleRising.Cellule cellule) {
         if (!joueur.hasAttached(TRAQUE)) {
             return;
         }
         if (chasseursDe(joueur).stream().anyMatch(chasseur -> voit(chasseur, joueur))) {
-            CelluleRising.marquerReperee(joueur.level().getServer(), cellule);
+            // Descente de la Société un jour de jeu plus tard ; le joueur perdra son Soutien à ce moment (G5.10)
+            CelluleRising.marquerReperee(joueur.level().getServer(), cellule, joueur);
             joueur.sendOverlayMessage(Component.translatable("traque.redrising.reperee"));
             RedRising.LOGGER.info("Traque de {} : vu en entrant dans une cellule, cellule repérée", joueur.getPlainTextName());
         } else {

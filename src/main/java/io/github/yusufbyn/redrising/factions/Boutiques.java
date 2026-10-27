@@ -1,6 +1,7 @@
 package io.github.yusufbyn.redrising.factions;
 
 import io.github.yusufbyn.redrising.RedRising;
+import io.github.yusufbyn.redrising.monde.CelluleRising;
 import net.fabricmc.fabric.api.attachment.v1.AttachmentRegistry;
 import net.fabricmc.fabric.api.attachment.v1.AttachmentType;
 import net.fabricmc.fabric.api.event.player.UseEntityCallback;
@@ -92,7 +93,8 @@ public final class Boutiques {
         if (pnj.isTrading()) {
             return;
         }
-        if (!boutique.admet(JaugesJoueur.get(joueur))) {
+        // Le Rising refuse aussi un joueur en quarantaine (il a dénoncé une cellule, G5.10)
+        if (!boutique.admet(JaugesJoueur.get(joueur)) || (boutique == Boutique.RISING && CelluleRising.enQuarantaine(joueur))) {
             joueur.sendOverlayMessage(Component.translatable("boutique.redrising.refus." + boutique.getSerializedName()));
             return;
         }

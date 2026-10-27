@@ -143,7 +143,14 @@ public final class CommandesDebug {
                                 .then(Commands.argument("pos", BlockPosArgument.blockPos())
                                         .then(argEnum("direction", HORIZONTALES).executes(CommandesDebug::construireCellule))))
                         .then(Commands.literal("oublier")
-                                .then(Commands.argument("pos", BlockPosArgument.blockPos()).executes(CommandesDebug::oublierStructure))))
+                                .then(Commands.argument("pos", BlockPosArgument.blockPos()).executes(CommandesDebug::oublierStructure)))
+                        .then(Commands.literal("tomber")
+                                .then(Commands.argument("pos", BlockPosArgument.blockPos()).executes(CommandesDebug::faireTomber))))
+                .then(Commands.literal("denonciation")
+                        .then(Commands.literal("get").executes(ctx -> lireDenonciation(ctx, ctx.getSource().getPlayerOrException()))
+                                .then(argJoueur(CommandesDebug::lireDenonciation)))
+                        .then(Commands.literal("reset").executes(ctx -> effacerDenonciation(ctx, ctx.getSource().getPlayerOrException()))
+                                .then(argJoueur(CommandesDebug::effacerDenonciation))))
                 .then(Commands.literal("patrouille")
                         .then(Commands.literal("creer")
                                 .then(argPoint(1).then(argPoint(2).executes(ctx -> creerPatrouille(ctx, 2))
@@ -333,7 +340,9 @@ public final class CommandesDebug {
         ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.structure.list", postes.size(),
                 Acces.SEUIL_LOYAUTE_SOCIETE, positions(portes)), false);
         List<CelluleRising.Cellule> cellules = CelluleRising.cellules(ctx.getSource().getServer());
-        List<String> entrees = cellules.stream().map(cellule -> cellule.entree().toShortString() + " (" + cellule.versSalle().getSerializedName() + ")").toList();
+        List<String> entrees = cellules.stream().map(cellule -> cellule.entree().toShortString() + " (" + cellule.versSalle().getSerializedName()
+                + (cellule.reperee() ? ", repérée, descente au tick " + cellule.descente() : "")
+                + (cellule.sansFils() >= 0 ? ", sans Fils depuis le tick " + cellule.sansFils() : "") + ")").toList();
         ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.structure.list.cellules", cellules.size(),
                 Acces.SEUIL_SOUTIEN_RISING, positions(entrees)), false);
         return postes.size() + cellules.size();
@@ -369,6 +378,40 @@ public final class CommandesDebug {
             throw PAS_DE_STRUCTURE.create(pos.toShortString());
         }
         ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.structure.oublier", pos.toShortString()), true);
+        return Command.SINGLE_SUCCESS;
+    }
+
+    /** Fait tomber la cellule qui contient cette position, comme une dénonciation (sans effet sur les jauges). */
+    private static int faireTomber(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        BlockPos pos = BlockPosArgument.getLoadedBlockPos(ctx, ctx.getSource().getServer().overworld(), "pos");
+        CelluleRising.Cellule cellule = CelluleRising.contenant(ctx.getSource().getServer(), pos);
+        if (cellule == null) {
+            throw PAS_DE_STRUCTURE.create(pos.toShortString());
+        }
+        CelluleRising.tomber(ctx.getSource().getServer().overworld(), cellule, "commande");
+        ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.structure.tomber", cellule.entree().toShortString()), true);
+        return Command.SINGLE_SUCCESS;
+    }
+
+    // --- Dénonciation (G5.10) ---
+
+    private static int lireDenonciation(CommandContext<CommandSourceStack> ctx, ServerPlayer joueur) {
+        String connues = CelluleRising.connues(joueur).stream().map(cellule -> cellule.entree().toShortString()).collect(Collectors.joining(" ; "));
+        Long quarantaine = joueur.getAttached(CelluleRising.QUARANTAINE);
+        Long blanchi = joueur.getAttached(ActionsFaction.DERNIER_BLANCHIMENT);
+        Component fin = CelluleRising.enQuarantaine(joueur) ? Component.literal(String.valueOf(quarantaine)) : Component.translatable("commande.redrising.aucun");
+        Component jour = blanchi == null ? Component.translatable("commande.redrising.aucun") : Component.literal(String.valueOf(blanchi));
+        ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.denonciation.get", joueur.getDisplayName(),
+                connues.isEmpty() ? Component.translatable("commande.redrising.aucun") : Component.literal(connues), fin, jour), false);
+        return CelluleRising.connues(joueur).size();
+    }
+
+    /** Oublie les cellules connues, la quarantaine et le dernier jour de blanchiment. */
+    private static int effacerDenonciation(CommandContext<CommandSourceStack> ctx, ServerPlayer joueur) {
+        joueur.removeAttached(CelluleRising.CONNUES);
+        joueur.removeAttached(CelluleRising.QUARANTAINE);
+        joueur.removeAttached(ActionsFaction.DERNIER_BLANCHIMENT);
+        ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.denonciation.reset", joueur.getDisplayName()), true);
         return Command.SINGLE_SUCCESS;
     }
 

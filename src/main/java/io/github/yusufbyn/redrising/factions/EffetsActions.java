@@ -14,6 +14,8 @@ public final class EffetsActions {
     public static final int DECLIN_SUSPICION_PAR_JOUR = 2;
     /** Distance à laquelle un PNJ du Rising peut être dénoncé à un Gris. */
     public static final double PORTEE_DENONCIATION = 16;
+    /** 🟡 Une cellule connue est dénoncée si elle est à cette distance du Gris (G5.10). */
+    public static final double PORTEE_DENONCIATION_CELLULE = 32;
     /** Un PNJ de Couleur voit le joueur agir à cette distance (et s'il a une ligne de vue). */
     public static final double PORTEE_TEMOIN = 16;
 
@@ -79,6 +81,24 @@ public final class EffetsActions {
     /** Le joueur a fui un contrôle. */
     public static Variation fuiteControle() {
         return new Variation(-5, 0, 10);
+    }
+
+    /** Dénoncer une cellule du Rising à un Gris, carte en main (G5.10). */
+    public static Variation denoncerCellule() {
+        return new Variation(10, -25, -10);
+    }
+
+    /** Le joueur a mené les Gris à une cellule pendant une traque (G5.10) : pas une trahison voulue, mais une imprudence. */
+    public static Variation celluleReperee() {
+        return new Variation(0, -10, 0);
+    }
+
+    /**
+     * La baisse de Suspicion d'une dénonciation (PNJ ou cellule) ne compte qu'une fois par jour de jeu, et jamais pendant
+     * une traque (G5.10) : sinon dénoncer serait une machine à se blanchir. Loyauté et Soutien s'appliquent toujours.
+     */
+    public static Variation denonciationSansBlanchiment(Variation variation) {
+        return new Variation(variation.loyaute(), variation.soutien(), Math.max(0, variation.suspicion()));
     }
 
     /** Un Gris a vu de la contrebande du Rising en main, ou utilisée (G5.8) ; une fois par minute au plus ({@link Contrebande}). */

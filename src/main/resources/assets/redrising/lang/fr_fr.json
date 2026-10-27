@@ -183,5 +183,9 @@
   "commande.redrising.boutique.get": "%s : boutique %s",
   "commande.redrising.boutique.set": "Boutique de %s : %s",
   "commande.redrising.boutique.achats.get": "Échanges de %s (jour %s) : %s",
-  "commande.redrising.boutique.achats.reset": "Échanges du jour de %s remis à zéro"
+  "commande.redrising.boutique.achats.reset": "Échanges du jour de %s remis à zéro",
+  "faction.redrising.denonce.cellule": "Le Gris prend la carte : la cellule tombe",
+  "commande.redrising.structure.tomber": "Cellule en %s tombée",
+  "commande.redrising.denonciation.get": "%s : cellules connues %s ; quarantaine du Rising jusqu'au tick %s ; dernière baisse de Suspicion par dénonciation le jour %s",
+  "commande.redrising.denonciation.reset": "Cellules connues, quarantaine et blanchiment de %s remis à zéro"
 }

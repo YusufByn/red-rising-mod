@@ -10,6 +10,7 @@ import net.fabricmc.fabric.api.client.gametest.v1.world.TestWorldBuilder;
 import net.minecraft.client.gui.screens.DeathScreen;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.Level;
 
 import java.io.IOException;
@@ -48,6 +49,20 @@ final class OutilsTest {
                 && mc.level != null && mc.level.dimension().equals(Level.OVERWORLD), 200);
         ouvert.getConnection().waitForChunksRender();
         return ouvert;
+    }
+
+    /**
+     * Lacet et tangage pour qu'un joueur debout en {@code position} (« x y z ») regarde le torse de cette entité.
+     * {@code tp ... facing entity <uuid> eyes} laisse parfois le joueur regarder ailleurs.
+     */
+    static String regard(String position, Entity cible) {
+        String[] xyz = position.split(" ");
+        double dx = cible.getX() - Double.parseDouble(xyz[0]);
+        double dy = cible.getY() + 1.2 - (Double.parseDouble(xyz[1]) + 1.62);
+        double dz = cible.getZ() - Double.parseDouble(xyz[2]);
+        double lacet = Math.toDegrees(Math.atan2(-dx, dz));
+        double tangage = -Math.toDegrees(Math.atan2(dy, Math.sqrt(dx * dx + dz * dz)));
+        return lacet + " " + tangage;
     }
 
     /** Juste après l'entrée dans le monde, certaines commandes (dont /kill) n'ont pas encore d'effet. */

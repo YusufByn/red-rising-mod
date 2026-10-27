@@ -3,6 +3,7 @@ package io.github.yusufbyn.redrising.factions;
 import com.mojang.serialization.Codec;
 import io.github.yusufbyn.redrising.RedRising;
 import io.github.yusufbyn.redrising.couleur.Couleur;
+import io.github.yusufbyn.redrising.monde.CelluleRising;
 import io.github.yusufbyn.redrising.monde.Vue;
 import io.github.yusufbyn.redrising.pnj.PnjCouleur;
 import io.github.yusufbyn.redrising.pnj.TraqueGris;
@@ -23,11 +24,10 @@ import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityTypes;
-import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.monster.Creeper;
 import net.minecraft.world.entity.npc.villager.Villager;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.ServerExplosion;
 import net.minecraft.world.level.block.ChestBlock;
@@ -55,7 +55,8 @@ import java.util.UUID;
  *     <li><b>Voler</b> : prendre des objets dans un coffre (ou un tonneau) d'un camp ; compté une fois par ouverture.
  *     Casser un coffre d'un camp compte aussi comme un vol (sinon on viderait un poste en perçant un mur).</li>
  *     <li><b>Dénoncer</b> : accroupi, clic droit à mains vides sur un PNJ Gris ; le PNJ du Rising le plus proche
- *     (à moins de {@value EffetsActions#PORTEE_DENONCIATION} blocs) est arrêté.</li>
+ *     (à moins de {@value EffetsActions#PORTEE_DENONCIATION} blocs, hors des cellules) est arrêté. Avec une carte en main :
+ *     la cellule connue la plus proche du Gris tombe (G5.10). La baisse de Suspicion ne compte qu'une fois par jour.</li>
  *     <li>Chaque jour de jeu, la Suspicion retombe un peu.</li>
  * </ul>
  *
@@ -70,6 +71,12 @@ public final class ActionsFaction {
     );
 
     /** Sur un PNJ : jour de jeu où chaque joueur l'a aidé pour la dernière fois. */
+    /** Sur le joueur : jour de jeu de la dernière dénonciation qui a fait baisser sa Suspicion (une par jour, G5.10). */
+    public static final AttachmentType<Long> DERNIER_BLANCHIMENT = AttachmentRegistry.create(
+            Identifier.fromNamespaceAndPath(RedRising.MOD_ID, "dernier_blanchiment"),
+            builder -> builder.persistent(Codec.LONG).copyOnDeath()
+    );
+
     private static final AttachmentType<Map<UUID, Long>> AIDE_LE = AttachmentRegistry.create(
             Identifier.fromNamespaceAndPath(RedRising.MOD_ID, "aide_le"),
             builder -> builder.persistent(Codec.unboundedMap(UUIDUtil.STRING_CODEC, Codec.LONG))
@@ -107,6 +114,13 @@ public final class ActionsFaction {
             if (objet.has(DataComponents.FOOD)) {
                 if (joueur instanceof ServerPlayer serveur) {
                     aider(serveur, pnj, couleur, objet);
+                }
+                return InteractionResult.SUCCESS;
+            }
+            // Carte en main : on montre au Gris l'emplacement d'une cellule connue (G5.10)
+            if ((objet.is(Items.MAP) || objet.is(Items.FILLED_MAP)) && couleur == Couleur.GRIS) {
+                if (joueur instanceof ServerPlayer serveur) {
+                    denoncerCellule(serveur, pnj, objet);
                 }
                 return InteractionResult.SUCCESS;
             }
@@ -153,7 +167,8 @@ public final class ActionsFaction {
     private static void denoncer(ServerPlayer joueur) {
         double portee = EffetsActions.PORTEE_DENONCIATION;
         Villager rebelle = joueur.level().getEntities(EntityTypes.VILLAGER, joueur.getBoundingBox().inflate(portee),
-                        pnj -> pnj.getAttached(CAMP) == Camp.RISING && pnj.distanceTo(joueur) <= portee)
+                        // Pas les PNJ d'une cellule : seule la dénonciation de la cellule, carte en main, les atteint
+                        pnj -> pnj.getAttached(CAMP) == Camp.RISING && pnj.distanceTo(joueur) <= portee && !CelluleRising.dansUneCellule(pnj))
                 .stream()
                 .min(Comparator.comparingDouble(pnj -> pnj.distanceToSqr(joueur)))
                 .orElse(null);
@@ -164,7 +179,34 @@ public final class ActionsFaction {
         // Arrêté : emmené par les Gris (il disparaît, sans mourir ni rien laisser)
         rebelle.discard();
         joueur.sendOverlayMessage(Component.translatable("faction.redrising.denonce", rebelle.getDisplayName()));
-        agir(joueur, "dénonce un PNJ du Rising", EffetsActions.denoncer());
+        agir(joueur, "dénonce un PNJ du Rising", denonciation(joueur, EffetsActions.denoncer()));
+    }
+
+    /**
+     * Carte en main, à un Gris : la cellule connue la plus proche du Gris (à moins de
+     * {@value EffetsActions#PORTEE_DENONCIATION_CELLULE} blocs) tombe, le Gris garde la carte, et le Rising met le
+     * dénonciateur en quarantaine. Aucune cellule connue à portée : rien ne se passe, la carte reste au joueur.
+     */
+    private static void denoncerCellule(ServerPlayer joueur, Villager gris, ItemStack carte) {
+        CelluleRising.Cellule cellule = CelluleRising.connueLaPlusProche(joueur, gris.position(), EffetsActions.PORTEE_DENONCIATION_CELLULE);
+        if (cellule == null) {
+            return;
+        }
+        carte.consume(1, joueur);
+        CelluleRising.tomber(joueur.level().getServer().overworld(), cellule, "dénoncée par " + joueur.getPlainTextName());
+        CelluleRising.mettreEnQuarantaine(joueur);
+        joueur.sendOverlayMessage(Component.translatable("faction.redrising.denonce.cellule"));
+        agir(joueur, "dénonce une cellule du Rising", denonciation(joueur, EffetsActions.denoncerCellule()));
+    }
+
+    /** La baisse de Suspicion d'une dénonciation : une fois par jour de jeu, jamais pendant une traque. */
+    private static Variation denonciation(ServerPlayer joueur, Variation variation) {
+        long jour = joueur.level().getServer().overworld().getGameTime() / TICKS_PAR_JOUR;
+        if (joueur.hasAttached(TraqueGris.TRAQUE) || Long.valueOf(jour).equals(joueur.getAttached(DERNIER_BLANCHIMENT))) {
+            return EffetsActions.denonciationSansBlanchiment(variation);
+        }
+        joueur.setAttached(DERNIER_BLANCHIMENT, jour);
+        return variation;
     }
 
     /** Camp d'un coffre, ou {@code null} s'il n'appartient à personne (ou n'est pas un coffre du monde). */
@@ -184,9 +226,10 @@ public final class ActionsFaction {
                 && aUnCamp(monde, ChestBlock.getConnectedBlockPos(pos, etat));
     }
 
+    /** Un coffre d'un camp, ou la planque d'une cellule (G5.10). */
     private static boolean aUnCamp(Level monde, BlockPos pos) {
         BlockEntity bloc = monde.getBlockEntity(pos);
-        return bloc != null && bloc.getAttached(CAMP) != null;
+        return bloc != null && (bloc.getAttached(CAMP) != null || bloc.hasAttached(CelluleRising.PLANQUE));
     }
 
     public static int nombreObjets(Container coffre) {
@@ -238,8 +281,9 @@ public final class ActionsFaction {
     /**
      * Une explosion va détruire des blocs (G5.9) : leur contenu tombera marqué ({@code BlockEntityMixin}). Si elle détruit
      * un coffre d'un camp et qu'on remonte au joueur responsable, c'est un vol, une fois par camp, avec ses témoins.
-     * Le responsable : celui qui a allumé la TNT (ou tiré la flèche enflammée) ; pour un creeper, le joueur qu'il visait.
-     * Une TNT allumée par la redstone n'a pas de responsable.
+     * Le responsable : celui qui a allumé la TNT (ou tiré la flèche enflammée). Pas de responsable pour un creeper
+     * (un joueur poursuivi près d'un poste ne l'a pas voulu) ni pour une TNT allumée par la redstone : le contenu tombe
+     * marqué, ça suffit.
      */
     public static void explosion(ServerExplosion explosion, List<BlockPos> detruits) {
         ServerPlayer responsable = responsable(explosion);
@@ -259,14 +303,7 @@ public final class ActionsFaction {
     }
 
     private static @Nullable ServerPlayer responsable(ServerExplosion explosion) {
-        LivingEntity source = explosion.getIndirectSourceEntity();
-        if (source instanceof ServerPlayer joueur) {
-            return joueur;
-        }
-        if (source instanceof Creeper creeper && creeper.getTarget() instanceof ServerPlayer vise) {
-            return vise;
-        }
-        return null;
+        return explosion.getIndirectSourceEntity() instanceof ServerPlayer joueur ? joueur : null;
     }
 
     /** Applique une action selon ses témoins, et prévient le joueur s'il a été vu. */

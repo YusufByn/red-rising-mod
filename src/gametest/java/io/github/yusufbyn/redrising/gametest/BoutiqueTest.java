@@ -209,7 +209,7 @@ public class BoutiqueTest implements FabricClientGameTest {
         });
         monde.getServer().runCommand("rr boutique set " + pnj.getStringUUID() + " societe");
         jauges(monde, Acces.SEUIL_LOYAUTE_SOCIETE - 1, 0, 0);
-        monde.getServer().runCommand("tp @a 0.5 -60 1.5 " + regard("0.5 -60 1.5", pnj));
+        monde.getServer().runCommand("tp @a 0.5 -60 1.5 " + OutilsTest.regard("0.5 -60 1.5", pnj));
         context.waitTicks(5);
         context.getInput().pressKey(options -> options.keyUse);
         context.waitTicks(10);
@@ -327,7 +327,7 @@ public class BoutiqueTest implements FabricClientGameTest {
 
     /** Devant le marchand, regard sur ses yeux, un vrai clic droit : l'écran de commerce s'ouvre. */
     private static void ouvrir(TestSingleplayerContext monde, ClientGameTestContext context, Villager marchand, String position) {
-        monde.getServer().runCommand("tp @a " + position + " " + regard(position, marchand));
+        monde.getServer().runCommand("tp @a " + position + " " + OutilsTest.regard(position, marchand));
         context.waitTicks(5);
         context.getInput().pressKey(options -> options.keyUse);
         context.waitTicks(10);
@@ -336,17 +336,6 @@ public class BoutiqueTest implements FabricClientGameTest {
             OutilsTest.garderCapture(context.takeScreenshot("boutique-echec"));
             throw new AssertionError("Écran de commerce pas ouvert ; visé : " + vise);
         }
-    }
-
-    /** Lacet et tangage pour qu'un joueur debout en {@code position} regarde le torse du PNJ. */
-    private static String regard(String position, Villager pnj) {
-        String[] xyz = position.split(" ");
-        double dx = pnj.getX() - Double.parseDouble(xyz[0]);
-        double dy = pnj.getY() + 1.2 - (Double.parseDouble(xyz[1]) + 1.62);
-        double dz = pnj.getZ() - Double.parseDouble(xyz[2]);
-        double lacet = Math.toDegrees(Math.atan2(-dx, dz));
-        double tangage = -Math.toDegrees(Math.atan2(dy, Math.sqrt(dx * dx + dz * dz)));
-        return lacet + " " + tangage;
     }
 
     private static void fermer(TestSingleplayerContext monde, ClientGameTestContext context) {

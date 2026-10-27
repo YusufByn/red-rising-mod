@@ -86,6 +86,7 @@ Mod Fabric fan-made, solo, gratuit et non commercial, dans l'univers Red Rising 
 - Tests client : `tp ... facing entity <uuid> eyes` peut laisser le joueur regarder ailleurs ; calculer lacet et tangage soi-même (voir `BoutiqueTest.regard`).
 - Contenu d'un contenant détruit (toutes causes) : il tombe dans `BlockEntity.preRemoveSideEffects`, juste avant le retrait du bloc (voir `BlockEntityMixin`). Blocs qu'une explosion va détruire, avec son responsable (`getIndirectSourceEntity`) : `ServerExplosion.interactWithBlocks` (voir `ServerExplosionMixin`).
 - Pas de `getDayTime` sur `ServerLevel` en 26.2 (le temps passe par des « timelines ») : dans les tests, fixer l'heure par `/time set noon`.
+- Conclure qu'un PNJ a disparu (Fils d'une cellule...) : seulement si ses entités sont chargées (`ServerLevel.isPositionEntityTicking`), sinon on ne le voit pas alors qu'il est là.
 - Ce qu'un PNJ voit : toujours `monde/Vue.voit(pnj, joueur)` (murs et fumée), jamais `hasLineOfSight` directement.
 - Tests unitaires : une classe qui charge `Level` (`Level.RESOURCE_KEY_CODEC`, `Level.OVERWORLD`) plante sans Minecraft démarré. Pour un codec de dimension : `ResourceKey.codec(Registries.DIMENSION)`.
 - Tests client de traque : un chasseur téléporté loin sort des chunks chargés, il est oublié et la traque en fait apparaître un autre. Pour en garder un seul, tuer les autres (un chasseur tué n'est remplacé que par les renforts).
