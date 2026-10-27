@@ -67,7 +67,7 @@ public final class CelluleRising {
      * @param interieur la salle (sans les murs)
      * @param entree    moitié basse de l'entrée cachée (l'autre moitié est au-dessus)
      * @param versSalle direction de la salle vue de l'entrée, depuis dehors
-     * @param reperee   un chasseur a vu un joueur traqué y entrer (G5.6) ; ce qu'il en advient relève de G5.9
+     * @param reperee   un chasseur a vu un joueur traqué y entrer (G5.6) ; ce qu'il en advient relève de G5.10
      */
     public record Cellule(BoundingBox interieur, BlockPos entree, Direction versSalle, boolean reperee) {
         public static final Codec<Cellule> CODEC = RecordCodecBuilder.create(instance -> instance.group(

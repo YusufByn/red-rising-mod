@@ -304,8 +304,8 @@ Deux jauges séparées (pas une barre Société ↔ Rising) pour permettre **l'a
 - ✅ **Entrée cachée** : deux blocs de pierre ordinaires (vanilla, même F3 n'y voit que de la pierre) dans le mur. Accroupi, main vide, clic droit : un joueur admis passe dans la salle. Un joueur refusé n'apprend rien : il ne se passe rien, comme sur n'importe quelle pierre (pas de message, pas de son).
 - ✅ **Repère** : quelques particules rouges sur l'entrée toutes les 2 secondes, envoyées par le serveur aux seuls joueurs admis à moins de 12 blocs.
 - ✅ **Sortie** : même geste depuis l'intérieur, quel que soit le Soutien. **Intérieur surveillé** : un joueur refusé dans la salle (Soutien tombé une fois dedans, mur percé) est mis devant l'entrée, avec le message « Le Rising te met dehors » (il connaît déjà la cellule).
-- ✅ **Trouver une cellule en creusant est permis** : on en fera du contenu avec la dénonciation d'une cellule (G5.9), la traque (G5.6) et le Triomphe.
-- 🟡 **Dénoncer une cellule (G5.9, esquisse)** : une cellule où le joueur est entré au moins une fois (par l'entrée ou en creusant) lui est connue. Même geste que dénoncer un PNJ (accroupi, main vide, clic droit sur un Gris) : si une cellule connue est à moins de 32 blocs du Gris, c'est elle qui est dénoncée, sinon le PNJ du Rising le plus proche. La cellule tombe : ses PNJ sont arrêtés, son coffre saisi (vidé, sans camp), elle sort de la liste. Jauges : +10 / −25 / −10.
+- ✅ **Trouver une cellule en creusant est permis** : on en fera du contenu avec la dénonciation d'une cellule (G5.10), la traque (G5.6) et le Triomphe.
+- 🟡 **Dénoncer une cellule (G5.10, esquisse)** : une cellule où le joueur est entré au moins une fois (par l'entrée ou en creusant) lui est connue. Même geste que dénoncer un PNJ (accroupi, main vide, clic droit sur un Gris) : si une cellule connue est à moins de 32 blocs du Gris, c'est elle qui est dénoncée, sinon le PNJ du Rising le plus proche. La cellule tombe : ses PNJ sont arrêtés, son coffre saisi (vidé, sans camp), elle sort de la liste. Jauges : +10 / −25 / −10.
 - ✅ **Entonnoirs** : un entonnoir (posé ou sur wagonnet) ne vide pas un coffre ou un tonneau d'un camp, ni un coffre double dont une moitié appartient à un camp. Il peut toujours le remplir (c'est un don).
 
 ### Traque (G5.6)
@@ -315,7 +315,7 @@ Deux jauges séparées (pas une barre Société ↔ Rising) pour permettre **l'a
 - ✅ **Tuer un chasseur** ne rapporte pas de Soutien (sinon la traque rapporte : −10 / 0 / +10 avec témoin ordinaire, et les autres chasseurs sont des Gris). Un chasseur tué n'est remplacé que par les renforts.
 - ✅ **Gagner** :
   - **semer les Gris** : 60 secondes de suite sans qu'aucun chasseur ne voie le joueur ;
-  - **se cacher dans une cellule du Rising** (si on y est admis) : sans être vu, victoire immédiate ; sous les yeux d'un chasseur, la cellule est **repérée** (ce qu'il en advient relève de G5.9) et la traque continue (les murs cachent le joueur, il peut y semer les Gris) ;
+  - **se cacher dans une cellule du Rising** (si on y est admis) : sans être vu, victoire immédiate ; sous les yeux d'un chasseur, la cellule est **repérée** (ce qu'il en advient relève de G5.10) et la traque continue (les murs cachent le joueur, il peut y semer les Gris) ;
   - **abandon au bout de 10 minutes** : victoire seulement si aucun chasseur ne voit le joueur à ce moment ; sinon les Gris se retirent sans que ce soit une victoire (un joueur perché, intouchable, ne gagne pas).
 - ✅ **Perdre : l'arrestation** — un chasseur au contact (2,5 blocs, en le voyant : pas à travers un mur) pendant 3 secondes de suite. L'arrêté est emmené devant le poste de la Société le plus proche (à moins de 500 blocs, sinon sur place) et **interrogé 30 secondes** : tenu sur place, ralenti, aveuglé, et **il ne peut ni subir de dégâts ni mourir**. Rien n'est perdu : ni objets, ni expérience, ni point de réapparition, et ce n'est pas une mort. Loyauté −15.
 - ✅ La traque et l'interrogatoire sont enregistrés sur le joueur : se déconnecter les met en pause, ils reprennent à son retour (de nouveaux chasseurs arrivent). Mourir pendant une traque ne l'arrête pas.
@@ -329,7 +329,7 @@ Deux jauges séparées (pas une barre Société ↔ Rising) pour permettre **l'a
 | Retrait des Gris (abandon, toujours vu) | 90 | aucun |
 | Arrêté | 50 | Loyauté −15, 30 s d'interrogatoire, emmené au poste |
 
-- Relèvent d'autres tickets : le sort d'une cellule repérée et ce que l'interrogatoire peut révéler (G5.9) ; les raids sur les cellules et des traques plus dures après certains jalons (G6.3, Triomphe G16.2) ; chasseurs partis des garnisons et prison (G8.1) ; fouille et objets volés confisqués (plus tard) ; traques entre joueurs (multijoueur, plus tard). Pour l'instant, les chasseurs apparaissent en surface (hauteur du terrain) : à revoir pour les mines (G7.2).
+- Relèvent d'autres tickets : le sort d'une cellule repérée et ce que l'interrogatoire peut révéler (G5.10) ; les raids sur les cellules et des traques plus dures après certains jalons (G6.3, Triomphe G16.2) ; chasseurs partis des garnisons et prison (G8.1) ; fouille et objets volés confisqués (plus tard) ; traques entre joueurs (multijoueur, plus tard). Pour l'instant, les chasseurs apparaissent en surface (hauteur du terrain) : à revoir pour les mines (G7.2).
 
 ### Conséquences
 - Loyauté haute : accès aux domaines, commerces, équipement de la Société (razor réservé aux Or).
@@ -414,11 +414,11 @@ PNJ qu'on peut **croiser et influencer**. Trois règles :
 - ✅ Équipement rebelle côté Rising : voir plus bas (G5.7).
 - Le razor est l'objet le plus technique (arme qui change de forme, hitbox custom).
 
-### Équipement rebelle (G5.7, décidé le 27/10)
+### Équipement rebelle (décidé le 27/10 en G5.7, code en G5.8)
 - ✅ **Principe** : les Fils d'Arès vivent cachés et ne tiennent pas un combat contre les Gris ; leur matériel est volé ou bricolé, pour frapper puis disparaître. Rien n'y est meilleur que l'équipement de la Société sur son terrain (dégâts, protection, déplacement) : il sert seulement à échapper aux Gris. Les objets portent le signe d'Arès (le casque à pointes solaires).
 - ✅ **Écarté exprès** : masque ou fausse identité (faux papiers du Cuivre), cape d'invisibilité (technologie d'Or, discrétion du Rose), armures et bottes (Orange), soins (Jaune), brouilleur de scanners (Vert), armes et explosifs (le jeu du Rising ne doit pas devenir un jeu de combat ; chevauchement avec les sangLames, encore ❓).
 - ✅ **Contrebande** (règle commune à tout objet rebelle) :
-  - l'objet est marqué « Contrebande du Rising » (dans sa description) ; il ne se fabrique pas, il ne vient que du Rising (boutique de la cellule, G5.8) ;
+  - l'objet est marqué « Contrebande du Rising » (dans sa description) ; il ne se fabrique pas, il ne vient que du Rising (boutique de la cellule, G5.9) ;
   - **tenu en main ou utilisé devant un Gris** (même règle que les témoins : 16 blocs, ligne de vue) : Suspicion +5, au plus une fois par minute ; les autres témoins ne le reconnaissent pas ;
   - **rangé dans l'inventaire** : invisible pour l'instant ; la fouille (plus tard) le confisquera, Suspicion +10 par objet trouvé ;
   - le coffre d'une cellule est une planque sûre (les entonnoirs ne le vident pas, la fouille ne s'y appliquera pas).

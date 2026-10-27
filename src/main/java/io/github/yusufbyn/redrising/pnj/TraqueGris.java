@@ -412,7 +412,7 @@ public final class TraqueGris {
 
     /**
      * Le joueur traqué entre dans une cellule du Rising ({@code CelluleRising}). Sans être vu : la traque est gagnée.
-     * Sous les yeux d'un chasseur : la cellule est repérée (G5.9), et la traque continue.
+     * Sous les yeux d'un chasseur : la cellule est repérée (G5.10), et la traque continue.
      */
     public static void entreDansCellule(ServerPlayer joueur, CelluleRising.Cellule cellule) {
         if (!joueur.hasAttached(TRAQUE)) {
