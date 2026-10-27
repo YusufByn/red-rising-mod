@@ -101,6 +101,11 @@ public class PnjCouleurTest implements FabricClientGameTest {
      * Témoin : un villageois ordinaire sans métier, avec le même poste à côté, doit le prendre (sinon le test ne prouve rien).
      */
     private static void postesDeTravail(TestSingleplayerContext monde) {
+        // Rien ne doit déranger le témoin pendant qu'il va à son poste : pas de monstres (un zombie le fait fuir ou le tue,
+        // échec aléatoire vu le 27/10), plein jour, joueur tout près (la zone est chargée et simulée)
+        monde.getServer().runCommand("difficulty peaceful");
+        monde.getServer().runCommand("time set noon");
+        monde.getServer().runCommand("tp @a -26.5 -60 -4.5");
         Couleur[] sansMetier = {Couleur.OR, Couleur.ROSE};
         int[] temoin = monde.getServer().computeOnServer(server -> {
             ServerLevel niveau = server.overworld();
@@ -130,13 +135,14 @@ public class PnjCouleurTest implements FabricClientGameTest {
         } catch (AssertionError e) {
             String etat = monde.getServer().computeOnServer(server -> {
                 StringBuilder texte = new StringBuilder();
-                for (Villager v : server.overworld().getEntities(EntityTypes.VILLAGER, v -> v.getZ() < -5 && v.getX() < -10)) {
+                texte.append("\n  jour ").append(server.overworld().isBrightOutside()).append(", difficulté ").append(server.overworld().getDifficulty());
+                for (Villager v : server.overworld().getEntities(EntityTypes.VILLAGER, v -> true)) {
                     texte.append("\n  ").append(v.getId() == temoin[0] ? "témoin" : PnjCouleur.couleur(v))
                             .append(" en ").append(v.blockPosition().toShortString())
                             .append(" : ").append(v.getVillagerData().profession().getRegisteredName())
                             .append(", job ").append(v.getBrain().getMemoryInternal(MemoryModuleType.JOB_SITE))
                             .append(", potentiel ").append(v.getBrain().getMemoryInternal(MemoryModuleType.POTENTIAL_JOB_SITE))
-                            .append(", IA ").append(!v.isNoAi());
+                            .append(", IA ").append(!v.isNoAi()).append(", vivant ").append(v.isAlive());
                 }
                 return texte.toString();
             });

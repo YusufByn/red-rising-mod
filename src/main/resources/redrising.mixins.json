@@ -5,7 +5,9 @@
   "mixins": [
     "ChestMenuMixin",
     "HopperBlockEntityMixin",
-    "CraftingMenuMixin"
+    "CraftingMenuMixin",
+    "BlockEntityMixin",
+    "ServerExplosionMixin"
   ],
   "injectors": {
     "defaultRequire": 1

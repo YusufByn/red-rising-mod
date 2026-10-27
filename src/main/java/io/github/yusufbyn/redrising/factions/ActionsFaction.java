@@ -23,10 +23,13 @@ import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityTypes;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.monster.Creeper;
 import net.minecraft.world.entity.npc.villager.Villager;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.ServerExplosion;
 import net.minecraft.world.level.block.ChestBlock;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
@@ -34,8 +37,11 @@ import net.minecraft.world.level.block.state.properties.ChestType;
 import org.jspecify.annotations.Nullable;
 
 import java.util.Comparator;
+import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -113,13 +119,6 @@ public final class ActionsFaction {
             return InteractionResult.PASS;
         });
 
-        // Casser un coffre d'un camp : son contenu tombe marqué volé (G5.9), avant la casse (il tombe pendant)
-        PlayerBlockBreakEvents.BEFORE.register((monde, joueur, pos, etat, bloc) -> {
-            if (bloc instanceof Container coffre && bloc.getAttached(CAMP) instanceof Camp camp && !monde.isClientSide()) {
-                Boutiques.marquerVoles(coffre, camp);
-            }
-            return true;
-        });
         PlayerBlockBreakEvents.AFTER.register((monde, joueur, pos, etat, bloc) -> {
             Camp camp = bloc == null ? null : bloc.getAttached(CAMP);
             if (camp != null && joueur instanceof ServerPlayer serveur) {
@@ -234,6 +233,40 @@ public final class ActionsFaction {
             temoin = Temoin.ORDINAIRE;
         }
         return temoin;
+    }
+
+    /**
+     * Une explosion va détruire des blocs (G5.9) : leur contenu tombera marqué ({@code BlockEntityMixin}). Si elle détruit
+     * un coffre d'un camp et qu'on remonte au joueur responsable, c'est un vol, une fois par camp, avec ses témoins.
+     * Le responsable : celui qui a allumé la TNT (ou tiré la flèche enflammée) ; pour un creeper, le joueur qu'il visait.
+     * Une TNT allumée par la redstone n'a pas de responsable.
+     */
+    public static void explosion(ServerExplosion explosion, List<BlockPos> detruits) {
+        ServerPlayer responsable = responsable(explosion);
+        if (responsable == null) {
+            return;
+        }
+        Set<Camp> voles = EnumSet.noneOf(Camp.class);
+        for (BlockPos pos : detruits) {
+            if (explosion.level().getBlockEntity(pos) instanceof Container coffre && coffre instanceof BlockEntity bloc
+                    && bloc.getAttached(CAMP) instanceof Camp camp) {
+                voles.add(camp);
+            }
+        }
+        for (Camp camp : voles) {
+            agirDevantTemoins(responsable, "fait sauter un coffre " + camp.getSerializedName(), EffetsActions.voler(camp), null);
+        }
+    }
+
+    private static @Nullable ServerPlayer responsable(ServerExplosion explosion) {
+        LivingEntity source = explosion.getIndirectSourceEntity();
+        if (source instanceof ServerPlayer joueur) {
+            return joueur;
+        }
+        if (source instanceof Creeper creeper && creeper.getTarget() instanceof ServerPlayer vise) {
+            return vise;
+        }
+        return null;
     }
 
     /** Applique une action selon ses témoins, et prévient le joueur s'il a été vu. */

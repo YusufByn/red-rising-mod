@@ -24,12 +24,15 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.EntityTypes;
+import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.entity.item.PrimedTnt;
 import net.minecraft.world.entity.npc.villager.Villager;
 import net.minecraft.world.inventory.MerchantMenu;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.trading.MerchantOffer;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
 import net.minecraft.world.level.storage.ServerLevelData;
 import net.minecraft.world.phys.AABB;
@@ -43,7 +46,8 @@ import java.util.Objects;
  * G5.9 : chaque camp a une boutique conditionnelle. Commerce ouvert par de vrais clics ; les échanges eux-mêmes passent
  * par le menu de commerce côté serveur (le même chemin qu'un clic dans l'écran). Paliers de la Société (40, 60),
  * vente plafonnée par jour puis rouverte le lendemain, achat, objet volé refusé, refus hors palier, modificateur de prix,
- * stock du Rising, et aucune jauge qui bouge en commerçant.
+ * stock du Rising, et aucune jauge qui bouge en commerçant. Coffre d'un camp détruit par une TNT : contenu marqué, vol compté
+ * si le joueur l'a allumée.
  */
 public class BoutiqueTest implements FabricClientGameTest {
     /** Coin du poste : commis en (23.5, -60, -36.5), derrière le comptoir ; coffre de la Société en (25, -60, -35). */
@@ -64,6 +68,7 @@ public class BoutiqueTest implements FabricClientGameTest {
 
             societe(monde, context);
             refus(monde, context);
+            explosion(monde);
             rising(monde, context);
         }
         RedRising.LOGGER.info("[G5.9] OK : chaque camp a une boutique conditionnelle");
@@ -215,6 +220,65 @@ public class BoutiqueTest implements FabricClientGameTest {
         verifierMessage(context, "sous le seuil", "boutique.redrising.refus.societe");
         monde.getServer().runOnServer(server -> pnj.discard());
         RedRising.LOGGER.info("[G5.9] Sous le seuil : la Société refuse de commercer");
+    }
+
+    // --- Explosion d'un coffre d'un camp ---
+
+    /**
+     * Un coffre de la Société isolé (aucun PNJ que l'explosion tuerait) : une TNT allumée par le joueur le détruit. Son
+     * contenu tombe marqué, et c'est un vol (sans témoin ici). Une TNT sans responsable (allumée par la redstone) : contenu
+     * marqué, aucun vol.
+     */
+    private static void explosion(TestSingleplayerContext monde) {
+        monde.getServer().runCommand("tp @a 40.5 -60 -15.5");
+        jauges(monde, 50, 0, 0);
+        BlockPos coffre = new BlockPos(40, -60, 0);
+        BlockPos autreCoffre = new BlockPos(60, -60, 0);
+        for (BlockPos pos : List.of(coffre, autreCoffre)) {
+            monde.getServer().runCommand("setblock " + pos.getX() + " " + pos.getY() + " " + pos.getZ() + " minecraft:chest");
+            monde.getServer().runCommand("rr coffre set " + pos.getX() + " " + pos.getY() + " " + pos.getZ() + " societe");
+            monde.getServer().runOnServer(server -> ((ChestBlockEntity) Objects.requireNonNull(server.overworld().getBlockEntity(pos)))
+                    .setItem(0, new ItemStack(Items.COAL, 8)));
+        }
+
+        // Allumée par le joueur
+        monde.getServer().runOnServer(server -> {
+            PrimedTnt tnt = new PrimedTnt(server.overworld(), 41.5, -60, 0.5, OutilsTest.joueur(server));
+            tnt.setFuse(10);
+            server.overworld().addFreshEntity(tnt);
+        });
+        monde.getServer().waitFor(server -> !server.overworld().getBlockState(coffre).is(Blocks.CHEST), 60);
+        verifierCharbonTombe(monde, coffre, "TNT du joueur");
+        // Sans témoin : Suspicion à moitié, pas de Loyauté perdue, le Soutien du vol à la Société
+        verifierJauges(monde, "coffre de la Société détruit par la TNT du joueur", new Jauges(50, 2, 3));
+        RedRising.LOGGER.info("[G5.9] Coffre de la Société détruit par la TNT du joueur : contenu marqué, vol compté");
+
+        // Sans responsable
+        monde.getServer().runOnServer(server -> {
+            PrimedTnt tnt = new PrimedTnt(server.overworld(), 61.5, -60, 0.5, null);
+            tnt.setFuse(10);
+            server.overworld().addFreshEntity(tnt);
+        });
+        monde.getServer().waitFor(server -> !server.overworld().getBlockState(autreCoffre).is(Blocks.CHEST), 60);
+        verifierCharbonTombe(monde, autreCoffre, "TNT sans responsable");
+        verifierJauges(monde, "coffre détruit par une TNT sans responsable", new Jauges(50, 2, 3));
+        RedRising.LOGGER.info("[G5.9] Coffre détruit par une TNT sans responsable : contenu marqué, aucun vol");
+        jauges(monde, 50, 0, 0);
+    }
+
+    /** Le charbon du coffre est tombé au sol, marqué « Volé à la Société ». */
+    private static void verifierCharbonTombe(TestSingleplayerContext monde, BlockPos coffre, String cas) {
+        monde.getServer().waitFor(server -> !charbonTombe(server, coffre).isEmpty(), 20);
+        boolean marque = monde.getServer().computeOnServer(server ->
+                charbonTombe(server, coffre).stream().allMatch(objet -> Boutiques.voleA(objet.getItem()) == Camp.SOCIETE));
+        if (!marque) {
+            throw new AssertionError(cas + " : le charbon du coffre est tombé sans la marque « Volé à la Société »");
+        }
+        monde.getServer().runOnServer(server -> charbonTombe(server, coffre).forEach(ItemEntity::discard));
+    }
+
+    private static List<ItemEntity> charbonTombe(MinecraftServer server, BlockPos coffre) {
+        return server.overworld().getEntities(EntityTypes.ITEM, new AABB(coffre).inflate(8), objet -> objet.getItem().is(Items.COAL));
     }
 
     // --- Rising ---

@@ -341,7 +341,8 @@ Deux jauges séparées (pas une barre Société ↔ Rising) pour permettre **l'a
 - ✅ **Pas de boucle d'argent infini** :
   - la Société n'achète que de la production brute et ne vend que des produits finis : aucun objet n'est sur les deux listes ;
   - le Rising ne paie jamais en crédits : rien ne revient vers la Société ;
-  - **objets volés marqués** : tout ce qui est dans un coffre d'un camp porte la marque « Volé à la Société » (ou « au Rising ») dès qu'on l'ouvre ou qu'on le casse, et **chaque camp refuse ses propres biens volés**. Un objet volé ne s'empile plus avec les autres (la fouille le retrouvera) ;
+  - **objets volés marqués** : tout ce qui est dans un coffre d'un camp porte la marque « Volé à la Société » (ou « au Rising ») dès qu'on l'ouvre, et ce qui tombe d'un coffre d'un camp détruit, quelle qu'en soit la cause (casse, explosion, commande). **Chaque camp refuse ses propres biens volés**.
+  - **Explosion** (correction du 27/10) : faire sauter un coffre d'un camp est un vol, une fois par explosion et par camp, avec les témoins habituels, quand on remonte au joueur responsable : celui qui a allumé la TNT (ou tiré la flèche enflammée) ; pour un creeper, le joueur qu'il visait. Une TNT allumée par la redstone n'a pas de responsable : contenu marqué, pas de vol. Un objet volé ne s'empile plus avec les autres (la fouille le retrouvera) ;
   - la Société n'achète jamais de contrebande.
 - 🟡 **Catalogue** (valeurs dans `factions/Catalogue`, seuils dans `factions/Acces`) :
 
@@ -369,7 +370,6 @@ Deux jauges séparées (pas une barre Société ↔ Rising) pour permettre **l'a
 - ✅ **Quand la cellule tombe (G5.10)** : sa boutique disparaît avec son PNJ arrêté ; ce que le joueur y a acheté lui reste (sauf une fouille future). Les autres cellules gardent leur boutique.
 - ❓ **Limites connues, à revoir avec la fouille** :
   - **Blanchiment par craft** : un objet volé passé dans un craft réversible (charbon ↔ bloc de charbon, fer ↔ bloc de fer, blé ↔ botte de foin) perd sa marque, et la Société le rachète. Non corrigé.
-  - Un coffre d'un camp détruit par une explosion laisse tomber son contenu sans marque.
   - Les autres PNJ de Couleur gardent leurs échanges de Minecraft, sans réapprovisionnement faute de poste de travail.
   - Côté écran : le client ne connaît pas la marque des boutiques ; un objet volé posé en paiement peut montrer un résultat que le serveur refuse au clic.
 
