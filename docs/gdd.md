@@ -291,7 +291,7 @@ Deux jauges séparées (pas une barre Société ↔ Rising) pour permettre **l'a
   - **Se déconnecter** pendant un contrôle (ou passer un portail) compte comme une fuite (correction du 27/10). La fuite d'un joueur déconnecté est comptée à son retour. Mourir pendant un contrôle l'annule, sans effet.
   - Attaquer le Gris : c'est « tuer un PNJ de l'ordre », avec un Gris témoin.
 - 🟡 Distances et durées dans `factions/Controle`, effets dans `EffetsActions`.
-- Pour plus tard : une fouille qui trouverait les objets volés (marqués à la sortie d'un coffre de la Société).
+- Pour plus tard : une fouille qui trouverait les objets volés (marqués à la sortie d'un coffre de la Société) et la contrebande du Rising (section 9).
 
 ### Poste de la Société (G5.3)
 - ✅ Structure générique : une salle en quartz (7×7) avec un comptoir, un PNJ Cuivre (camp Société) et un coffre de la Société. Construite par `/rr structure poste` en attendant la génération (G7.1).
@@ -411,8 +411,23 @@ PNJ qu'on peut **croiser et influencer**. Trois règles :
 - ✅ gravBoots et armures craftés par l'Orange.
 - ❓ Qui peut utiliser gravBoots et armures.
 - ❓ sangLames : Couleur(s) associée(s), fonctionnement.
-- ❓ Équipement rebelle côté Rising.
+- ✅ Équipement rebelle côté Rising : voir plus bas (G5.7).
 - Le razor est l'objet le plus technique (arme qui change de forme, hitbox custom).
+
+### Équipement rebelle (G5.7, décidé le 27/10)
+- ✅ **Principe** : les Fils d'Arès vivent cachés et ne tiennent pas un combat contre les Gris ; leur matériel est volé ou bricolé, pour frapper puis disparaître. Rien n'y est meilleur que l'équipement de la Société sur son terrain (dégâts, protection, déplacement) : il sert seulement à échapper aux Gris. Les objets portent le signe d'Arès (le casque à pointes solaires).
+- ✅ **Écarté exprès** : masque ou fausse identité (faux papiers du Cuivre), cape d'invisibilité (technologie d'Or, discrétion du Rose), armures et bottes (Orange), soins (Jaune), brouilleur de scanners (Vert), armes et explosifs (le jeu du Rising ne doit pas devenir un jeu de combat ; chevauchement avec les sangLames, encore ❓).
+- ✅ **Contrebande** (règle commune à tout objet rebelle) :
+  - l'objet est marqué « Contrebande du Rising » (dans sa description) ; il ne se fabrique pas, il ne vient que du Rising (boutique de la cellule, G5.8) ;
+  - **tenu en main ou utilisé devant un Gris** (même règle que les témoins : 16 blocs, ligne de vue) : Suspicion +5, au plus une fois par minute ; les autres témoins ne le reconnaissent pas ;
+  - **rangé dans l'inventaire** : invisible pour l'instant ; la fouille (plus tard) le confisquera, Suspicion +10 par objet trouvé ;
+  - le coffre d'une cellule est une planque sûre (les entonnoirs ne le vident pas, la fouille ne s'y appliquera pas).
+- ✅ **Fumigène** (🟡 Soutien 20, le seuil d'entrée d'une cellule) : grenade à fumée, lancée, à usage unique. Nuage d'environ 5 blocs pendant 10 secondes, qui coupe la ligne de vue des PNJ au travers : un chasseur perd le joueur (il fouille autour de sa dernière position connue), le témoin d'un vol ne voit rien. Lancé devant un Gris, c'est de la contrebande (sans effet de plus pendant une traque, la Suspicion y est déjà au maximum).
+- ✅ **Chausse-trappes** (🟡 Soutien 40) : bloc de ferraille bas, posé au sol, discret. Un PNJ ou un joueur qui marche dessus (le poseur compris) est ralenti 3 secondes, et la chausse-trappe **disparaît** une fois déclenchée. Un Gris qui s'y prend fouille autour du piège : il sait qu'un rebelle est passé. **Au plus 3 posées par joueur** : en poser une quatrième fait disparaître la plus ancienne (on ne tapisse pas les abords d'une cellule). Le poseur peut reprendre la sienne en la cassant ; cassée par un autre, elle est perdue.
+- 🟡 Valeurs (seuils, durées, rayon du nuage, nombre de chausse-trappes, Suspicion de la contrebande) à régler en jeu, chacune à un seul endroit du code.
+- **Pistes pour plus tard** (non décidées) :
+  - **Insigne d'Arès**, avec la fouille : gardé dans l'inventaire, les témoins du peuple couvrent le joueur (ils comptent comme « aucun témoin ») et le repère des cellules se voit de plus loin ; preuve d'appartenance, il coûterait cher à une fouille (Suspicion +25). À surveiller : proche de l'effet des faux papiers du Cuivre.
+  - **Appel aux Fils**, avec le soutien armé : à usage unique, deux PNJ Rouges du Rising viennent se battre 60 secondes ; une fois par jour de jeu, Soutien −5 si l'un d'eux est tué ou arrêté. Demande des PNJ alliés qui combattent.
 
 ---
 
@@ -451,7 +466,7 @@ PNJ qu'on peut **croiser et influencer**. Trois règles :
 - [ ] Durée de l'Institut (promotion précédente) et moment du jalon Darrow
 - [ ] Ce qu'un PNJ Sculpté par un Violet apporte concrètement
 - [ ] Comportement exact des PNJ Roses
-- [ ] Équipement : accès gravBoots / armures, sangLames, équipement rebelle
+- [ ] Équipement : accès gravBoots / armures, sangLames (équipement rebelle tranché en G5.7)
 - [ ] Luna : contenu et moment d'accès
 - [ ] Reformulation des 7 questions du test (sans toucher aux paires)
 - [ ] Vérifier en jeu que Cuivre et Marron sont fun
