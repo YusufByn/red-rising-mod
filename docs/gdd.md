@@ -320,6 +320,7 @@ Deux jauges séparées (pas une barre Société ↔ Rising) pour permettre **l'a
 - ✅ **Perdre : l'arrestation** — un chasseur au contact (2,5 blocs, en le voyant : pas à travers un mur) pendant 3 secondes de suite. L'arrêté est emmené devant le poste de la Société le plus proche (à moins de 500 blocs, sinon sur place) et **interrogé 30 secondes** : tenu sur place, ralenti, aveuglé, et **il ne peut ni subir de dégâts ni mourir**. Rien n'est perdu : ni objets, ni expérience, ni point de réapparition, et ce n'est pas une mort. Loyauté −15.
 - ✅ La traque et l'interrogatoire sont enregistrés sur le joueur : se déconnecter les met en pause, ils reprennent à son retour (de nouveaux chasseurs arrivent). Mourir pendant une traque ne l'arrête pas.
 - 🟡 Valeurs (toutes dans `factions/Traque`, sauf la Loyauté de l'arrestation dans `EffetsActions`) : 3 chasseurs, un renfort par minute jusqu'à 6 ; vue 48 blocs ; tir à 20 blocs toutes les 2 secondes, ralentissement de 2 secondes ; semer en 60 secondes ; abandon à 10 minutes ; interrogatoire de 30 secondes.
+- ❓ **Point ouvert, à régler en jouant** : une flèche toutes les 2 secondes et 2 secondes de ralentissement peuvent tenir le joueur ralenti sans interruption (surtout à plusieurs chasseurs). Pistes : une immunité courte après un ralentissement, ou des tirs seulement quand le joueur est hors d'atteinte (perché, de l'autre côté d'un obstacle).
 - 🟡 **Suspicion après la traque** (tous restent au palier de contrôle) :
 
 | Issue | Suspicion | Autres effets |
