@@ -1,7 +1,7 @@
-"""Dessine les textures provisoires des objets rebelles (G5.8) : le fumigène et la chausse-trappe.
+"""Dessine les textures provisoires des objets du mod : fumigène et chausse-trappe (G5.8), crédit de la Société (G5.9).
 
-À lancer depuis la racine du projet :  python3 outils/objets_rebelles.py  (demande Pillow).
-Écrit textures/item/fumigene.png et textures/block/chausse_trappe.png (16x16). Les pixels transparents de la
+À lancer depuis la racine du projet :  python3 outils/objets.py  (demande Pillow).
+Écrit textures/item/fumigene.png, textures/item/credit.png et textures/block/chausse_trappe.png (16x16). Les pixels transparents de la
 chausse-trappe laissent voir le sol : Minecraft la dessine alors en « cutout », sans rien à déclarer.
 """
 from pathlib import Path
@@ -68,7 +68,27 @@ def chausse_trappe():
     return image
 
 
+def credit():
+    """Pièce dorée cerclée de sombre, frappée de la pyramide de la Société (les Couleurs, de l'Or au sommet)."""
+    image = Image.new("RGBA", (16, 16), VIDE)
+    p = image.load()
+    bord, or_, or_clair, grave = teinte("6e4a12"), teinte("e0b030"), teinte("f6dc78"), teinte("a87818")
+    for y in range(16):
+        for x in range(16):
+            d = ((x - 7.5) ** 2 + (y - 7.5) ** 2) ** 0.5
+            if d <= 6.6:
+                p[x, y] = bord if d > 5.6 else or_
+    for x, y in ((5, 4), (4, 5), (4, 6), (5, 3), (6, 3)):
+        p[x, y] = or_clair
+    # Pyramide gravée : trois marches
+    for y, (debut, fin) in zip(range(5, 11), ((7, 8), (7, 8), (6, 9), (6, 9), (5, 10), (5, 10))):
+        for x in range(debut, fin + 1):
+            p[x, y] = grave
+    return image
+
+
 if __name__ == "__main__":
     fumigene().save(TEXTURES / "item/fumigene.png")
     chausse_trappe().save(TEXTURES / "block/chausse_trappe.png")
+    credit().save(TEXTURES / "item/credit.png")
     print("Textures écrites dans", TEXTURES)

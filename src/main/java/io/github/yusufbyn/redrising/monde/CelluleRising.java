@@ -6,6 +6,8 @@ import io.github.yusufbyn.redrising.RedRising;
 import io.github.yusufbyn.redrising.couleur.Couleur;
 import io.github.yusufbyn.redrising.factions.Acces;
 import io.github.yusufbyn.redrising.factions.ActionsFaction;
+import io.github.yusufbyn.redrising.factions.Boutique;
+import io.github.yusufbyn.redrising.factions.Boutiques;
 import io.github.yusufbyn.redrising.factions.Camp;
 import io.github.yusufbyn.redrising.factions.JaugesJoueur;
 import io.github.yusufbyn.redrising.pnj.PnjCouleur;
@@ -262,6 +264,7 @@ public final class CelluleRising {
                 versSalle.getOpposite().toYRot(), Couleur.ROUGE);
         if (fils != null) {
             fils.setAttached(ActionsFaction.CAMP, Camp.RISING);
+            fils.setAttached(Boutiques.BOUTIQUE, Boutique.RISING);
             fils.setNoAi(true);
         }
 

@@ -38,7 +38,8 @@ Code commun dans `src/main`, code client uniquement (HUD, écrans, rendu) dans `
 - `R` (modifiable, catégorie « Red Rising ») : capacité active de sa Couleur.
 - Accroupi + clic droit sur un PNJ de Couleur avec de la nourriture : l'aider. À mains vides sur un PNJ Gris : dénoncer le PNJ du Rising le plus proche.
 - Accroupi + clic droit à main vide sur l'entrée cachée d'une cellule du Rising (repérée par des particules rouges, visibles à partir de 20 de Soutien) : entrer, puis sortir de la même façon.
-- Objets rebelles (G5.8) : fumigène (clic droit pour le lancer : nuage de fumée de 10 s qui coupe la vue des PNJ), chausse-trappe (se pose comme un bloc ; 3 par joueur au plus, la casser rend la sienne). Pas de recette : `/give @s redrising:fumigene` ou `redrising:chausse_trappe`, ou l'onglet « Red Rising » de l'inventaire créatif, en attendant la boutique du Rising (G5.9).
+- Clic droit (debout) sur le commis Cuivre d'un poste ou le Fils d'une cellule : leur boutique (G5.9), en crédits pour la Société, en troc pour le Rising, selon son palier de Loyauté ou de Soutien.
+- Objets rebelles (G5.8) : fumigène (clic droit pour le lancer : nuage de fumée de 10 s qui coupe la vue des PNJ), chausse-trappe (se pose comme un bloc ; 3 par joueur au plus, la casser rend la sienne). Pas de recette : la boutique du Rising, ou `/give @s redrising:fumigene` (`redrising:chausse_trappe`, `redrising:credit`), ou l'onglet « Red Rising » de l'inventaire créatif.
 - Options > Personnalisation du skin > « Cheveux de Couleur » : affiche ou non les cheveux teintés (réglage client, `config/redrising-client.properties`).
 
 ## Commandes de debug
@@ -53,6 +54,7 @@ Réservées aux ops (ou à la triche activée en solo). `[joueur]` est optionnel
 - `/rr patrouille creer <pos1> <pos2> [pos3] [pos4]` (un PNJ Gris qui fait la ronde entre ces points), `/rr patrouille get <pnj>` (ronde, contrôle en cours, fouille autour d'une chausse-trappe), `/rr patrouille clear <pnj>`
 - `/rr controle get [joueur]` (dernier contrôle subi, dernier jour où un contrôle obéi a fait baisser la Suspicion), `/rr controle reset [joueur]`
 - `/rr traque get [joueur]`, `/rr traque start [joueur]` (Suspicion au maximum et traque tout de suite), `/rr traque stop [joueur]` (fin de la traque ou de l'interrogatoire, Suspicion à 90), `/rr traque arreter [joueur]` (arrestation et interrogatoire tout de suite)
+- `/rr boutique get <pnj>`, `/rr boutique set <pnj> <societe|rising|aucune>` (PNJ qui tient une boutique), `/rr boutique achats get|reset [joueur]` (échanges du jour : stock et plafond)
 - `/rr fumee <pos>` (nuage de fumée sans rien lancer), `/rr fumee list`, `/rr fumee clear` (nuages du monde où l'on est)
 - `/rr chausse_trappes list [joueur]`, `/rr chausse_trappes clear [joueur]` (sans joueur : toutes)
 - `/rr contrebande get [joueur]` (dernier repérage par un Gris), `/rr contrebande reset [joueur]`
@@ -64,7 +66,7 @@ Réservées aux ops (ou à la triche activée en solo). `[joueur]` est optionnel
 
 - `outils/marque_couleur.py` : régénère les textures de l'apparence par Couleur (mains, yeux, cheveux), pour les joueurs et les PNJ.
 - `outils/planche_couleurs.py` : après `./gradlew runClientGameTest`, assemble les captures des 14 Couleurs en une planche (`build/captures-gametest/planche-couleurs.png`).
-- `outils/objets_rebelles.py` : redessine les textures provisoires du fumigène et de la chausse-trappe.
+- `outils/objets.py` : redessine les textures provisoires des objets du mod (fumigène, chausse-trappe, crédit).
 - Les trois demandent Pillow (`pip3 install pillow`).
 
 ## Tests

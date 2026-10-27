@@ -75,6 +75,7 @@ public final class ObjetsRebelles {
                 .displayItems((parametres, sortie) -> {
                     sortie.accept(FUMIGENE);
                     sortie.accept(CHAUSSE_TRAPPE_OBJET);
+                    sortie.accept(Boutiques.CREDIT);
                 })
                 .build());
     }

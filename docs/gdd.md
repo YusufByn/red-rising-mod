@@ -291,7 +291,7 @@ Deux jauges séparées (pas une barre Société ↔ Rising) pour permettre **l'a
   - **Se déconnecter** pendant un contrôle (ou passer un portail) compte comme une fuite (correction du 27/10). La fuite d'un joueur déconnecté est comptée à son retour. Mourir pendant un contrôle l'annule, sans effet.
   - Attaquer le Gris : c'est « tuer un PNJ de l'ordre », avec un Gris témoin.
 - 🟡 Distances et durées dans `factions/Controle`, effets dans `EffetsActions`.
-- Pour plus tard : une fouille qui trouverait les objets volés (marqués à la sortie d'un coffre de la Société) et la contrebande du Rising (section 9).
+- Pour plus tard : une fouille qui trouverait les objets volés (marqués depuis G5.9, voir Commerce) et la contrebande du Rising (section 9).
 
 ### Poste de la Société (G5.3)
 - ✅ Structure générique : une salle en quartz (7×7) avec un comptoir, un PNJ Cuivre (camp Société) et un coffre de la Société. Construite par `/rr structure poste` en attendant la génération (G7.1).
@@ -330,6 +330,48 @@ Deux jauges séparées (pas une barre Société ↔ Rising) pour permettre **l'a
 | Arrêté | 50 | Loyauté −15, 30 s d'interrogatoire, emmené au poste |
 
 - Relèvent d'autres tickets : le sort d'une cellule repérée et ce que l'interrogatoire peut révéler (G5.10) ; les raids sur les cellules et des traques plus dures après certains jalons (G6.3, Triomphe G16.2) ; chasseurs partis des garnisons et prison (G8.1) ; fouille et objets volés confisqués (plus tard) ; traques entre joueurs (multijoueur, plus tard). Pour l'instant, les chasseurs apparaissent en surface (hauteur du terrain) : à revoir pour les mines (G7.2).
+
+### Commerce (G5.9, décidé le 27/10)
+- ✅ **Monnaie** : la Société paie et vend en **crédits** (objet du mod, la monnaie du lore ; elle seule en donne). Le **Rising ne prend pas d'argent** : il troque contre ce qui manque aux mines (poudre, fer, silex). Écartés : les émeraudes de Minecraft (villageois ordinaires et fermes à émeraudes rendraient les prix dérisoires, et un Rising qui prend de l'argent sonne faux), le troc partout (chaînes d'échanges impossibles à équilibrer, rien à gérer pour l'Argent).
+- ✅ **Qui vend** : le commis Cuivre du poste et le Fils Rouge de la cellule (marqués « boutique » à la construction ; `/rr boutique set` pour les mondes déjà construits). Clic droit normal : l'écran de commerce de Minecraft ; accroupi, les gestes d'aide et de dénonciation ne changent pas.
+- ✅ **Offres refaites à chaque ouverture, pour ce joueur** : seulement les articles de son palier (les autres n'apparaissent pas, les paliers du Rising restent secrets), avec ses échanges du jour. Les échanges de métier du villageois (cartes du cartographe, argile du maçon) disparaissent pour ces deux PNJ ; les remises de Minecraft (réputation, villageois guéri, Héros du village) et l'expérience ne jouent pas.
+- ✅ **Stock et plafond par joueur et par jour de jeu**, sans poste de travail : un compteur d'échanges gardé sur le joueur, remis à zéro chaque jour. Il vaut aussi pour ce que la Société **achète** (sinon une ferme de blé donnerait des crédits sans limite).
+- ✅ **Accès** : le seuil de la structure (Loyauté 40, Soutien 20). Un joueur entré par effraction n'achète rien : « La Société ne commerce pas avec toi ».
+- ✅ **Acheter et vendre ne touchent jamais aux jauges** (sinon on achèterait de la Loyauté ou du Soutien). Donner au Rising contre un fumigène n'est pas de l'aide.
+- ✅ **Pas de boucle d'argent infini** :
+  - la Société n'achète que de la production brute et ne vend que des produits finis : aucun objet n'est sur les deux listes ;
+  - le Rising ne paie jamais en crédits : rien ne revient vers la Société ;
+  - **objets volés marqués** : tout ce qui est dans un coffre d'un camp porte la marque « Volé à la Société » (ou « au Rising ») dès qu'on l'ouvre ou qu'on le casse, et **chaque camp refuse ses propres biens volés**. Un objet volé ne s'empile plus avec les autres (la fouille le retrouvera) ;
+  - la Société n'achète jamais de contrebande.
+- 🟡 **Catalogue** (valeurs dans `factions/Catalogue`, seuils dans `factions/Acces`) :
+
+| Boutique | Palier | Article | Prix | Par jour |
+|---|---|---|---|---|
+| Société vend | Loyauté 40 | 3 pains | 1 crédit | 8 |
+| Société vend | Loyauté 40 | 8 torches | 1 crédit | 4 |
+| Société vend | Loyauté 40 | carte vierge | 2 crédits | 2 |
+| Société vend | Loyauté 60 | pioche en fer, épée en fer | 6 crédits | 1 chacune |
+| Société vend | Loyauté 60 | plastron en fer | 10 crédits | 1 |
+| Société vend | Loyauté 60 | bouclier | 4 crédits | 1 |
+| Société achète | Loyauté 40 | 8 charbons → 1 crédit | | 4 (plafond) |
+| Société achète | Loyauté 40 | 4 fer brut → 1 crédit | | 4 |
+| Société achète | Loyauté 40 | 2 or brut → 1 crédit | | 2 |
+| Société achète | Loyauté 40 | 16 blés → 1 crédit | | 3 |
+| Société achète | Loyauté 40 | 16 pommes de terre → 1 crédit | | 3 |
+| Rising | Soutien 20 | 1 fumigène | 2 poudres + 1 lingot de fer | **2** |
+| Rising | Soutien 40 | 3 chausse-trappes | 4 lingots de fer + 1 silex | 1 |
+| Rising | Soutien 60 | (réservé : insigne d'Arès, appel aux Fils) | | |
+
+  Soit 16 crédits par jour au plus en vendant à la Société. Palier 80 de la Société réservé à son équipement (razor pour l'Or, armures de l'Orange, G10).
+- ✅ **Prix du fumigène** : il efface un témoin. Le frein principal est le stock (2 par jour de jeu) ; le prix (poudre et fer) donne du poids à chacun. S'il reste trop fort, baisser le stock à 1.
+- ✅ **Prix qui ne bougent pas avec les jauges** : elles n'ouvrent que des paliers.
+- ✅ **Crochet** : prix final = prix de base × les facteurs des **modificateurs de prix** (`Boutiques.declarerModificateur`), arrondi au-dessus, au moins 1. Le facteur porte toujours sur ce que le joueur donne (sous 1, meilleure affaire dans les deux sens). Les meilleurs échanges de l'Argent (G9.4) et le charme du Rose (G9.16) déclareront chacun le leur.
+- ✅ **Quand la cellule tombe (G5.10)** : sa boutique disparaît avec son PNJ arrêté ; ce que le joueur y a acheté lui reste (sauf une fouille future). Les autres cellules gardent leur boutique.
+- ❓ **Limites connues, à revoir avec la fouille** :
+  - **Blanchiment par craft** : un objet volé passé dans un craft réversible (charbon ↔ bloc de charbon, fer ↔ bloc de fer, blé ↔ botte de foin) perd sa marque, et la Société le rachète. Non corrigé.
+  - Un coffre d'un camp détruit par une explosion laisse tomber son contenu sans marque.
+  - Les autres PNJ de Couleur gardent leurs échanges de Minecraft, sans réapprovisionnement faute de poste de travail.
+  - Côté écran : le client ne connaît pas la marque des boutiques ; un objet volé posé en paiement peut montrer un résultat que le serveur refuse au clic.
 
 ### Conséquences
 - Loyauté haute : accès aux domaines, commerces, équipement de la Société (razor réservé aux Or).

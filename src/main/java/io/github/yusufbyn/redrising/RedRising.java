@@ -8,6 +8,7 @@ import io.github.yusufbyn.redrising.couleur.Naissance;
 import io.github.yusufbyn.redrising.couleur.RestrictionsCouleur;
 import io.github.yusufbyn.redrising.data.EtatMondeServeur;
 import io.github.yusufbyn.redrising.factions.ActionsFaction;
+import io.github.yusufbyn.redrising.factions.Boutiques;
 import io.github.yusufbyn.redrising.factions.Contrebande;
 import io.github.yusufbyn.redrising.factions.JaugesJoueur;
 import io.github.yusufbyn.redrising.factions.ObjetsRebelles;
@@ -29,6 +30,7 @@ public class RedRising implements ModInitializer {
     public void onInitialize() {
         LOGGER.info("Red Rising : initialisation");
         ObjetsRebelles.init();
+        Boutiques.init();
         CouleurJoueur.init();
         Naissance.init();
         CapacitesPassives.init();

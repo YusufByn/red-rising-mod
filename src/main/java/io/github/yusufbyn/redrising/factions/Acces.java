@@ -18,6 +18,8 @@ public final class Acces {
     public static final int SEUIL_FUMIGENE = 20;
     /** 🟡 Soutien pour obtenir des chausse-trappes du Rising (G5.7) ; lu par la boutique (G5.9). */
     public static final int SEUIL_CHAUSSE_TRAPPE = 40;
+    /** 🟡 Loyauté pour acheter l'équipement de la Société (outils et armure de fer, G5.9). */
+    public static final int SEUIL_EQUIPEMENT_SOCIETE = 60;
     /** Suspicion à partir de laquelle les patrouilles de Gris contrôlent le joueur. */
     public static final int SEUIL_CONTROLE = 40;
     /** Suspicion au maximum : la traque (G5.6) remplace les contrôles. */

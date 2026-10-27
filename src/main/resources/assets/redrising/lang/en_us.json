@@ -172,5 +172,16 @@
   "commande.redrising.chausse_trappes.list": "Caltrops (%s): %s placed %s",
   "commande.redrising.chausse_trappes.clear": "%s caltrop(s) removed",
   "commande.redrising.contrebande.get": "Contraband of %s: last spotted by a Gray at tick %s",
-  "commande.redrising.contrebande.reset": "Contraband spotting of %s reset"
+  "commande.redrising.contrebande.reset": "Contraband spotting of %s reset",
+  "item.redrising.credit": "Credit",
+  "boutique.redrising.societe": "Society Counter",
+  "boutique.redrising.rising": "Rising Stores",
+  "boutique.redrising.refus.societe": "The Society won't trade with you",
+  "boutique.redrising.refus.rising": "The Rising won't trade with you",
+  "objet.redrising.vole.societe": "Stolen from the Society",
+  "objet.redrising.vole.rising": "Stolen from the Rising",
+  "commande.redrising.boutique.get": "%s: shop %s",
+  "commande.redrising.boutique.set": "Shop of %s: %s",
+  "commande.redrising.boutique.achats.get": "Trades of %s (day %s): %s",
+  "commande.redrising.boutique.achats.reset": "Daily trades of %s reset"
 }

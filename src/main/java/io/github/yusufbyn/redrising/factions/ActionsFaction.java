@@ -113,6 +113,13 @@ public final class ActionsFaction {
             return InteractionResult.PASS;
         });
 
+        // Casser un coffre d'un camp : son contenu tombe marqué volé (G5.9), avant la casse (il tombe pendant)
+        PlayerBlockBreakEvents.BEFORE.register((monde, joueur, pos, etat, bloc) -> {
+            if (bloc instanceof Container coffre && bloc.getAttached(CAMP) instanceof Camp camp && !monde.isClientSide()) {
+                Boutiques.marquerVoles(coffre, camp);
+            }
+            return true;
+        });
         PlayerBlockBreakEvents.AFTER.register((monde, joueur, pos, etat, bloc) -> {
             Camp camp = bloc == null ? null : bloc.getAttached(CAMP);
             if (camp != null && joueur instanceof ServerPlayer serveur) {

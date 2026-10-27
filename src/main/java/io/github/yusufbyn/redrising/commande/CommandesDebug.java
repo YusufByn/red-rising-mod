@@ -17,7 +17,10 @@ import io.github.yusufbyn.redrising.couleur.TestEnCours;
 import io.github.yusufbyn.redrising.data.EtatMonde;
 import io.github.yusufbyn.redrising.data.EtatMondeServeur;
 import io.github.yusufbyn.redrising.factions.Acces;
+import io.github.yusufbyn.redrising.factions.AchatsDuJour;
 import io.github.yusufbyn.redrising.factions.ActionsFaction;
+import io.github.yusufbyn.redrising.factions.Boutique;
+import io.github.yusufbyn.redrising.factions.Boutiques;
 import io.github.yusufbyn.redrising.factions.Camp;
 import io.github.yusufbyn.redrising.factions.ChausseTrappes;
 import io.github.yusufbyn.redrising.factions.Contrebande;
@@ -164,6 +167,18 @@ public final class CommandesDebug {
                                 .then(argJoueur(CommandesDebug::arreterTraque)))
                         .then(Commands.literal("arreter").executes(ctx -> arreterJoueur(ctx, ctx.getSource().getPlayerOrException()))
                                 .then(argJoueur(CommandesDebug::arreterJoueur))))
+                .then(Commands.literal("boutique")
+                        .then(Commands.literal("get")
+                                .then(Commands.argument("pnj", EntityArgument.entity()).executes(CommandesDebug::lireBoutique)))
+                        .then(Commands.literal("set")
+                                .then(Commands.argument("pnj", EntityArgument.entity())
+                                        .then(argEnum("boutique", Boutique.values()).executes(ctx -> changerBoutique(ctx, lireEnum(ctx, "boutique", Boutique.values()))))
+                                        .then(Commands.literal("aucune").executes(ctx -> changerBoutique(ctx, null)))))
+                        .then(Commands.literal("achats")
+                                .then(Commands.literal("get").executes(ctx -> lireAchats(ctx, ctx.getSource().getPlayerOrException()))
+                                        .then(argJoueur(CommandesDebug::lireAchats)))
+                                .then(Commands.literal("reset").executes(ctx -> effacerAchats(ctx, ctx.getSource().getPlayerOrException()))
+                                        .then(argJoueur(CommandesDebug::effacerAchats)))))
                 .then(Commands.literal("fumee")
                         .then(Commands.literal("list").executes(CommandesDebug::listerFumees))
                         .then(Commands.literal("clear").executes(CommandesDebug::dissiperFumees))
@@ -451,6 +466,43 @@ public final class CommandesDebug {
     private static int arreterJoueur(CommandContext<CommandSourceStack> ctx, ServerPlayer joueur) {
         TraqueGris.arreter(joueur);
         ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.traque.arreter", joueur.getDisplayName()), true);
+        return Command.SINGLE_SUCCESS;
+    }
+
+    // --- Boutiques (G5.9) ---
+
+    private static int lireBoutique(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        Villager pnj = villageois(ctx);
+        Boutique boutique = pnj.getAttached(Boutiques.BOUTIQUE);
+        Component nom = boutique == null ? Component.translatable("commande.redrising.aucun") : Component.literal(boutique.getSerializedName());
+        ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.boutique.get", pnj.getDisplayName(), nom), false);
+        return boutique == null ? 0 : 1;
+    }
+
+    /** Marque un PNJ comme tenant une boutique (mondes construits avant G5.9, tests). */
+    private static int changerBoutique(CommandContext<CommandSourceStack> ctx, @Nullable Boutique boutique) throws CommandSyntaxException {
+        Villager pnj = villageois(ctx);
+        if (boutique == null) {
+            pnj.removeAttached(Boutiques.BOUTIQUE);
+        } else {
+            pnj.setAttached(Boutiques.BOUTIQUE, boutique);
+        }
+        Component nom = boutique == null ? Component.translatable("commande.redrising.aucun") : Component.literal(boutique.getSerializedName());
+        ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.boutique.set", pnj.getDisplayName(), nom), true);
+        return Command.SINGLE_SUCCESS;
+    }
+
+    private static int lireAchats(CommandContext<CommandSourceStack> ctx, ServerPlayer joueur) {
+        AchatsDuJour achats = Boutiques.achats(joueur);
+        String liste = new TreeMap<>(achats.nombres()).entrySet().stream()
+                .map(entree -> entree.getKey() + " ×" + entree.getValue()).collect(Collectors.joining(", "));
+        ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.boutique.achats.get", joueur.getDisplayName(), achats.jour(), liste), false);
+        return achats.nombres().size();
+    }
+
+    private static int effacerAchats(CommandContext<CommandSourceStack> ctx, ServerPlayer joueur) {
+        joueur.removeAttached(Boutiques.ACHATS);
+        ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.boutique.achats.reset", joueur.getDisplayName()), true);
         return Command.SINGLE_SUCCESS;
     }
 

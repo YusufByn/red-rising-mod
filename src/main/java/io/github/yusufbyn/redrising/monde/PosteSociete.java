@@ -6,6 +6,8 @@ import io.github.yusufbyn.redrising.RedRising;
 import io.github.yusufbyn.redrising.couleur.Couleur;
 import io.github.yusufbyn.redrising.factions.Acces;
 import io.github.yusufbyn.redrising.factions.ActionsFaction;
+import io.github.yusufbyn.redrising.factions.Boutique;
+import io.github.yusufbyn.redrising.factions.Boutiques;
 import io.github.yusufbyn.redrising.factions.Camp;
 import io.github.yusufbyn.redrising.factions.JaugesJoueur;
 import io.github.yusufbyn.redrising.pnj.PnjCouleur;
@@ -222,6 +224,7 @@ public final class PosteSociete {
         Villager commis = PnjCouleur.creer(monde, Vec3.atBottomCenterOf(new BlockPos(x0 + milieu, y0 + 1, z0 + milieu + 1)), 180, Couleur.CUIVRE);
         if (commis != null) {
             commis.setAttached(ActionsFaction.CAMP, Camp.SOCIETE);
+            commis.setAttached(Boutiques.BOUTIQUE, Boutique.SOCIETE);
             commis.setNoAi(true); // reste à son comptoir
         }
 

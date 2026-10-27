@@ -172,5 +172,16 @@
   "commande.redrising.chausse_trappes.list": "Chausse-trappes (%s) : %s posée(s) %s",
   "commande.redrising.chausse_trappes.clear": "%s chausse-trappe(s) retirée(s)",
   "commande.redrising.contrebande.get": "Contrebande de %s : dernier repérage par un Gris au tick %s",
-  "commande.redrising.contrebande.reset": "Repérage de contrebande de %s remis à zéro"
+  "commande.redrising.contrebande.reset": "Repérage de contrebande de %s remis à zéro",
+  "item.redrising.credit": "Crédit",
+  "boutique.redrising.societe": "Comptoir de la Société",
+  "boutique.redrising.rising": "Réserve du Rising",
+  "boutique.redrising.refus.societe": "La Société ne commerce pas avec toi",
+  "boutique.redrising.refus.rising": "Le Rising ne commerce pas avec toi",
+  "objet.redrising.vole.societe": "Volé à la Société",
+  "objet.redrising.vole.rising": "Volé au Rising",
+  "commande.redrising.boutique.get": "%s : boutique %s",
+  "commande.redrising.boutique.set": "Boutique de %s : %s",
+  "commande.redrising.boutique.achats.get": "Échanges de %s (jour %s) : %s",
+  "commande.redrising.boutique.achats.reset": "Échanges du jour de %s remis à zéro"
 }
