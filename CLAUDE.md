@@ -76,6 +76,7 @@ Mod Fabric fan-made, solo, gratuit et non commercial, dans l'univers Red Rising 
 - Tests client : lire un champ privé du client (message au-dessus de la barre d'objets...) par réflexion, dans le test seulement (noms officiels en 26.2), voir `CelluleRisingTest`.
 - Témoins (G5.5) : une action qui dépend de qui l'a vue passe par `ActionsFaction.agirDevantTemoins` (témoin calculé, puis `EffetsActions.selonTemoins`). Les tests qui ne portent pas sur les témoins attendent `selonTemoins(..., Temoin.AUCUN)` et retirent les PNJ qui verraient le joueur.
 - Faire marcher un villageois (patrouille) : donner sa destination au cerveau (`brain.setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(...))`) toutes les demi-secondes ; ses comportements libres ne la remplacent que si elle est absente. Les PNJ en patrouille chargés sont suivis par `ServerEntityEvents.ENTITY_LOAD`/`ENTITY_UNLOAD` (voir `PatrouillePnj`).
+- `ServerPlayConnectionEvents.DISCONNECT` peut tourner sur le fil réseau (`Netty Local IO` en solo), pas sur celui du serveur : n'y modifier ni jauges ni attachments. Pour punir une déconnexion, poser un attachment persistant pendant l'action et le traiter à `JOIN` (voir `PatrouillePnj.CONTROLE_EN_COURS`).
 
 ## CI
 

@@ -42,7 +42,7 @@ import java.util.UUID;
 /**
  * G5.5 : témoins, ronde d'une patrouille de Gris et contrôles. Une patrouille réagit à un joueur suspect :
  * à 39 de Suspicion elle l'ignore, à 40 elle le contrôle ; obéir fait baisser la Suspicion une fois par jour,
- * fuir la fait monter.
+ * fuir la fait monter, se déconnecter pendant un contrôle aussi.
  */
 public class PatrouilleGrisTest implements FabricClientGameTest {
     /** Coffre de la Société pour les vols, loin de la patrouille. */
@@ -80,11 +80,19 @@ public class PatrouilleGrisTest implements FabricClientGameTest {
             monde.getServer().runCommand("time set noon");
 
             controles(monde, context, gris);
+
+            // Se déconnecter pendant un contrôle compte comme une fuite : on quitte le monde juste après le « Halte »
+            reprendreLesControles(monde);
+            pres(monde, gris);
+            attendreDebutControle(monde, context, gris, "contrôle quitté");
             sauvegarde = monde.getWorldSave();
         }
 
         // --- Rechargement : le Gris a gardé sa ronde et repart ; le joueur garde son suivi de contrôle ---
         try (TestSingleplayerContext monde = sauvegarde.open()) {
+            // La fuite est comptée au retour du joueur
+            monde.getServer().waitFor(server -> JaugesJoueur.get(OutilsTest.joueur(server)).equals(new Jauges(40, 0, 60)), 40);
+            verifierJauges(monde, "déconnexion pendant un contrôle, compté au retour", new Jauges(40, 0, 60));
             OutilsTest.attendreArrivee(context);
             int depart = monde.getServer().computeOnServer(server -> ronde(server, gris).index());
             monde.getServer().waitFor(server -> ronde(server, gris).index() != depart, 600);

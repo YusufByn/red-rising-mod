@@ -288,6 +288,7 @@ Deux jauges séparées (pas une barre Société ↔ Rising) pour permettre **l'a
 - ✅ **Contrôle** : un Gris en patrouille qui voit un joueur au palier de contrôle à moins de 12 blocs l'arrête (« Halte ! Contrôle. »), vient à lui, puis le contrôle pendant 5 secondes avant de reprendre sa ronde. Un joueur n'est pas contrôlé plus d'une fois toutes les 5 minutes de jeu. Le contrôle est abandonné, sans effet, si le Gris n'arrive pas en 20 secondes.
   - **Obéir** (rester jusqu'au bout) : Suspicion −5, **une fois par jour de jeu au plus** (sinon on se blanchit en allant voir les patrouilles). Message « Contrôle terminé : tu peux circuler ».
   - **Fuir** : s'éloigner à plus de 16 blocs du Gris, **dès le « Halte »**, approche comprise : Loyauté −5, Suspicion +10. Une seule limite de distance, plus grande que la distance de détection, pour qu'on ne soit pas en fuite dès le « Halte ».
+  - **Se déconnecter** pendant un contrôle (ou passer un portail) compte comme une fuite (correction du 27/10). La fuite d'un joueur déconnecté est comptée à son retour. Mourir pendant un contrôle l'annule, sans effet.
   - Attaquer le Gris : c'est « tuer un PNJ de l'ordre », avec un Gris témoin.
 - 🟡 Distances et durées dans `factions/Controle`, effets dans `EffetsActions`.
 - Pour plus tard : une fouille qui trouverait les objets volés (marqués à la sortie d'un coffre de la Société).

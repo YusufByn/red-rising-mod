@@ -14,6 +14,7 @@ import net.fabricmc.fabric.api.attachment.v1.AttachmentRegistry;
 import net.fabricmc.fabric.api.attachment.v1.AttachmentType;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerEntityEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
@@ -41,7 +42,8 @@ import java.util.UUID;
  * <p>Le PNJ marche grâce au cerveau des villageois : on lui donne sa destination (mémoire {@code WALK_TARGET}) toutes les
  * demi-secondes, et il trouve son chemin. Le contrôle passe avant la ronde ; la ronde reprend là où elle s'était arrêtée.</p>
  *
- * <p>Seule la ronde est enregistrée avec le PNJ ; un contrôle en cours est perdu au rechargement (sans effet).</p>
+ * <p>Seule la ronde est enregistrée avec le PNJ ; un contrôle en cours est perdu au rechargement. Se déconnecter pendant
+ * un contrôle compte comme une fuite.</p>
  */
 public final class PatrouillePnj {
     /** Ronde d'un PNJ Gris en patrouille. */
@@ -65,6 +67,12 @@ public final class PatrouillePnj {
     public static final AttachmentType<SuiviControle> SUIVI_CONTROLE = AttachmentRegistry.create(
             Identifier.fromNamespaceAndPath(RedRising.MOD_ID, "suivi_controle"),
             builder -> builder.persistent(SuiviControle.CODEC).copyOnDeath()
+    );
+
+    /** Sur le joueur, du « Halte » à l'issue du contrôle. Sauvegardé : s'il se déconnecte entre les deux, c'est une fuite. */
+    private static final AttachmentType<Boolean> CONTROLE_EN_COURS = AttachmentRegistry.create(
+            Identifier.fromNamespaceAndPath(RedRising.MOD_ID, "controle_en_cours"),
+            builder -> builder.persistent(Codec.BOOL)
     );
 
     private static final int PERIODE = 10;
@@ -96,6 +104,16 @@ public final class PatrouillePnj {
         ServerEntityEvents.ENTITY_UNLOAD.register((entite, monde) -> {
             if (entite instanceof Villager pnj) {
                 oublier(pnj);
+            }
+        });
+        // Revenu avec un contrôle en cours : il s'était déconnecté (ou le serveur s'était arrêté) pendant le contrôle.
+        // On ne le compte pas à la déconnexion : l'événement peut tourner hors du fil du serveur.
+        ServerPlayConnectionEvents.JOIN.register((connexion, envoi, server) -> {
+            ServerPlayer joueur = connexion.getPlayer();
+            if (joueur.hasAttached(CONTROLE_EN_COURS)) {
+                joueur.removeAttached(CONTROLE_EN_COURS);
+                joueur.sendOverlayMessage(Component.translatable("faction.redrising.controle.fuite"));
+                fuir(joueur, "s'est déconnecté pendant un contrôle");
             }
         });
         ServerTickEvents.END_SERVER_TICK.register(server -> {
@@ -197,17 +215,30 @@ public final class PatrouillePnj {
     private static void commencerControle(Villager gris, ServerPlayer suspect, long maintenant) {
         CONTROLES.put(gris.getUUID(), new EnCours(suspect.getUUID(), new Controle(maintenant)));
         suspect.setAttached(SUIVI_CONTROLE, new SuiviControle(maintenant, suivi(suspect).dernierJourBlanchi()));
+        suspect.setAttached(CONTROLE_EN_COURS, true);
         suspect.sendOverlayMessage(Component.translatable("faction.redrising.controle.halte"));
         RedRising.LOGGER.info("Un Gris contrôle {} (Suspicion {})", suspect.getPlainTextName(), JaugesJoueur.get(suspect).suspicion());
     }
 
     private static void suivreControle(MinecraftServer server, Villager gris, EnCours enCours, long maintenant) {
         ServerPlayer suspect = server.getPlayerList().getPlayer(enCours.suspect());
-        if (suspect == null || suspect.level() != gris.level() || !suspect.isAlive()) {
+        if (suspect == null) {
+            // Déconnecté : la fuite sera comptée à son retour (CONTROLE_EN_COURS)
             CONTROLES.remove(gris.getUUID());
             return;
         }
-        switch (enCours.controle().suivre(gris.distanceTo(suspect), maintenant)) {
+        if (!suspect.isAlive()) {
+            CONTROLES.remove(gris.getUUID());
+            suspect.removeAttached(CONTROLE_EN_COURS);
+            return;
+        }
+        // Passé dans une autre dimension (portail) : il a fui
+        double distance = suspect.level() == gris.level() ? gris.distanceTo(suspect) : Double.MAX_VALUE;
+        Controle.Issue issue = enCours.controle().suivre(distance, maintenant);
+        if (issue != Controle.Issue.EN_COURS) {
+            suspect.removeAttached(CONTROLE_EN_COURS);
+        }
+        switch (issue) {
             case EN_COURS -> {
                 gris.getBrain().setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(suspect, VITESSE_APPROCHE, 1));
                 gris.getBrain().setMemory(MemoryModuleType.LOOK_TARGET, new EntityTracker(suspect, true));
@@ -219,13 +250,17 @@ public final class PatrouillePnj {
             case FUITE -> {
                 CONTROLES.remove(gris.getUUID());
                 suspect.sendOverlayMessage(Component.translatable("faction.redrising.controle.fuite"));
-                ActionsFaction.agir(suspect, "fuit un contrôle", EffetsActions.fuiteControle());
+                fuir(suspect, "fuit un contrôle");
             }
             case ABANDON -> {
                 CONTROLES.remove(gris.getUUID());
                 RedRising.LOGGER.info("Contrôle de {} abandonné (Gris bloqué)", suspect.getPlainTextName());
             }
         }
+    }
+
+    private static void fuir(ServerPlayer suspect, String action) {
+        ActionsFaction.agir(suspect, action, EffetsActions.fuiteControle());
     }
 
     /** Contrôle mené à bout : la Suspicion baisse, une fois par jour de jeu au plus. */
