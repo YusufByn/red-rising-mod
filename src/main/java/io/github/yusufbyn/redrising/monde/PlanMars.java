@@ -3,8 +3,10 @@ package io.github.yusufbyn.redrising.monde;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.ChunkPos;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
@@ -56,6 +58,11 @@ public record PlanMars(BlockPos apparition, Map<Region, BlockPos> regions) {
      * 200 blocs, jusqu'à cette distance.
      */
     public static final int DISTANCE_MAX_MINE = 1000;
+    /**
+     * Un fort (stronghold) n'est jamais refusé par la mine (c'est l'accès à l'End) : la mine s'en écarte. Son chunk de
+     * départ reste à plus de son emprise et de la portée d'un fort (8 chunks) de tout fort.
+     */
+    public static final int ECART_FORT = EMPRISE_MINE + 8 + 1;
     static final int ESSAIS = 64;
     /** La région des pôles cherche la terre ferme jusqu'à 32 pas de 64 blocs de part et d'autre (2 km). */
     static final int PAS_POLES = 32;
@@ -104,17 +111,18 @@ public record PlanMars(BlockPos apparition, Map<Region, BlockPos> regions) {
      *
      * @param apparition le point d'apparition choisi par Minecraft
      * @param prepares   les chunks déjà préparés au moment du tirage (la mine les évite)
+     * @param forts      les chunks de départ des forts, calculés depuis la graine (la mine s'en écarte)
      */
-    public static PlanMars tirer(long graine, BlockPos apparition, Terrain terrain, ChunksPrepares prepares) {
+    public static PlanMars tirer(long graine, BlockPos apparition, Terrain terrain, ChunksPrepares prepares, Collection<ChunkPos> forts) {
         Map<Region, BlockPos> regions = new EnumMap<>(Region.class);
         for (Region region : Region.values()) {
-            regions.put(region, placer(region, graine, apparition, regions, terrain, prepares));
+            regions.put(region, placer(region, graine, apparition, regions, terrain, prepares, forts));
         }
         return new PlanMars(apparition, regions);
     }
 
     private static BlockPos placer(Region region, long graine, BlockPos apparition, Map<Region, BlockPos> placees, Terrain terrain,
-                                   ChunksPrepares prepares) {
+                                   ChunksPrepares prepares, Collection<ChunkPos> forts) {
         if (region == Region.POLES) {
             // Les pôles sont une bande de latitude (G7.1.2) : la région (Obsidian) est au nord, en face du point
             // d'apparition, sur la terre ferme la plus proche le long de la même latitude
@@ -140,7 +148,7 @@ public record PlanMars(BlockPos apparition, Map<Region, BlockPos> regions) {
                 double rayon = bas + hasard.nextDouble() * (haut - bas);
                 BlockPos candidat = enSurface(apparition.getX() + (int) Math.round(Math.cos(angle) * rayon),
                         apparition.getZ() + (int) Math.round(Math.sin(angle) * rayon), terrain);
-                List<String> defauts = defauts(region, candidat, placees, apparition, terrain, prepares);
+                List<String> defauts = defauts(region, candidat, placees, apparition, terrain, prepares, forts);
                 if (defauts.isEmpty()) {
                     return candidat;
                 }
@@ -158,7 +166,7 @@ public record PlanMars(BlockPos apparition, Map<Region, BlockPos> regions) {
      * Ce qui ne va pas pour cette région à cette position (vide : rien). Sert au tirage, et aux tests pour vérifier un plan.
      */
     public static List<String> defauts(Region region, BlockPos pos, Map<Region, BlockPos> autres, BlockPos apparition, Terrain terrain,
-                                       ChunksPrepares prepares) {
+                                       ChunksPrepares prepares, Collection<ChunkPos> forts) {
         List<String> defauts = new ArrayList<>();
         if (region == Region.POLES) {
             if (Math.abs(pos.getZ()) < LATITUDE_POLES) {
@@ -190,6 +198,14 @@ public record PlanMars(BlockPos apparition, Map<Region, BlockPos> regions) {
         }
         if (region == Region.MINE) {
             defauts.addAll(defautsEmprise(pos, prepares));
+            int cx = pos.getX() >> 4;
+            int cz = pos.getZ() >> 4;
+            for (ChunkPos fort : forts) {
+                if (Math.max(Math.abs(fort.x() - cx), Math.abs(fort.z() - cz)) < ECART_FORT) {
+                    defauts.add("trop près d'un fort en " + fort);
+                    break;
+                }
+            }
         }
         if (region == Region.CITE && ecartDeHauteur(pos, terrain) > PLATITUDE_CITE) {
             defauts.add("terrain pas plat (" + ecartDeHauteur(pos, terrain) + " blocs d'écart)");
@@ -223,7 +239,7 @@ public record PlanMars(BlockPos apparition, Map<Region, BlockPos> regions) {
     }
 
     /** Tous les défauts du plan (vide : cohérent). */
-    public List<String> defauts(Terrain terrain, ChunksPrepares prepares) {
+    public List<String> defauts(Terrain terrain, ChunksPrepares prepares, Collection<ChunkPos> forts) {
         List<String> defauts = new ArrayList<>();
         for (Region region : Region.values()) {
             BlockPos pos = regions.get(region);
@@ -231,7 +247,7 @@ public record PlanMars(BlockPos apparition, Map<Region, BlockPos> regions) {
                 defauts.add(region.getSerializedName() + " : absente");
                 continue;
             }
-            defauts(region, pos, regions, apparition, terrain, prepares)
+            defauts(region, pos, regions, apparition, terrain, prepares, forts)
                     .forEach(defaut -> defauts.add(region.getSerializedName() + " : " + defaut));
         }
         return defauts;

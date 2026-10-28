@@ -1,0 +1,12 @@
+{
+  "structures": [
+    {
+      "structure": "redrising:mine",
+      "weight": 1
+    }
+  ],
+  "placement": {
+    "type": "redrising:plan",
+    "salt": 1840215
+  }
+}

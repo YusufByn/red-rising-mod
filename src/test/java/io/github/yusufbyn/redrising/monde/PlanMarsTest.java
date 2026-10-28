@@ -1,6 +1,7 @@
 package io.github.yusufbyn.redrising.monde;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.ChunkPos;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -31,9 +32,9 @@ class PlanMarsTest {
     @Test
     void planCoherentEtComplet() {
         for (long graine : new long[]{1, 42, -7_335_412_901L}) {
-            PlanMars plan = PlanMars.tirer(graine, APPARITION, MER_ET_COLLINES, AUCUN);
+            PlanMars plan = PlanMars.tirer(graine, APPARITION, MER_ET_COLLINES, AUCUN, List.of());
             assertEquals(Region.values().length, plan.regions().size());
-            assertEquals(List.of(), plan.defauts(MER_ET_COLLINES, AUCUN), "graine " + graine);
+            assertEquals(List.of(), plan.defauts(MER_ET_COLLINES, AUCUN, List.of()), "graine " + graine);
             plan.regions().forEach((region, pos) -> {
                 if (region != Region.POLES) {
                     assertTrue(pos.getX() + 48 <= 900, region + " dans la mer : " + pos);
@@ -45,9 +46,9 @@ class PlanMarsTest {
 
     @Test
     void memeGraineMemePlan() {
-        assertEquals(PlanMars.tirer(42, APPARITION, MER_ET_COLLINES, AUCUN), PlanMars.tirer(42, APPARITION, MER_ET_COLLINES, AUCUN));
-        assertNotEquals(PlanMars.tirer(42, APPARITION, MER_ET_COLLINES, AUCUN).regions(),
-                PlanMars.tirer(43, APPARITION, MER_ET_COLLINES, AUCUN).regions());
+        assertEquals(PlanMars.tirer(42, APPARITION, MER_ET_COLLINES, AUCUN, List.of()), PlanMars.tirer(42, APPARITION, MER_ET_COLLINES, AUCUN, List.of()));
+        assertNotEquals(PlanMars.tirer(42, APPARITION, MER_ET_COLLINES, AUCUN, List.of()).regions(),
+                PlanMars.tirer(43, APPARITION, MER_ET_COLLINES, AUCUN, List.of()).regions());
     }
 
     /** Chunks préparés en carré autour d'un chunk : départs jusqu'à {@code departs}, références jusqu'à {@code references}. */
@@ -72,7 +73,7 @@ class PlanMarsTest {
         // Recherche du point d'apparition à 80 blocs de lui : références jusqu'à 8 chunks, départs jusqu'à 16 autour
         PlanMars.ChunksPrepares prepares = prepares(APPARITION.offset(-80, 0, 0), 16, 8);
         for (long graine = 0; graine < 50; graine++) {
-            BlockPos mine = PlanMars.tirer(graine, APPARITION, MER_ET_COLLINES, prepares).regions().get(Region.MINE);
+            BlockPos mine = PlanMars.tirer(graine, APPARITION, MER_ET_COLLINES, prepares, List.of()).regions().get(Region.MINE);
             double distance = Math.hypot(mine.getX() - APPARITION.getX(), mine.getZ() - APPARITION.getZ());
             assertTrue(distance >= 199 && distance <= PlanMars.DISTANCE_MAX_MINE + 1, "graine " + graine + " : mine à " + distance);
             assertEquals(List.of(), PlanMars.defautsEmprise(mine, prepares), "graine " + graine);
@@ -83,15 +84,29 @@ class PlanMarsTest {
     void laMineSEloigneSiIlLeFaut() {
         // Références préparées jusqu'à 30 chunks (480 blocs) : aucune place entre 200 et 400, la mine s'éloigne
         PlanMars.ChunksPrepares prepares = prepares(APPARITION, 30, 30);
-        BlockPos mine = PlanMars.tirer(3, APPARITION, MER_ET_COLLINES, prepares).regions().get(Region.MINE);
+        BlockPos mine = PlanMars.tirer(3, APPARITION, MER_ET_COLLINES, prepares, List.of()).regions().get(Region.MINE);
         double distance = Math.hypot(mine.getX() - APPARITION.getX(), mine.getZ() - APPARITION.getZ());
         assertTrue(distance > 400 && distance <= PlanMars.DISTANCE_MAX_MINE + 1, "mine à " + distance);
         assertEquals(List.of(), PlanMars.defautsEmprise(mine, prepares));
     }
 
     @Test
+    void laMineSEcarteDesForts() {
+        // Un fort juste là où la mine tomberait : elle va ailleurs, assez loin pour que leurs emprises ne se croisent pas
+        BlockPos sansFort = PlanMars.tirer(11, APPARITION, MER_ET_COLLINES, AUCUN, List.of()).regions().get(Region.MINE);
+        List<ChunkPos> forts = List.of(new ChunkPos((sansFort.getX() >> 4) + 3, sansFort.getZ() >> 4));
+        PlanMars plan = PlanMars.tirer(11, APPARITION, MER_ET_COLLINES, AUCUN, forts);
+        BlockPos mine = plan.regions().get(Region.MINE);
+        int ecart = Math.max(Math.abs((mine.getX() >> 4) - forts.getFirst().x()), Math.abs((mine.getZ() >> 4) - forts.getFirst().z()));
+        assertTrue(ecart >= PlanMars.ECART_FORT, "mine à " + ecart + " chunks du fort");
+        assertEquals(List.of(), plan.defauts(MER_ET_COLLINES, AUCUN, forts));
+        assertTrue(PlanMars.defauts(Region.MINE, sansFort, Map.of(), APPARITION, MER_ET_COLLINES, AUCUN, forts).stream()
+                .anyMatch(defaut -> defaut.contains("fort")));
+    }
+
+    @Test
     void polesAuNord() {
-        BlockPos poles = PlanMars.tirer(5, APPARITION, MER_ET_COLLINES, AUCUN).regions().get(Region.POLES);
+        BlockPos poles = PlanMars.tirer(5, APPARITION, MER_ET_COLLINES, AUCUN, List.of()).regions().get(Region.POLES);
         assertEquals(APPARITION.getX(), poles.getX());
         assertTrue(poles.getZ() < -PlanMars.LATITUDE_POLES);
     }
@@ -110,20 +125,20 @@ class PlanMarsTest {
                 return 40;
             }
         };
-        PlanMars plan = PlanMars.tirer(9, APPARITION, ocean, AUCUN);
+        PlanMars plan = PlanMars.tirer(9, APPARITION, ocean, AUCUN, List.of());
         assertEquals(Region.values().length, plan.regions().size());
-        assertTrue(plan.defauts(ocean, AUCUN).stream().anyMatch(defaut -> defaut.contains("dans l'eau")));
+        assertTrue(plan.defauts(ocean, AUCUN, List.of()).stream().anyMatch(defaut -> defaut.contains("dans l'eau")));
     }
 
     @Test
     void defautsDetectes() {
         List<String> defauts = PlanMars.defauts(Region.MINE, APPARITION.offset(10, 0, 0), Map.of(), APPARITION, MER_ET_COLLINES,
-                prepares(APPARITION, 5, 13));
+                prepares(APPARITION, 5, 13), List.of());
         assertTrue(defauts.stream().anyMatch(defaut -> defaut.contains("point d'apparition")), defauts.toString());
         assertTrue(defauts.stream().anyMatch(defaut -> defaut.contains("chunk de départ")), defauts.toString());
         assertTrue(defauts.stream().anyMatch(defaut -> defaut.contains("emprise")), defauts.toString());
         List<String> tropPres = PlanMars.defauts(Region.CITE, APPARITION.offset(800, 0, 100), Map.of(Region.GARNISON, APPARITION.offset(600, 0, 0)),
-                APPARITION, MER_ET_COLLINES, AUCUN);
+                APPARITION, MER_ET_COLLINES, AUCUN, List.of());
         assertTrue(tropPres.stream().anyMatch(defaut -> defaut.contains("trop près de garnison")), tropPres.toString());
     }
 }

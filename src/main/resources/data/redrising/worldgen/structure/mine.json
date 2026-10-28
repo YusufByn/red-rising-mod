@@ -1,0 +1,7 @@
+{
+  "type": "redrising:mine",
+  "biomes": "#minecraft:is_overworld",
+  "step": "top_layer_modification",
+  "terrain_adaptation": "encapsulate",
+  "spawn_overrides": {}
+}

@@ -9,7 +9,10 @@
     "BlockEntityMixin",
     "ServerExplosionMixin",
     "VillagerMixin",
-    "MinecraftServerMixin"
+    "MinecraftServerMixin",
+    "NoiseBasedChunkGeneratorMixin",
+    "ChunkGeneratorMixin",
+    "MonsterRoomFeatureMixin"
   ],
   "injectors": {
     "defaultRequire": 1

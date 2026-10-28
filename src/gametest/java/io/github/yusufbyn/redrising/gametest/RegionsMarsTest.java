@@ -2,6 +2,7 @@ package io.github.yusufbyn.redrising.gametest;
 
 import io.github.yusufbyn.redrising.RedRising;
 import io.github.yusufbyn.redrising.data.EtatMondeServeur;
+import io.github.yusufbyn.redrising.monde.MineLykos;
 import io.github.yusufbyn.redrising.monde.PlanMars;
 import io.github.yusufbyn.redrising.monde.Region;
 import io.github.yusufbyn.redrising.monde.RegionsMars;
@@ -61,10 +62,10 @@ public class RegionsMarsTest implements FabricClientGameTest {
                     ServerLevel overworld = server.overworld();
                     BlockPos apparition = estimation.atY(overworld.getChunkSource().getGenerator().getBaseHeight(estimation.getX(), estimation.getZ(),
                             Heightmap.Types.OCEAN_FLOOR_WG, overworld, aleatoire));
-                    return PlanMars.tirer(graine, apparition, terrain(server, aleatoire), PlanMars.ChunksPrepares.AUCUN);
+                    return PlanMars.tirer(graine, apparition, terrain(server, aleatoire), PlanMars.ChunksPrepares.AUCUN, List.of());
                 });
                 List<String> defauts = monde.getServer().computeOnServer(server -> autre.defauts(
-                        terrain(server, RandomState.create(server.registryAccess(), NoiseGeneratorSettings.OVERWORLD, graine)), PlanMars.ChunksPrepares.AUCUN));
+                        terrain(server, RandomState.create(server.registryAccess(), NoiseGeneratorSettings.OVERWORLD, graine)), PlanMars.ChunksPrepares.AUCUN, List.of()));
                 if (!defauts.isEmpty()) {
                     throw new AssertionError("Graine " + graine + " : " + defauts);
                 }
@@ -93,8 +94,9 @@ public class RegionsMarsTest implements FabricClientGameTest {
 
         // Monde plat, comme ceux des autres tests : pas de plan
         try (TestSingleplayerContext monde = OutilsTest.nouveauMonde(context)) {
+            // Sans plan, pas de mine non plus (G7.2.1) : son placement lit le plan
             boolean sansPlan = monde.getServer().computeOnServer(server -> RegionsMars.plan(server) == null && RegionsMars.courant() == null
-                    && EtatMondeServeur.get(server).plan().isEmpty());
+                    && EtatMondeServeur.get(server).plan().isEmpty() && MineLykos.centre() == null && !MineLykos.dansEmprise(0, 0));
             if (!sansPlan) {
                 throw new AssertionError("Monde plat : il a un plan");
             }

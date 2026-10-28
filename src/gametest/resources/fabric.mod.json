@@ -18,6 +18,7 @@
       "io.github.yusufbyn.redrising.gametest.AttitudePnjTest",
       "io.github.yusufbyn.redrising.gametest.RegionsMarsTest",
       "io.github.yusufbyn.redrising.gametest.BiomesMarsTest",
+      "io.github.yusufbyn.redrising.gametest.MineLykosTest",
       "io.github.yusufbyn.redrising.gametest.CommandesDebugTest",
       "io.github.yusufbyn.redrising.gametest.HudJaugesTest",
       "io.github.yusufbyn.redrising.gametest.ApparenceCouleurTest",

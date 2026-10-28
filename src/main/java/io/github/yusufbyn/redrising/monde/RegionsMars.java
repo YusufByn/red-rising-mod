@@ -19,12 +19,16 @@ import net.minecraft.world.level.LevelHeightAccessor;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.biome.BiomeSource;
 import net.minecraft.world.level.chunk.ChunkGenerator;
+import net.minecraft.world.level.chunk.ChunkGeneratorStructureState;
+import net.minecraft.world.level.levelgen.structure.StructureSet;
+import net.minecraft.world.level.levelgen.structure.placement.ConcentricRingsStructurePlacement;
 import net.minecraft.world.level.chunk.status.ChunkStatus;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.levelgen.NoiseBasedChunkGenerator;
 import net.minecraft.world.level.levelgen.RandomState;
 import org.jspecify.annotations.Nullable;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -81,12 +85,14 @@ public final class RegionsMars {
         BlockPos apparition = monde.getLevelData().getRespawnData().pos();
         Prepares prepares = prepares(monde, ChunkPos.containing(apparition));
         PlanMars.Terrain terrain = terrain(generateur, aleatoire, monde);
-        PlanMars plan = PlanMars.tirer(monde.getSeed(), apparition, terrain, prepares);
+        List<ChunkPos> forts = forts(monde);
+        PlanMars plan = PlanMars.tirer(monde.getSeed(), apparition, terrain, prepares, forts);
         EtatMondeServeur.modifier(server, etat -> etat.avecPlan(plan));
         courant = plan;
         BlockPos mine = plan.regions().get(Region.MINE);
         dernierTirage = new Tirage(prepares.rayonReferences(), prepares.rayonDeparts(),
-                Math.round(Math.hypot(mine.getX() - apparition.getX(), mine.getZ() - apparition.getZ())), plan.defauts(terrain, prepares));
+                Math.round(Math.hypot(mine.getX() - apparition.getX(), mine.getZ() - apparition.getZ())), fortLePlusProche(mine, forts),
+                plan.defauts(terrain, prepares, forts));
         RedRising.LOGGER.info("Plan de Mars tiré en {} ms (apparition {}) : {}", (System.nanoTime() - debut) / 1_000_000,
                 apparition.toShortString(), plan.regions());
         RedRising.LOGGER.info("Plan de Mars : {}", dernierTirage);
@@ -95,9 +101,33 @@ public final class RegionsMars {
     /**
      * Ce que le dernier tirage a vu (pour les tests et le journal) : jusqu'où, autour du point d'apparition, des chunks
      * avaient déjà passé les étapes des références et des départs de structures (en chunks, en carré, -1 : aucun), la
-     * distance de la mine au point d'apparition, et les défauts du plan.
+     * distance de la mine au point d'apparition, celle du fort le plus proche (en chunks, en carré), et les défauts du plan.
      */
-    public record Tirage(int rayonReferences, int rayonDeparts, long distanceMine, List<String> defauts) {
+    public record Tirage(int rayonReferences, int rayonDeparts, long distanceMine, int fortLePlusProche, List<String> defauts) {
+    }
+
+    /**
+     * Les chunks de départ des forts de ce monde, calculés depuis la graine (les anneaux de Minecraft, sans générer de
+     * chunks). Minecraft les calcule de toute façon au démarrage ; la première demande attend ce calcul.
+     */
+    public static List<ChunkPos> forts(ServerLevel monde) {
+        ChunkGeneratorStructureState etat = monde.getChunkSource().getGeneratorState();
+        List<ChunkPos> forts = new ArrayList<>();
+        for (Holder<StructureSet> ensemble : etat.possibleStructureSets()) {
+            if (ensemble.value().placement() instanceof ConcentricRingsStructurePlacement anneaux) {
+                List<ChunkPos> positions = etat.getRingPositionsFor(anneaux);
+                if (positions != null) {
+                    forts.addAll(positions);
+                }
+            }
+        }
+        return forts;
+    }
+
+    /** Distance (en chunks, en carré) du fort le plus proche de la mine, ou -1 sans fort. */
+    static int fortLePlusProche(BlockPos mine, List<ChunkPos> forts) {
+        return forts.stream().mapToInt(fort -> Math.max(Math.abs(fort.x() - (mine.getX() >> 4)), Math.abs(fort.z() - (mine.getZ() >> 4))))
+                .min().orElse(-1);
     }
 
     private static volatile @Nullable Tirage dernierTirage;
