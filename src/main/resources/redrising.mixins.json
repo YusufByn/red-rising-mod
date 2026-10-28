@@ -12,7 +12,7 @@
     "MinecraftServerMixin",
     "NoiseBasedChunkGeneratorMixin",
     "ChunkGeneratorMixin",
-    "MonsterRoomFeatureMixin"
+    "ConfiguredFeatureMixin"
   ],
   "injectors": {
     "defaultRequire": 1

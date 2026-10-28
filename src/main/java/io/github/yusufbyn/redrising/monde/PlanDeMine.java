@@ -28,7 +28,8 @@ import java.util.concurrent.ConcurrentHashMap;
  *     tiré au hasard (Kruskal), qui commence par l'axe principal (croix à travers le puits, plus large), puis des boucles,
  *     puis des culs-de-sac coupés au hasard, sans jamais couper un nœud obligatoire. Un arbre relie tous ses nœuds : tout est
  *     relié par construction (et vérifié par les tests).</li>
- *     <li><b>Puits</b> : le principal au centre, de bas en haut jusqu'au bouchon ; deux secondaires entre deux niveaux.</li>
+ *     <li><b>Puits</b> : le principal au centre, de bas en haut jusqu'au bouchon, sous la surface de sa propre colonne ; deux
+ *     secondaires entre deux niveaux.</li>
  *     <li><b>Caverne de la colonie</b> (G7.3) sur le niveau 3, au bout de l'axe : parcelles, place et échafaud (G7.10),
  *     point d'apparition du Rouge (G7.8), notés ici pour leurs tickets.</li>
  *     <li><b>Cellules</b> (G7.5) : {@value #CELLULES} emplacements laissés en roche pleine, au bout d'un cul-de-sac ou sur
@@ -70,8 +71,8 @@ public final class PlanDeMine {
     static final int ECART_CELLULES = 24;
     /** 🟡 Puits secondaires : deux entre deux niveaux, à 40 blocs au moins du centre. */
     static final int PUITS_SECONDAIRES = 2;
-    /** Bouchon : deux couches, sous au moins 3 blocs du terrain d'origine. */
-    static final int PROFONDEUR_BOUCHON = 5;
+    /** 🟡 Bouchon : deux couches, sous 3 blocs du terrain d'origine (au point le plus bas de la colonne du puits). */
+    public static final int ROCHE_SUR_BOUCHON = 3;
     /**
      * Le remplissage du relief (adaptation {@code encapsulate}) déborde de 12 blocs autour de ses boîtes : il ne doit pas
      * atteindre la surface, sinon il ferait monter le terrain (une butte au-dessus du puits). La boîte du puits s'arrête à
@@ -168,7 +169,7 @@ public final class PlanDeMine {
 
     // --- Tirage ---
 
-    private record Cle(long graine, BlockPos centre, int solMinimum, int solAuPuits) {
+    private record Cle(long graine, BlockPos centre, int solMinimum, int solAuPuits, int surfacePuits) {
     }
 
     /** Un plan est tiré une fois par mine, puis relu : la pose de chaque chunk le redemande (fils de génération). */
@@ -179,11 +180,14 @@ public final class PlanDeMine {
      *
      * @param graine     la graine du monde
      * @param solMinimum le terrain le plus bas de l'emprise (le haut de la mine reste dessous, avec sa marge)
-     * @param solAuPuits le terrain le plus bas autour du puits principal (16 blocs) : le bouchon est dessous, et la boîte de
-     *                   remplissage du puits s'arrête à {@value #BOITE_PUITS_SOUS_SURFACE} blocs plus bas
+     * @param solAuPuits   le terrain le plus bas autour du puits principal (16 blocs) : la boîte de remplissage du puits
+     *                     s'arrête à {@value #BOITE_PUITS_SOUS_SURFACE} blocs plus bas
+     * @param surfacePuits la surface de la colonne du puits principal (3 × 3, son point le plus bas, hauteur au-dessus du
+     *                     dernier bloc) : le bouchon est dessous, sous {@value #ROCHE_SUR_BOUCHON} blocs de roche d'origine
      */
-    public static PlanDeMine de(long graine, BlockPos centre, int solMinimum, int solAuPuits) {
-        return CACHE.computeIfAbsent(new Cle(graine, centre.immutable(), solMinimum, solAuPuits), cle -> tirer(cle.graine(), cle.centre(), cle.solMinimum(), cle.solAuPuits()));
+    public static PlanDeMine de(long graine, BlockPos centre, int solMinimum, int solAuPuits, int surfacePuits) {
+        return CACHE.computeIfAbsent(new Cle(graine, centre.immutable(), solMinimum, solAuPuits, surfacePuits),
+                cle -> tirer(cle.graine(), cle.centre(), cle.solMinimum(), cle.solAuPuits(), cle.surfacePuits()));
     }
 
     /** Un nœud de la grille d'un niveau. */
@@ -200,7 +204,7 @@ public final class PlanDeMine {
     private record Arete(Noeud a, Noeud b, boolean axe) {
     }
 
-    static PlanDeMine tirer(long graine, BlockPos centre, int solMinimum, int solAuPuits) {
+    static PlanDeMine tirer(long graine, BlockPos centre, int solMinimum, int solAuPuits, int surfacePuits) {
         Random hasard = new Random(graine ^ centre.asLong() * 0x9E3779B97F4A7C15L);
         // Niveaux sous la surface, avec leur marge
         List<Integer> sols = new ArrayList<>();
@@ -313,9 +317,9 @@ public final class PlanDeMine {
             }
         }
 
-        // Puits principal, jusqu'au bouchon
-        int hautPuits = solAuPuits - PROFONDEUR_BOUCHON - 1;
-        puits.addFirst(new Puits(centre.getX(), centre.getZ(), sols.getLast(), Math.max(hautPuits, sols.getFirst() + HAUTEUR_AXE), true));
+        // Puits principal, jusqu'au bouchon : 3 blocs de roche, puis les 2 couches du bouchon, sous la surface de sa colonne
+        int hautPuits = Math.max(surfacePuits - 1 - ROCHE_SUR_BOUCHON - 2, sols.getFirst() + HAUTEUR_AXE);
+        puits.addFirst(new Puits(centre.getX(), centre.getZ(), sols.getLast(), hautPuits, true));
         BoundingBox bouchon = new BoundingBox(centre.getX() - 1, hautPuits + 1, centre.getZ() - 1, centre.getX() + 1, hautPuits + 2, centre.getZ() + 1);
 
         Colonie colonie = colonie(caverne, caverneSurX, dx + dz);

@@ -19,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * Plan de la mine (G7.2.1) : tout relié au puits principal (parcours en largeur sur les boîtes de vide), dans l'emprise et
  * entre y −50 et 20, 12 emplacements de cellules en roche pleine, au moins 3 culs-de-sac sans cellule pour 1 avec,
- * bouchon sous la surface, même graine même plan.
+ * bouchon sous la surface de la colonne du puits, même graine même plan.
  */
 class PlanDeMineTest {
     private static final BlockPos CENTRE = new BlockPos(-740, 67, -317);
@@ -28,7 +28,7 @@ class PlanDeMineTest {
     @Test
     void toutEstReliéAuPuitsPrincipal() {
         for (long graine : GRAINES) {
-            PlanDeMine plan = PlanDeMine.tirer(graine, CENTRE, 62, 66);
+            PlanDeMine plan = PlanDeMine.tirer(graine, CENTRE, 62, 66, 66);
             List<BoundingBox> boites = new ArrayList<>(plan.galeries());
             plan.puits().forEach(p -> boites.add(p.interieur()));
             boites.add(plan.caverne().boite());
@@ -56,7 +56,8 @@ class PlanDeMineTest {
     @Test
     void dansLEmpriseEtSousLaSurface() {
         for (long graine : GRAINES) {
-            PlanDeMine plan = PlanDeMine.tirer(graine, CENTRE, 62, 66);
+            // La colonne du puits sur une butte : 28 blocs au-dessus du terrain le plus bas autour (graine 7 en jeu)
+            PlanDeMine plan = PlanDeMine.tirer(graine, CENTRE, 62, 66, 94);
             assertEquals(PlanDeMine.NIVEAUX_MAX, plan.sols().size());
             for (BoundingBox galerie : plan.galeries()) {
                 assertTrue(Math.abs(galerie.minX() - CENTRE.getX()) <= 120 && Math.abs(galerie.maxX() - CENTRE.getX()) <= 120
@@ -65,11 +66,11 @@ class PlanDeMineTest {
             }
             BoundingBox caverne = plan.caverne().boite();
             assertTrue(Math.abs(caverne.minX() - CENTRE.getX()) <= 120 && Math.abs(caverne.maxX() - CENTRE.getX()) <= 120, caverne.toString());
-            // Le bouchon : 2 couches, avec au moins 3 blocs du terrain d'origine au-dessus
+            // Le bouchon : 2 couches, sous 3 blocs du terrain d'origine de la colonne du puits (dernier bloc en 93)
             assertEquals(2, plan.bouchon().getYSpan());
-            assertTrue(plan.bouchon().maxY() <= 66 - 4);
+            assertEquals(93 - PlanDeMine.ROCHE_SUR_BOUCHON, plan.bouchon().maxY());
             assertEquals(plan.bouchon().minY() - 1, plan.puitsPrincipal().haut());
-            // La boîte du puits reste à 14 blocs sous la surface
+            // La boîte du puits reste à 14 blocs sous le terrain le plus bas autour (pas de butte)
             assertTrue(plan.hautBoitePuits() <= 66 - PlanDeMine.BOITE_PUITS_SOUS_SURFACE);
         }
     }
@@ -77,15 +78,23 @@ class PlanDeMineTest {
     @Test
     void unNiveauDeMoinsSousUneVallee() {
         // Terrain le plus bas à y = 25 : le niveau du haut (sol 8) serait trop près de la surface
-        PlanDeMine plan = PlanDeMine.tirer(1, CENTRE, 25, 66);
+        PlanDeMine plan = PlanDeMine.tirer(1, CENTRE, 25, 66, 66);
         assertFalse(plan.sols().contains(8));
         assertTrue(plan.hautDesBoites() + 12 < 25);
     }
 
     @Test
+    void puitsDansUnCreux() {
+        // Colonne du puits plus basse que le haut de la mine : le puits monte au moins jusqu'au niveau du haut
+        PlanDeMine plan = PlanDeMine.tirer(1, CENTRE, 62, 10, 10);
+        assertEquals(plan.sols().getFirst() + 4, plan.puitsPrincipal().haut());
+        assertEquals(plan.puitsPrincipal().haut() + 1, plan.bouchon().minY());
+    }
+
+    @Test
     void douzeCellulesEnRochePleineEtCulsDeSacMuets() {
         for (long graine : GRAINES) {
-            PlanDeMine plan = PlanDeMine.tirer(graine, CENTRE, 62, 66);
+            PlanDeMine plan = PlanDeMine.tirer(graine, CENTRE, 62, 66, 66);
             assertEquals(PlanDeMine.CELLULES, plan.cellules().size(), "graine " + graine);
             Set<BlockPos> boutsAvecCellule = new HashSet<>();
             boolean paroi = false;
@@ -110,7 +119,7 @@ class PlanDeMineTest {
 
     @Test
     void colonieReservee() {
-        PlanDeMine plan = PlanDeMine.tirer(42, CENTRE, 62, 66);
+        PlanDeMine plan = PlanDeMine.tirer(42, CENTRE, 62, 66, 66);
         PlanDeMine.Caverne caverne = plan.caverne();
         PlanDeMine.Colonie colonie = plan.colonie();
         BlockPos echafaud = colonie.echafaud();
@@ -123,11 +132,11 @@ class PlanDeMineTest {
 
     @Test
     void memeGraineMemePlan() {
-        PlanDeMine a = PlanDeMine.tirer(5, CENTRE, 62, 66);
-        PlanDeMine b = PlanDeMine.tirer(5, CENTRE, 62, 66);
+        PlanDeMine a = PlanDeMine.tirer(5, CENTRE, 62, 66, 66);
+        PlanDeMine b = PlanDeMine.tirer(5, CENTRE, 62, 66, 66);
         assertEquals(a.galeries(), b.galeries());
         assertEquals(a.cellules(), b.cellules());
         assertEquals(a.puits(), b.puits());
-        assertSame(PlanDeMine.de(5, CENTRE, 62, 66), PlanDeMine.de(5, CENTRE, 62, 66));
+        assertSame(PlanDeMine.de(5, CENTRE, 62, 66, 66), PlanDeMine.de(5, CENTRE, 62, 66, 66));
     }
 }

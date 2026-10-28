@@ -12,6 +12,7 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.Identifier;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.StructureManager;
 import net.minecraft.world.level.WorldGenLevel;
 import net.minecraft.world.level.block.Block;
@@ -21,6 +22,10 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.ChunkGenerator;
 import net.minecraft.world.level.chunk.ChunkGeneratorStructureState;
 import net.minecraft.world.level.levelgen.Heightmap;
+import net.minecraft.world.level.levelgen.feature.Feature;
+import net.minecraft.world.level.levelgen.feature.MonsterRoomFeature;
+import net.minecraft.world.level.levelgen.feature.OreFeature;
+import net.minecraft.world.level.levelgen.feature.ScatteredOreFeature;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.level.levelgen.structure.Structure;
 import net.minecraft.world.level.levelgen.structure.StructurePiece;
@@ -44,14 +49,14 @@ import java.util.concurrent.atomic.LongAccumulator;
  * <ul>
  *     <li><b>Placement</b> : seulement le chunk de la mine dans le plan sauvegardé ; un monde sans plan n'a pas de mine.</li>
  *     <li><b>Morceaux</b> : un par chunk de l'emprise (départ ± 8 chunks), sur les hauteurs de la mine, et un autour du puits
- *     principal jusqu'à 14 blocs sous la surface. Leurs boîtes servent au remplissage du relief ({@code encapsulate},
+ *     principal jusqu'à 14 blocs sous le terrain le plus bas autour. Leurs boîtes servent au remplissage du relief ({@code encapsulate},
  *     dans {@code data/redrising/worldgen/structure/mine.json}) : ni grotte de bruit ni aquifère dans le volume.</li>
  *     <li><b>Pose</b> : à la dernière étape de la génération ({@code top_layer_modification}), après les minerais, les
  *     géodes et les sources. Chaque morceau pose les blocs du plan qui touchent son chunk : coque de roche (seulement à
  *     la place du vide et des fluides), vide, étais, échelles, bouchon.</li>
- *     <li><b>Autour</b> : pas de carvers dans l'emprise, ni d'autre structure (sauf un fort) ni de salle de monstres
- *     (mixins sur {@code NoiseBasedChunkGenerator.applyCarvers}, {@code ChunkGenerator.tryGenerateStructure},
- *     {@code MonsterRoomFeature.place}).</li>
+ *     <li><b>Autour</b> : pas de carvers dans l'emprise, ni d'autre structure (sauf un fort), ni de décoration souterraine
+ *     autre que les minerais dans le volume de la mine (mixins sur {@code NoiseBasedChunkGenerator.applyCarvers},
+ *     {@code ChunkGenerator.tryGenerateStructure}, {@code ConfiguredFeature.place}).</li>
  * </ul>
  */
 public final class MineLykos extends Structure {
@@ -64,6 +69,8 @@ public final class MineLykos extends Structure {
 
     /** 🟡 Hauteur au-dessus de laquelle une autre structure ne gêne plus la mine (sauf le long du puits). */
     public static final int HAUT_DU_VOLUME = 32;
+    /** Le long du puits principal, jusqu'à cette distance : ni structure ni décoration souterraine, jusqu'en haut. */
+    static final int MARGE_PUITS = 32;
 
     /** Temps de pose des morceaux, pour le test du coût (en nanosecondes). */
     private static final AtomicLong POSES = new AtomicLong();
@@ -117,6 +124,36 @@ public final class MineLykos extends Structure {
         return boite.intersects(volume) || boite.intersects(colonne);
     }
 
+    /**
+     * Une décoration à ne pas poser (G7.2.1). Une décoration peut écrire dans le chunk voisin, même quand celui-ci est fini et
+     * que la mine y est posée (mesuré : une géode dans une galerie). Donc, dans l'emprise et un chunk autour, sous
+     * {@value #HAUT_DU_VOLUME} ou à {@value #MARGE_PUITS} blocs du puits principal, rien de souterrain ne se pose (géodes,
+     * sources, lacs souterrains, concrétions, lichen...), sauf les minerais : ils ne remplacent que de la roche, jamais le
+     * vide. Les salles de monstres, nulle part dans l'emprise (un générateur à nu). La surface (arbres, herbe) ne change pas.
+     */
+    public static boolean decorationRefusee(WorldGenLevel monde, Feature<?> decoration, BlockPos origine) {
+        if (decoration instanceof OreFeature || decoration instanceof ScatteredOreFeature) {
+            return false;
+        }
+        BlockPos centre = centre();
+        if (centre == null || !monde.getLevel().dimension().equals(Level.OVERWORLD)) {
+            return false;
+        }
+        int dx = Math.abs((origine.getX() >> 4) - (centre.getX() >> 4));
+        int dz = Math.abs((origine.getZ() >> 4) - (centre.getZ() >> 4));
+        if (decoration instanceof MonsterRoomFeature) {
+            return dx <= PlanMars.EMPRISE_MINE && dz <= PlanMars.EMPRISE_MINE;
+        }
+        if (dx > PlanMars.EMPRISE_MINE + 1 || dz > PlanMars.EMPRISE_MINE + 1) {
+            return false;
+        }
+        boolean presDuPuits = Math.abs(origine.getX() - centre.getX()) <= MARGE_PUITS && Math.abs(origine.getZ() - centre.getZ()) <= MARGE_PUITS;
+        if (origine.getY() >= HAUT_DU_VOLUME && !presDuPuits) {
+            return false;
+        }
+        return origine.getY() < monde.getHeight(Heightmap.Types.OCEAN_FLOOR_WG, origine.getX(), origine.getZ()) - 2;
+    }
+
     // --- Génération ---
 
     @Override
@@ -140,13 +177,21 @@ public final class MineLykos extends Structure {
                 solAuPuits = Math.min(solAuPuits, hauteur(contexte, centre.getX() + x, centre.getZ() + z));
             }
         }
+        // La surface de la colonne du puits (3 × 3) : son point le plus bas, sous lequel est le bouchon
+        int surfacePuits = Integer.MAX_VALUE;
+        for (int x = -1; x <= 1; x++) {
+            for (int z = -1; z <= 1; z++) {
+                surfacePuits = Math.min(surfacePuits, hauteur(contexte, centre.getX() + x, centre.getZ() + z));
+            }
+        }
         long graine = contexte.seed();
-        PlanDeMine plan = PlanDeMine.de(graine, centre, solMinimum, solAuPuits);
+        PlanDeMine plan = PlanDeMine.de(graine, centre, solMinimum, solAuPuits, surfacePuits);
         int solMin = solMinimum;
         int solPuits = solAuPuits;
+        int surface = surfacePuits;
         BlockPos position = new BlockPos(centre.getX(), plan.sols().getFirst(), centre.getZ());
-        RedRising.LOGGER.info("Mine : départ en {}, {} niveau(x), terrain le plus bas {}, au puits {} (générateur {})", position.toShortString(),
-                plan.sols().size(), solMin, solPuits, generateur.getClass().getSimpleName());
+        RedRising.LOGGER.info("Mine : départ en {}, {} niveau(x), terrain le plus bas {}, autour du puits {}, surface du puits {} (générateur {})",
+                position.toShortString(), plan.sols().size(), solMin, solPuits, surface, generateur.getClass().getSimpleName());
         return Optional.of(new GenerationStub(position, morceaux -> {
             int cx = centre.getX() >> 4;
             int cz = centre.getZ() >> 4;
@@ -156,14 +201,15 @@ public final class MineLykos extends Structure {
                     ChunkPos chunk = new ChunkPos(cx + dx, cz + dz);
                     BoundingBox boite = new BoundingBox(chunk.getMinBlockX(), bas, chunk.getMinBlockZ(), chunk.getMaxBlockX(), plan.hautDesBoites(),
                             chunk.getMaxBlockZ());
-                    morceaux.addPiece(new Morceau(boite, true, graine, centre, solMin, solPuits));
+                    morceaux.addPiece(new Morceau(boite, true, graine, centre, solMin, solPuits, surface));
                 }
             }
-            // Le puits principal et sa marge de 2 blocs, jusqu'à 14 blocs sous la surface
+            // Le puits principal et sa marge de 2 blocs, jusqu'à 14 blocs sous le terrain le plus bas autour (pas de butte) ;
+            // au-dessus, jusqu'au bouchon, sa coque le garde fermé
             if (plan.hautBoitePuits() > plan.hautDesBoites()) {
                 int bord = 1 + PlanDeMine.COQUE_PUITS;
                 morceaux.addPiece(new Morceau(new BoundingBox(centre.getX() - bord, plan.hautDesBoites(), centre.getZ() - bord,
-                        centre.getX() + bord, plan.hautBoitePuits(), centre.getZ() + bord), false, graine, centre, solMin, solPuits));
+                        centre.getX() + bord, plan.hautBoitePuits(), centre.getZ() + bord), false, graine, centre, solMin, solPuits, surface));
             }
         }));
     }
@@ -211,14 +257,16 @@ public final class MineLykos extends Structure {
         private final BlockPos centre;
         private final int solMinimum;
         private final int solAuPuits;
+        private final int surfacePuits;
 
-        Morceau(BoundingBox boite, boolean pose, long graine, BlockPos centre, int solMinimum, int solAuPuits) {
+        Morceau(BoundingBox boite, boolean pose, long graine, BlockPos centre, int solMinimum, int solAuPuits, int surfacePuits) {
             super(MORCEAU, 0, boite);
             this.pose = pose;
             this.graine = graine;
             this.centre = centre;
             this.solMinimum = solMinimum;
             this.solAuPuits = solAuPuits;
+            this.surfacePuits = surfacePuits;
         }
 
         Morceau(CompoundTag donnees) {
@@ -228,6 +276,8 @@ public final class MineLykos extends Structure {
             this.centre = new BlockPos(donnees.getIntOr("cx", 0), donnees.getIntOr("cy", 0), donnees.getIntOr("cz", 0));
             this.solMinimum = donnees.getIntOr("sol_minimum", 0);
             this.solAuPuits = donnees.getIntOr("sol_au_puits", 0);
+            // Morceaux d'avant le correctif du bouchon (sans surface du puits) : le plan d'alors, calé sur le terrain autour
+            this.surfacePuits = donnees.getIntOr("surface_puits", solAuPuits);
         }
 
         @Override
@@ -239,10 +289,11 @@ public final class MineLykos extends Structure {
             donnees.putInt("cz", centre.getZ());
             donnees.putInt("sol_minimum", solMinimum);
             donnees.putInt("sol_au_puits", solAuPuits);
+            donnees.putInt("surface_puits", surfacePuits);
         }
 
         public PlanDeMine plan() {
-            return PlanDeMine.de(graine, centre, solMinimum, solAuPuits);
+            return PlanDeMine.de(graine, centre, solMinimum, solAuPuits, surfacePuits);
         }
 
         @Override

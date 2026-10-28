@@ -50,7 +50,8 @@ import java.util.Objects;
  *     une grotte, aucun fluide contre le vide) ; aucun bloc de la mine ne voit le ciel ; aucune autre structure (sauf un
  *     fort) ne croise le volume ; aucun générateur de monstres dans l'emprise ; coût de la pose et temps par tick.</li>
  *     <li>Trois graines : la colonne du puits principal, du haut de la mine au bouchon, sans grotte ni fluide autour ; le
- *     bouchon, la roche d'origine au-dessus, et pas de butte en surface.</li>
+ *     bouchon, entre 3 et 5 blocs sous la surface de la colonne, sous de la roche pleine ; rien du puits ne voit le ciel ;
+ *     pas de butte en surface.</li>
  *     <li>Forts : la distance du plus proche, et une mine écartée d'un fort posé exprès sur son chemin.</li>
  * </ul>
  */
@@ -234,7 +235,9 @@ public class MineLykosTest implements FabricClientGameTest {
             if (etat.is(Blocks.SPRUCE_LOG)) {
                 piliers.add(cle);
             } else if (!(etat.isAir() || etat.is(Blocks.LADDER) || etat.is(Blocks.SPRUCE_FENCE) || etat.is(Blocks.SPRUCE_PLANKS))) {
-                malPoses++;
+                if (malPoses++ < 8) {
+                    RedRising.LOGGER.warn("[G7.2.1] Pas vide : {} en {}", etat, pos.toShortString());
+                }
             }
             if (pos.getY() >= niveau.getHeight(Heightmap.Types.MOTION_BLOCKING, pos.getX(), pos.getZ())) {
                 ciel++;
@@ -288,8 +291,9 @@ public class MineLykosTest implements FabricClientGameTest {
     // --- Colonne du puits ---
 
     /**
-     * Du haut des galeries au bouchon : rien que de la roche autour du puits (2 blocs), ni vide ni fluide ; le bouchon ;
-     * au moins 3 blocs de la roche d'origine au-dessus ; pas de butte en surface (le remplissage du relief ne l'atteint pas).
+     * Du haut des galeries au bouchon : rien que de la roche autour du puits (2 blocs), ni vide ni fluide ; le bouchon, entre
+     * 🟡 3 et 5 blocs sous la surface de chaque colonne du puits, et rien que du plein entre les deux ; pas de butte en surface
+     * (le remplissage du relief ne l'atteint pas).
      */
     private static void colonneDuPuits(TestSingleplayerContext monde, long graine) {
         String defauts = monde.getServer().computeOnServer(server -> {
@@ -318,10 +322,35 @@ public class MineLykosTest implements FabricClientGameTest {
                     liste.add("bouchon incomplet en " + pos.toShortString());
                 }
             }
-            int surface = niveau.getHeight(Heightmap.Types.OCEAN_FLOOR, principal.x(), principal.z());
-            if (surface - 1 - bouchon.maxY() < 3) {
-                liste.add("seulement " + (surface - 1 - bouchon.maxY()) + " bloc(s) au-dessus du bouchon");
+            List<Integer> profondeurs = new ArrayList<>();
+            for (int x = principal.x() - 1; x <= principal.x() + 1; x++) {
+                for (int z = principal.z() - 1; z <= principal.z() + 1; z++) {
+                    int dessus = sol(niveau, x, z) - 1;
+                    int profondeur = dessus - bouchon.maxY();
+                    profondeurs.add(profondeur);
+                    if (profondeur < 3 || profondeur > 5) {
+                        liste.add("bouchon à " + profondeur + " bloc(s) sous la surface en " + x + " " + z);
+                    }
+                    for (int y = bouchon.maxY() + 1; y <= dessus; y++) {
+                        BlockState etat = niveau.getBlockState(new BlockPos(x, y, z));
+                        if (etat.isAir() || !etat.getFluidState().isEmpty()) {
+                            liste.add((etat.isAir() ? "vide" : "fluide") + " au-dessus du bouchon en " + x + " " + y + " " + z);
+                        }
+                    }
+                }
             }
+            // Aucun bloc du puits principal ne voit le ciel (sur les trois graines ; toute la mine sur la première)
+            int ciel = 0;
+            BoundingBox interieur = principal.interieur();
+            for (BlockPos pos : BlockPos.betweenClosed(interieur.minX(), interieur.minY(), interieur.minZ(), interieur.maxX(), interieur.maxY(), interieur.maxZ())) {
+                if (pos.getY() >= niveau.getHeight(Heightmap.Types.MOTION_BLOCKING, pos.getX(), pos.getZ())) {
+                    ciel++;
+                }
+            }
+            if (ciel > 0) {
+                liste.add(ciel + " bloc(s) du puits principal qui voient le ciel");
+            }
+            int surface = sol(niveau, principal.x(), principal.z());
             // Pas de butte : sur 7 × 7 points autour du puits, le sol (sans arbres ni plantes) est à la hauteur prévue par le
             // relief (médiane des écarts : un rocher n'en déplace que quelques-uns, une butte les ferait tous monter)
             List<Integer> ecarts = new ArrayList<>();
@@ -339,8 +368,8 @@ public class MineLykosTest implements FabricClientGameTest {
             if (Math.abs(mediane) > 1) {
                 liste.add("terrain autour du puits décalé de " + mediane + " blocs (butte ?) : " + ecarts);
             }
-            RedRising.LOGGER.info("[G7.2.1] Colonne du puits, de {} à {} : bouchon en {}, surface à {}, écart médian au relief prévu {}", bas, haut,
-                    bouchon.minY(), surface, mediane);
+            RedRising.LOGGER.info("[G7.2.1] Colonne du puits, de {} à {} : bouchon en {}, surface à {}, profondeurs du bouchon {}, écart médian au relief prévu {}",
+                    bas, haut, bouchon.minY(), surface, profondeurs, mediane);
             return String.join(" ; ", liste);
         });
         if (!defauts.isEmpty()) {
