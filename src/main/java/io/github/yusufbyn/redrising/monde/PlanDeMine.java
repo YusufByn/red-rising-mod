@@ -1,6 +1,7 @@
 package io.github.yusufbyn.redrising.monde;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import org.jspecify.annotations.Nullable;
 
@@ -40,6 +41,7 @@ import java.util.concurrent.ConcurrentHashMap;
  *     <li><b>Salles d'extraction</b> (G7.2.2) : une par case libre de la grille, ouverte de côté sur une galerie ; chambres à
  *     piliers, fronts de taille, salles de forage (niveaux 3 et 4), {@value #SALLES_PAR_NIVEAU_4} par niveau.</li>
  *     <li><b>Filons</b> (G7.2.2) : minerais riches et hélium-3, tirés avec le plan ({@link FilonsDeMine}).</li>
+ *     <li><b>Coffres d'outils</b> (G7.2.2) : dans une salle sur deux, contre un mur ; les restes des mineurs, sans camp.</li>
  * </ul>
  */
 public final class PlanDeMine {
@@ -90,6 +92,12 @@ public final class PlanDeMine {
     static final int HAUTEUR_FRONT = 4;
     static final double RAYON_FORAGE = 6.5;
     static final int HAUTEUR_FORAGE = 8;
+    /**
+     * 🟡 Coffres d'outils : au plus {@value #COFFRES_RARES} avec la table rare (une pioche en fer très usée), au niveau du bas,
+     * à plus de {@value #DISTANCE_COFFRE_RARE} blocs de la colonie.
+     */
+    public static final int COFFRES_RARES = 2;
+    public static final int DISTANCE_COFFRE_RARE = 80;
     /** 🟡 Bouchon : deux couches, sous 3 blocs du terrain d'origine (au point le plus bas de la colonne du puits). */
     public static final int ROCHE_SUR_BOUCHON = 3;
     /**
@@ -142,6 +150,10 @@ public final class PlanDeMine {
                 }
             };
         }
+    }
+
+    /** Un coffre d'outils : au sol d'une salle, contre un mur, tourné vers la salle ; {@code rare} : la table avec la pioche en fer. */
+    public record Coffre(BlockPos pos, Direction face, boolean rare) {
     }
 
     /** Un puits : 3 × 3 de vide de {@code bas} à {@code haut} compris, autour de (x, z). */
@@ -204,6 +216,7 @@ public final class PlanDeMine {
     private final Map<BoundingBox, Salle> sallesParBoite = new IdentityHashMap<>();
     private final BoundingBox boiteCaverne;
     private final List<FilonsDeMine.Bloc> filons;
+    private final List<Coffre> coffres;
     /** Les blocs de filon de chaque chunk, pour la pose. */
     private final Map<Long, List<FilonsDeMine.Bloc>> filonsParChunk = new HashMap<>();
     private final Set<BlockPos> poteaux;
@@ -237,6 +250,57 @@ public final class PlanDeMine {
         for (FilonsDeMine.Bloc bloc : filons) {
             filonsParChunk.computeIfAbsent(cleChunk(bloc.pos().getX() >> 4, bloc.pos().getZ() >> 4), cle -> new ArrayList<>()).add(bloc);
         }
+        this.coffres = coffres(hasard);
+    }
+
+    /**
+     * Les coffres d'outils : une salle sur deux, un coffre au sol contre un mur, loin des ouvertures et hors des étais. D'abord
+     * les coffres rares ({@value #COFFRES_RARES} au plus), dans les salles du niveau du bas à plus de
+     * {@value #DISTANCE_COFFRE_RARE} blocs de la colonie ; puis les autres salles, dans un ordre tiré.
+     */
+    private List<Coffre> coffres(Random hasard) {
+        BoundingBox zoneCaverne = caverne.boite();
+        List<Salle> ordre = new ArrayList<>(salles);
+        Collections.shuffle(ordre, hasard);
+        List<Salle> lointaines = new ArrayList<>(ordre.stream().filter(salle -> salle.niveau() == sols.size() - 1
+                && distance(zoneCaverne, salle.x(), salle.z()) > DISTANCE_COFFRE_RARE).limit(COFFRES_RARES).toList());
+        ordre.removeAll(lointaines);
+        ordre.addAll(0, lointaines);
+        List<Coffre> liste = new ArrayList<>();
+        for (Salle salle : ordre) {
+            if (liste.size() == salles.size() / 2) {
+                break;
+            }
+            Coffre coffre = coffreContreUnMur(salle, lointaines.contains(salle), hasard);
+            if (coffre != null) {
+                liste.add(coffre);
+            }
+        }
+        return liste;
+    }
+
+    private static double distance(BoundingBox boite, int x, int z) {
+        return Math.hypot(Math.max(0, Math.max(boite.minX() - x, x - boite.maxX())), Math.max(0, Math.max(boite.minZ() - z, z - boite.maxZ())));
+    }
+
+    /** Un coffre au sol de cette salle, contre un mur, tourné vers la salle, ou {@code null} faute de place. */
+    private @Nullable Coffre coffreContreUnMur(Salle salle, boolean rare, Random hasard) {
+        BoundingBox b = salle.boite();
+        int sol = b.minY();
+        for (int essai = 0; essai < 60; essai++) {
+            BlockPos pos = new BlockPos(b.minX() + hasard.nextInt(b.getXSpan()), sol, b.minZ() + hasard.nextInt(b.getZSpan()));
+            if (!salle.contient(pos.getX(), sol, pos.getZ()) || !salle.contient(pos.getX(), sol + 1, pos.getZ()) || poteaux.contains(pos)
+                    || salle.ouvertures().stream().anyMatch(ouverture -> ouverture.inflatedBy(2).isInside(pos))) {
+                continue;
+            }
+            for (Direction direction : Direction.Plane.HORIZONTAL) {
+                BlockPos voisin = pos.relative(direction);
+                if (!interieur(voisin.getX(), voisin.getY(), voisin.getZ())) {
+                    return new Coffre(pos, direction.getOpposite(), rare);
+                }
+            }
+        }
+        return null;
     }
 
     private static long cleChunk(int cx, int cz) {
@@ -900,6 +964,10 @@ public final class PlanDeMine {
 
     public List<Salle> salles() {
         return salles;
+    }
+
+    public List<Coffre> coffres() {
+        return coffres;
     }
 
     /** Tous les blocs de filon (minerais riches et hélium-3). */

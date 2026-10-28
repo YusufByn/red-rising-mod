@@ -1,6 +1,9 @@
 package io.github.yusufbyn.redrising.gametest;
 
 import io.github.yusufbyn.redrising.RedRising;
+import io.github.yusufbyn.redrising.factions.ActionsFaction;
+import io.github.yusufbyn.redrising.factions.Boutiques;
+import io.github.yusufbyn.redrising.factions.ObjetsRebelles;
 import io.github.yusufbyn.redrising.monde.FilonsDeMine;
 import io.github.yusufbyn.redrising.monde.MineLykos;
 import io.github.yusufbyn.redrising.monde.ObjetsMine;
@@ -21,7 +24,9 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.block.entity.ChestBlockEntity;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.tags.BlockTags;
@@ -63,8 +68,8 @@ import java.util.Set;
  *     bouchon, entre 3 et 5 blocs sous la surface de la colonne, sous de la roche pleine ; rien du puits ne voit le ciel ;
  *     pas de butte en surface.</li>
  *     <li>Forts : la distance du plus proche, et une mine écartée d'un fort posé exprès sur son chemin.</li>
- *     <li>G7.2.2 : salles et filons comptés sur les trois graines (emprise entière) ; une salle de forage en capture ; le
- *     minerai d'hélium-3 (lumière, pioche en pierre).</li>
+ *     <li>G7.2.2 : salles, filons et coffres d'outils comptés sur les trois graines (emprise entière) ; une salle de forage
+ *     en capture ; le minerai d'hélium-3 (lumière, pioche en pierre).</li>
  * </ul>
  */
 public class MineLykosTest implements FabricClientGameTest {
@@ -279,7 +284,7 @@ public class MineLykosTest implements FabricClientGameTest {
             BlockState etat = niveau.getBlockState(pos);
             if (etat.is(Blocks.SPRUCE_LOG)) {
                 piliers.add(cle);
-            } else if (!(etat.isAir() || etat.is(Blocks.LADDER) || etat.is(Blocks.SPRUCE_FENCE) || etat.is(Blocks.SPRUCE_PLANKS))) {
+            } else if (!(etat.isAir() || etat.is(Blocks.LADDER) || etat.is(Blocks.SPRUCE_FENCE) || etat.is(Blocks.SPRUCE_PLANKS) || etat.is(Blocks.CHEST))) {
                 if (malPoses++ < 8) {
                     RedRising.LOGGER.warn("[G7.2.1] Pas vide : {} en {}", etat, pos.toShortString());
                 }
@@ -343,6 +348,11 @@ public class MineLykosTest implements FabricClientGameTest {
     private static final Map<FilonsDeMine.Minerai, Integer> VISIBLES_MIN = Map.of(FilonsDeMine.Minerai.CHARBON, 400, FilonsDeMine.Minerai.FER, 500,
             FilonsDeMine.Minerai.CUIVRE, 220, FilonsDeMine.Minerai.OR, 160, FilonsDeMine.Minerai.REDSTONE, 210, FilonsDeMine.Minerai.HELIUM3, 60);
     private static final int HELIUM3_VOLUME_MIN = 400;
+    /** 🟡 Coffres d'outils : nombre, et ce qui n'y est jamais (en plus de la contrebande). */
+    private static final int COFFRES_MIN = 12;
+    private static final int COFFRES_MAX = 20;
+    private static final Set<Item> INTERDITS_DANS_LES_COFFRES = Set.of(Items.IRON_INGOT, Items.IRON_HELMET, Items.IRON_CHESTPLATE, Items.IRON_LEGGINGS,
+            Items.IRON_BOOTS, Items.DIAMOND, Boutiques.CREDIT, ObjetsMine.HELIUM3, ObjetsMine.MINERAI_HELIUM3_OBJET);
     /** 🟡 Plafonds : fer du volume par rapport à vanilla (sans nos filons), diamants visibles par rapport au squelette sans salles. */
     private static final double FER_VOLUME_MAX = 1.25;
     private static final double DIAMANTS_VISIBLES_MAX = 1.2;
@@ -483,6 +493,38 @@ public class MineLykosTest implements FabricClientGameTest {
                 liste.add(String.format(Locale.ROOT, "diamants visibles ×%.2f", rapportDiamants));
             }
             RedRising.LOGGER.info("[G7.2.2] Graine {} : filons{}", graine, minerais);
+
+            // Coffres d'outils : posés, sans camp, rien d'interdit dedans, au plus 2 pioches en fer dans toute la mine
+            int coffres = 0;
+            int rares = 0;
+            Map<Item, Integer> contenu = new java.util.TreeMap<>(java.util.Comparator.comparing(item -> item.toString()));
+            for (PlanDeMine.Coffre coffre : plan.coffres()) {
+                if (!(niveau.getBlockEntity(coffre.pos()) instanceof ChestBlockEntity bloc)) {
+                    liste.add("pas de coffre en " + coffre.pos().toShortString());
+                    continue;
+                }
+                coffres++;
+                rares += coffre.rare() ? 1 : 0;
+                if (ActionsFaction.campDuCoffre(bloc) != null) {
+                    liste.add("coffre d'un camp en " + coffre.pos().toShortString());
+                }
+                bloc.unpackLootTable(null);
+                for (int i = 0; i < bloc.getContainerSize(); i++) {
+                    ItemStack pile = bloc.getItem(i);
+                    if (pile.isEmpty()) {
+                        continue;
+                    }
+                    contenu.merge(pile.getItem(), pile.getCount(), Integer::sum);
+                    if (INTERDITS_DANS_LES_COFFRES.contains(pile.getItem()) || pile.is(ObjetsRebelles.CONTREBANDE)) {
+                        liste.add(pile + " dans le coffre en " + coffre.pos().toShortString());
+                    }
+                }
+            }
+            int pioches = contenu.getOrDefault(Items.IRON_PICKAXE, 0);
+            if (coffres < COFFRES_MIN || coffres > COFFRES_MAX || pioches > PlanDeMine.COFFRES_RARES) {
+                liste.add(coffres + " coffres, " + pioches + " pioches en fer");
+            }
+            RedRising.LOGGER.info("[G7.2.2] Graine {} : {} coffres d'outils ({} rares), contenu {}", graine, coffres, rares, contenu);
             return String.join(" ; ", liste);
         });
         if (!defauts.isEmpty()) {

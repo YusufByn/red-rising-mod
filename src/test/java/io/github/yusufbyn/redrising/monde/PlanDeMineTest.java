@@ -244,6 +244,41 @@ class PlanDeMineTest {
     }
 
     @Test
+    void coffresDOutils() {
+        for (long graine : GRAINES) {
+            PlanDeMine plan = PlanDeMine.tirer(graine, CENTRE, 62, 66, 66);
+            List<PlanDeMine.Coffre> coffres = plan.coffres();
+            assertTrue(coffres.size() >= 12 && coffres.size() <= 20, "graine " + graine + " : " + coffres.size() + " coffres");
+            int rares = 0;
+            Set<PlanDeMine.Salle> salles = new HashSet<>();
+            for (PlanDeMine.Coffre coffre : coffres) {
+                BlockPos pos = coffre.pos();
+                String nom = "graine " + graine + " : coffre en " + pos;
+                PlanDeMine.Salle salle = plan.salles().stream().filter(s -> s.contient(pos.getX(), pos.getY(), pos.getZ())).findFirst().orElse(null);
+                assertTrue(salle != null, nom + " hors d'une salle");
+                assertTrue(salles.add(salle), nom + " : deux coffres dans la même salle");
+                assertEquals(salle.boite().minY(), pos.getY(), nom + " pas au sol");
+                BlockPos mur = pos.relative(coffre.face().getOpposite());
+                assertTrue(plan.interieur(pos.getX(), pos.getY(), pos.getZ()) && !plan.interieur(mur.getX(), mur.getY(), mur.getZ()), nom + " pas contre un mur");
+                assertFalse(plan.poteaux().contains(pos), nom + " sur un étai");
+                for (BoundingBox ouverture : salle.ouvertures()) {
+                    assertFalse(ouverture.inflatedBy(1).isInside(pos), nom + " devant une ouverture");
+                }
+                if (coffre.rare()) {
+                    rares++;
+                    assertEquals(plan.sols().size() - 1, salle.niveau(), nom + " : coffre rare hors du niveau du bas");
+                    BoundingBox caverne = plan.caverne().boite();
+                    double versColonie = Math.hypot(Math.max(0, Math.max(caverne.minX() - salle.x(), salle.x() - caverne.maxX())),
+                            Math.max(0, Math.max(caverne.minZ() - salle.z(), salle.z() - caverne.maxZ())));
+                    assertTrue(versColonie > PlanDeMine.DISTANCE_COFFRE_RARE, nom + " : coffre rare près de la colonie");
+                }
+            }
+            assertTrue(rares <= PlanDeMine.COFFRES_RARES, "graine " + graine + " : " + rares + " coffres rares");
+            System.out.println("Coffres, graine " + graine + " : " + coffres.size() + " dont " + rares + " rares");
+        }
+    }
+
+    @Test
     void colonieReservee() {
         PlanDeMine plan = PlanDeMine.tirer(42, CENTRE, 62, 66, 66);
         PlanDeMine.Caverne caverne = plan.caverne();
@@ -265,6 +300,7 @@ class PlanDeMineTest {
         assertEquals(a.puits(), b.puits());
         assertEquals(a.salles(), b.salles());
         assertEquals(a.filons(), b.filons());
+        assertEquals(a.coffres(), b.coffres());
         assertSame(PlanDeMine.de(5, CENTRE, 62, 66, 66), PlanDeMine.de(5, CENTRE, 62, 66, 66));
     }
 }

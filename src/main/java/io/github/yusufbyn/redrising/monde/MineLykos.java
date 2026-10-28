@@ -18,6 +18,11 @@ import net.minecraft.world.level.StructureManager;
 import net.minecraft.world.level.WorldGenLevel;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.ChestBlock;
+import net.minecraft.world.RandomizableContainer;
+import net.minecraft.world.level.storage.loot.LootTable;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.world.level.block.LadderBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.ChunkGenerator;
@@ -54,7 +59,7 @@ import java.util.concurrent.atomic.LongAccumulator;
  *     dans {@code data/redrising/worldgen/structure/mine.json}) : ni grotte de bruit ni aquifère dans le volume.</li>
  *     <li><b>Pose</b> : à la dernière étape de la génération ({@code top_layer_modification}), après les minerais, les
  *     géodes et les sources. Chaque morceau pose les blocs du plan qui touchent son chunk : coque de roche (seulement à
- *     la place du vide et des fluides), vide (galeries, puits, caverne, salles), étais, échelles, bouchon ; et avant tout, les
+ *     la place du vide et des fluides), vide (galeries, puits, caverne, salles), étais, échelles, coffres, bouchon ; et avant tout, les
  *     filons de son chunk.</li>
  *     <li><b>Autour</b> : pas de carvers dans l'emprise, ni d'autre structure (sauf un fort), ni de décoration souterraine
  *     autre que les minerais dans le volume de la mine (mixins sur {@code NoiseBasedChunkGenerator.applyCarvers},
@@ -351,7 +356,7 @@ public final class MineLykos extends Structure {
                 return;
             }
             long debut = System.nanoTime();
-            poser(monde, plan(), chunk);
+            poser(monde, plan(), chunk, hasard);
             long duree = System.nanoTime() - debut;
             POSES.incrementAndGet();
             TEMPS_TOTAL.addAndGet(duree);
@@ -367,9 +372,12 @@ public final class MineLykos extends Structure {
     private static final BlockState PILIER = Blocks.SPRUCE_LOG.defaultBlockState();
     private static final BlockState ECHELLE = Blocks.LADDER.defaultBlockState().setValue(LadderBlock.FACING, Direction.SOUTH);
     private static final BlockState BOUCHON = Blocks.POLISHED_ANDESITE.defaultBlockState();
+    /** Tables de butin des coffres d'outils ({@code data/redrising/loot_table/chests/}). */
+    public static final ResourceKey<LootTable> COFFRE_OUTILS = ResourceKey.create(Registries.LOOT_TABLE, id("chests/mine_outils"));
+    public static final ResourceKey<LootTable> COFFRE_RARE = ResourceKey.create(Registries.LOOT_TABLE, id("chests/mine_outils_rare"));
 
     /** Pose, dans ce chunk, tout ce que le plan y met. */
-    static void poser(WorldGenLevel monde, PlanDeMine plan, BoundingBox chunk) {
+    static void poser(WorldGenLevel monde, PlanDeMine plan, BoundingBox chunk, RandomSource hasard) {
         BoundingBox colonne = new BoundingBox(chunk.minX(), monde.getMinY(), chunk.minZ(), chunk.maxX(), monde.getMaxY(), chunk.maxZ());
         // Filons d'abord (G7.2.2) : un chunk sans vide de la mine peut en avoir (hélium-3 caché)
         poserFilons(monde, plan, chunk);
@@ -440,6 +448,13 @@ public final class MineLykos extends Structure {
                 if (colonne.isInside(echelle)) {
                     monde.setBlock(echelle, ECHELLE, Block.UPDATE_CLIENTS);
                 }
+            }
+        }
+        // Coffres d'outils (G7.2.2) : sans camp, leur contenu tiré à la première ouverture
+        for (PlanDeMine.Coffre coffre : plan.coffres()) {
+            if (colonne.isInside(coffre.pos())) {
+                monde.setBlock(coffre.pos(), Blocks.CHEST.defaultBlockState().setValue(ChestBlock.FACING, coffre.face()), Block.UPDATE_CLIENTS);
+                RandomizableContainer.setBlockEntityLootTable(monde, hasard, coffre.pos(), coffre.rare() ? COFFRE_RARE : COFFRE_OUTILS);
             }
         }
         BoundingBox bouchon = intersection(plan.bouchon(), colonne);
