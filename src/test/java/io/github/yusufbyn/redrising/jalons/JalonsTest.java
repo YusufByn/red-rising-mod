@@ -24,7 +24,7 @@ class JalonsTest {
     }
 
     private static Bilan bilan(long presence, long aide, long tort) {
-        return new Bilan(new Horloge(presence, presence, aide, tort), Map.of(), Map.of());
+        return new Bilan(new Horloge(presence, presence, aide, tort), Map.of(), Map.of(), Map.of());
     }
 
     @AfterEach
@@ -63,7 +63,7 @@ class JalonsTest {
     void rythmeParJoueurEtParJour() {
         // 30 de net en 2 jours à un joueur, ou en 1 jour à deux joueurs : 15 par joueur et par jour
         assertEquals(15, bilan(2 * JOUR, 40, 10).rythme(), 1e-9);
-        assertEquals(15, new Bilan(new Horloge(JOUR, 2 * JOUR, 30, 0), Map.of(), Map.of()).rythme(), 1e-9);
+        assertEquals(15, new Bilan(new Horloge(JOUR, 2 * JOUR, 30, 0), Map.of(), Map.of(), Map.of()).rythme(), 1e-9);
     }
 
     @Test
@@ -82,7 +82,7 @@ class JalonsTest {
 
     @Test
     void bilanDeLaPeriode() {
-        Bilan bilan = Bilan.entre(new Horloge(100, 100, 5, 2), new Horloge(JOUR + 100, JOUR + 100, 25, 7), Map.of(), Map.of());
+        Bilan bilan = Bilan.entre(new Horloge(100, 100, 5, 2), new Horloge(JOUR + 100, JOUR + 100, 25, 7), Map.of(), Map.of(), Map.of());
         assertEquals(20, bilan.aide());
         assertEquals(5, bilan.tort());
         assertEquals(15, bilan.net());

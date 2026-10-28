@@ -214,5 +214,20 @@
   "commande.redrising.effet.recus.reset": "Payouts received by %s forgotten",
   "levier.redrising.alerte_patrouilles": "patrol alert",
   "levier.redrising.silence_rouge": "silence of the Reds",
-  "jalon.redrising.pendant_absence": "While you were away: %s"
+  "jalon.redrising.pendant_absence": "While you were away: %s",
+  "personnage.redrising.a_terre": "%s is down, unconscious",
+  "commande.redrising.personnage.donne": "Character %s given to NPC %s",
+  "commande.redrising.personnage.deplace": "Character %s given to NPC %s; taken from NPC %s, who played it",
+  "commande.redrising.personnage.libere": "NPC %s no longer plays a character",
+  "commande.redrising.personnage.ko": "NPC %s knocked down",
+  "commande.redrising.personnage.reveille": "NPC %s back up",
+  "commande.redrising.personnage.ligne": "%s: milestone %s; %s; NPC %s",
+  "commande.redrising.personnage.essentiel": "essential",
+  "commande.redrising.personnage.tuable": "killable",
+  "commande.redrising.personnage.mort": "dead at play time %s",
+  "commande.redrising.personnage.aucun": "No character declared",
+  "commande.redrising.personnage.tue": "NPC %s killed (essential or not)",
+  "commande.redrising.personnage.oublie": "Death of character %s forgotten: it can be played again",
+  "commande.redrising.personnage.inconnu": "No character declared as %s",
+  "commande.redrising.personnage.refuse_mort": "Character %s is dead (/rr personnage oublier to give it again)"
 }

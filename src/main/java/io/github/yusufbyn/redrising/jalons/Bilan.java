@@ -6,21 +6,34 @@ import java.util.Map;
 
 /**
  * L'état du monde vu par un jalon (G6.2), au moment où l'on décide de son échéance ou de son issue : ce qui s'est passé
- * depuis sa mise en route, les issues des jalons passés, les zones. Plus tard : attitudes des PNJ canon (G6.5),
- * personnages canon tués (G6.4). Logique pure (testée).
+ * depuis sa mise en route, les issues des jalons passés, les zones, les personnages canon morts (G6.4). Plus tard :
+ * attitudes des PNJ canon (G6.5). Logique pure (testée).
  *
  * @param periode l'horloge depuis la mise en route : temps de jeu, présence, aide et tort de la période
  */
-public record Bilan(Horloge periode, Map<String, Issue> issues, Map<String, Camp> zones) {
+public record Bilan(Horloge periode, Map<String, Issue> issues, Map<String, Camp> zones, Map<String, MortPersonnage> morts) {
     public Bilan {
         issues = Map.copyOf(issues);
         zones = Map.copyOf(zones);
+        morts = Map.copyOf(morts);
     }
 
     /** Ce qui s'est passé entre deux relevés de l'horloge. */
-    public static Bilan entre(Horloge depart, Horloge maintenant, Map<String, Issue> issues, Map<String, Camp> zones) {
+    public static Bilan entre(Horloge depart, Horloge maintenant, Map<String, Issue> issues, Map<String, Camp> zones,
+                              Map<String, MortPersonnage> morts) {
         return new Bilan(new Horloge(maintenant.temps() - depart.temps(), maintenant.presence() - depart.presence(),
-                maintenant.aide() - depart.aide(), maintenant.tort() - depart.tort()), issues, zones);
+                maintenant.aide() - depart.aide(), maintenant.tort() - depart.tort()), issues, zones, morts);
+    }
+
+    /** Ce personnage canon est mort (G6.4). */
+    public boolean tue(String personnage) {
+        return morts.containsKey(personnage);
+    }
+
+    /** Ce personnage canon a été tué par un joueur. */
+    public boolean tueParUnJoueur(String personnage) {
+        MortPersonnage mort = morts.get(personnage);
+        return mort != null && mort.joueur().isPresent();
     }
 
     public long aide() {

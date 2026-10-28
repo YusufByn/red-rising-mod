@@ -9,6 +9,7 @@ import io.github.yusufbyn.redrising.monde.CelluleRising;
 import io.github.yusufbyn.redrising.monde.Vue;
 import io.github.yusufbyn.redrising.pnj.PatrouillePnj;
 import io.github.yusufbyn.redrising.pnj.PnjCouleur;
+import io.github.yusufbyn.redrising.pnj.PnjEssentiels;
 import io.github.yusufbyn.redrising.pnj.TraqueGris;
 import net.fabricmc.fabric.api.attachment.v1.AttachmentRegistry;
 import net.fabricmc.fabric.api.attachment.v1.AttachmentType;
@@ -183,8 +184,10 @@ public final class ActionsFaction {
     private static void denoncer(ServerPlayer joueur) {
         double portee = EffetsActions.PORTEE_DENONCIATION;
         Villager rebelle = joueur.level().getEntities(EntityTypes.VILLAGER, joueur.getBoundingBox().inflate(portee),
-                        // Pas les PNJ d'une cellule : seule la dénonciation de la cellule, carte en main, les atteint
-                        pnj -> pnj.getAttached(CAMP) == Camp.RISING && pnj.distanceTo(joueur) <= portee && !CelluleRising.dansUneCellule(pnj))
+                        // Pas les PNJ d'une cellule : seule la dénonciation de la cellule, carte en main, les atteint.
+                        // Pas un personnage essentiel (G6.4) : on prend le suivant
+                        pnj -> pnj.getAttached(CAMP) == Camp.RISING && pnj.distanceTo(joueur) <= portee && !CelluleRising.dansUneCellule(pnj)
+                                && !PnjEssentiels.essentiel(pnj))
                 .stream()
                 .min(Comparator.comparingDouble(pnj -> pnj.distanceToSqr(joueur)))
                 .orElse(null);
@@ -296,6 +299,20 @@ public final class ActionsFaction {
     }
 
     /**
+     * Le joueur a mis à terre un personnage essentiel (G6.4) : un K.-O., avec les témoins du meurtre de sa Couleur
+     * (silence compris), sans Soutien. Son contrôleur mis à terre par lui : témoin Gris, comme pour un meurtre.
+     */
+    public static void mettreKo(ServerPlayer joueur, Villager pnj) {
+        Couleur couleur = PnjCouleur.couleur(pnj);
+        if (couleur == null) {
+            return;
+        }
+        boolean sonControleur = joueur.getUUID().equals(PatrouillePnj.suspectControle(pnj));
+        agirDevantTemoins(joueur, "met à terre " + pnj.getAttached(PnjEssentiels.PERSONNAGE), EffetsActions.ko(couleur), pnj,
+                contreLaSociete(couleur), sonControleur ? Temoin.GRIS : Temoin.AUCUN);
+    }
+
+    /**
      * Tuer un PNJ de cette Couleur est-il une action contre la Société (G6.3) ? Oui pour l'élite et l'ordre (chasseurs
      * compris) ; non pour le peuple : les Rouges ne couvrent pas celui qui s'en prend à eux.
      */
@@ -327,7 +344,7 @@ public final class ActionsFaction {
         for (Villager pnj : joueur.level().getEntities(EntityTypes.VILLAGER, joueur.getBoundingBox().inflate(portee),
                 pnj -> pnj != exclu && pnj.isAlive() && pnj.distanceTo(joueur) <= portee)) {
             Couleur couleur = PnjCouleur.couleur(pnj);
-            if (couleur == null || pnj.getAttached(CAMP) == Camp.RISING || !Vue.voit(pnj, joueur)
+            if (couleur == null || pnj.getAttached(CAMP) == Camp.RISING || PnjEssentiels.inconscient(pnj) || !Vue.voit(pnj, joueur)
                     || (contreLaSociete && EffetsMonde.silencieuse(joueur.level().getServer(), couleur))) {
                 continue;
             }

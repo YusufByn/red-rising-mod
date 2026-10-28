@@ -7,7 +7,8 @@
     "HopperBlockEntityMixin",
     "CraftingMenuMixin",
     "BlockEntityMixin",
-    "ServerExplosionMixin"
+    "ServerExplosionMixin",
+    "VillagerMixin"
   ],
   "injectors": {
     "defaultRequire": 1

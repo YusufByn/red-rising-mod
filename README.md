@@ -49,6 +49,7 @@ Réservées aux ops (ou à la triche activée en solo). `[joueur]` est optionnel
 - `/rr couleur get [joueur]`, `/rr couleur set <couleur> [joueur]`
 - `/rr jauge get [joueur]`, `/rr jauge set <jauge> <valeur> [joueur]`, `/rr jauge add <jauge> <delta> [joueur]`
 - `/rr jalon list`, `/rr jalon set <jalon> <issue>`, `/rr jalon clear <jalon>` (sans événement)
+- `/rr personnage list`, `/rr personnage tuer <pnj>`, `/rr personnage oublier <personnage>`, `/rr pnj personnage <pnj> <personnage>|aucun`, `/rr pnj ko <pnj>`, `/rr pnj reveiller <pnj>` (personnages canon)
 - `/rr effet list`, `/rr effet poser <levier> <niveau> [ticks]`, `/rr effet retirer <id>`, `/rr effet recus get|reset [joueur]` (effets des jalons)
 - `/rr jalon prochains`, `/rr jalon declencher <jalon> [issue]` (passage complet, avec l'événement), `/rr jalon effets <jalon> appliques|en_attente`
 - `/rr pnj spawn <couleur>` (un PNJ de cette Couleur à ta position), `/rr pnj get <pnj>`, `/rr pnj set <pnj> <couleur>`

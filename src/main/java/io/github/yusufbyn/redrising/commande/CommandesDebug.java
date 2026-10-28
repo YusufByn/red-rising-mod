@@ -44,7 +44,10 @@ import io.github.yusufbyn.redrising.jalons.Jalon;
 import io.github.yusufbyn.redrising.jalons.Jalons;
 import io.github.yusufbyn.redrising.jalons.JalonsEvents;
 import io.github.yusufbyn.redrising.jalons.Levier;
+import io.github.yusufbyn.redrising.jalons.MortPersonnage;
 import io.github.yusufbyn.redrising.jalons.MoteurJalons;
+import io.github.yusufbyn.redrising.jalons.Personnage;
+import io.github.yusufbyn.redrising.jalons.Personnages;
 import io.github.yusufbyn.redrising.monde.CelluleRising;
 import io.github.yusufbyn.redrising.monde.PosteSociete;
 import io.github.yusufbyn.redrising.monde.Vue;
@@ -53,6 +56,7 @@ import io.github.yusufbyn.redrising.factions.Traque;
 import io.github.yusufbyn.redrising.pnj.PatrouillePnj;
 import io.github.yusufbyn.redrising.pnj.TraqueGris;
 import io.github.yusufbyn.redrising.pnj.PnjCouleur;
+import io.github.yusufbyn.redrising.pnj.PnjEssentiels;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
@@ -78,6 +82,7 @@ import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -106,6 +111,10 @@ public final class CommandesDebug {
             jalon -> Component.translatable("commande.redrising.jalon.deja_passe", jalon));
     private static final DynamicCommandExceptionType EFFET_ABSENT = new DynamicCommandExceptionType(
             effet -> Component.translatable("commande.redrising.effet.absent", effet));
+    private static final DynamicCommandExceptionType PERSONNAGE_INCONNU = new DynamicCommandExceptionType(
+            personnage -> Component.translatable("commande.redrising.personnage.inconnu", personnage));
+    private static final DynamicCommandExceptionType PERSONNAGE_MORT = new DynamicCommandExceptionType(
+            personnage -> Component.translatable("commande.redrising.personnage.refuse_mort", personnage));
     private static final DynamicCommandExceptionType PAS_UN_VILLAGEOIS = new DynamicCommandExceptionType(
             entite -> Component.translatable("commande.redrising.pnj.pas_villageois", entite));
     private static final DynamicCommandExceptionType PAS_UN_COFFRE = new DynamicCommandExceptionType(
@@ -157,7 +166,24 @@ public final class CommandesDebug {
                         .then(Commands.literal("camp")
                                 .then(Commands.argument("pnj", EntityArgument.entity())
                                         .then(argEnum("camp", Camp.values()).executes(ctx -> changerCampPnj(ctx, lireEnum(ctx, "camp", Camp.values()))))
-                                        .then(Commands.literal("aucun").executes(ctx -> changerCampPnj(ctx, null))))))
+                                        .then(Commands.literal("aucun").executes(ctx -> changerCampPnj(ctx, null)))))
+                        // Personnages canon (G6.4)
+                        .then(Commands.literal("personnage")
+                                .then(Commands.argument("pnj", EntityArgument.entity())
+                                        .then(Commands.literal("aucun").executes(CommandesDebug::libererPnj))
+                                        .then(Commands.argument("personnage", StringArgumentType.word())
+                                                .suggests((ctx, builder) -> SharedSuggestionProvider.suggest(Personnages.tous().stream().map(Personnage::id), builder))
+                                                .executes(CommandesDebug::incarnerPnj))))
+                        .then(Commands.literal("ko")
+                                .then(Commands.argument("pnj", EntityArgument.entity()).executes(CommandesDebug::mettreKo)))
+                        .then(Commands.literal("reveiller")
+                                .then(Commands.argument("pnj", EntityArgument.entity()).executes(CommandesDebug::reveillerPnj))))
+                .then(Commands.literal("personnage")
+                        .then(Commands.literal("list").executes(CommandesDebug::listerPersonnages))
+                        .then(Commands.literal("tuer")
+                                .then(Commands.argument("pnj", EntityArgument.entity()).executes(CommandesDebug::tuerPersonnage)))
+                        .then(Commands.literal("oublier")
+                                .then(Commands.argument("personnage", StringArgumentType.word()).executes(CommandesDebug::oublierPersonnage))))
                 .then(Commands.literal("structure")
                         .then(Commands.literal("list").executes(CommandesDebug::listerStructures))
                         .then(Commands.literal("poste")
@@ -717,6 +743,77 @@ public final class CommandesDebug {
 
     private static Component nomCamp(@Nullable Camp camp) {
         return camp == null ? Component.translatable("commande.redrising.aucun") : nom("camp", camp);
+    }
+
+    // --- Personnages canon (G6.4) ---
+
+    private static int incarnerPnj(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        Villager pnj = villageois(ctx);
+        String personnage = StringArgumentType.getString(ctx, "personnage");
+        Set<UUID> ancien = new HashSet<>();
+        switch (PnjEssentiels.incarner(pnj, personnage, ancien)) {
+            case INCONNU -> throw PERSONNAGE_INCONNU.create(personnage);
+            case MORT -> throw PERSONNAGE_MORT.create(personnage);
+            case DONNE -> ctx.getSource().sendSuccess(() -> ancien.isEmpty()
+                    ? Component.translatable("commande.redrising.personnage.donne", personnage, pnj.getStringUUID())
+                    : Component.translatable("commande.redrising.personnage.deplace", personnage, pnj.getStringUUID(), ancien.iterator().next().toString()), true);
+        }
+        return Command.SINGLE_SUCCESS;
+    }
+
+    private static int libererPnj(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        Villager pnj = villageois(ctx);
+        PnjEssentiels.liberer(pnj);
+        ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.personnage.libere", pnj.getStringUUID()), true);
+        return Command.SINGLE_SUCCESS;
+    }
+
+    private static int mettreKo(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        Villager pnj = villageois(ctx);
+        PnjEssentiels.mettreATerre(pnj);
+        ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.personnage.ko", pnj.getStringUUID()), true);
+        return Command.SINGLE_SUCCESS;
+    }
+
+    private static int reveillerPnj(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        Villager pnj = villageois(ctx);
+        PnjEssentiels.reveiller(pnj);
+        ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.personnage.reveille", pnj.getStringUUID()), true);
+        return Command.SINGLE_SUCCESS;
+    }
+
+    /** Chaque personnage déclaré : son jalon, essentiel ou pas, mort ou pas, et le PNJ qui l'incarne. */
+    private static int listerPersonnages(CommandContext<CommandSourceStack> ctx) {
+        MinecraftServer server = ctx.getSource().getServer();
+        EtatMonde etat = EtatMondeServeur.get(server);
+        Map<String, UUID> porteurs = PnjEssentiels.porteurs(server);
+        for (Personnage personnage : Personnages.tous()) {
+            MortPersonnage mort = etat.morts().get(personnage.id());
+            Component statut = mort != null ? Component.translatable("commande.redrising.personnage.mort", temps(mort.temps()))
+                    : Component.translatable(Personnages.essentiel(personnage, etat) ? "commande.redrising.personnage.essentiel" : "commande.redrising.personnage.tuable");
+            UUID porteur = porteurs.get(personnage.id());
+            ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.personnage.ligne", personnage.id(),
+                    personnage.jalon() == null ? Component.translatable("commande.redrising.aucun") : Component.literal(personnage.jalon()), statut,
+                    porteur == null ? Component.translatable("commande.redrising.aucun") : Component.literal(porteur.toString())), false);
+        }
+        if (Personnages.tous().isEmpty()) {
+            ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.personnage.aucun"), false);
+        }
+        return Personnages.tous().size();
+    }
+
+    private static int tuerPersonnage(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        Villager pnj = villageois(ctx);
+        PnjEssentiels.tuer(pnj, ctx.getSource().getLevel());
+        ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.personnage.tue", pnj.getStringUUID()), true);
+        return Command.SINGLE_SUCCESS;
+    }
+
+    private static int oublierPersonnage(CommandContext<CommandSourceStack> ctx) {
+        String personnage = StringArgumentType.getString(ctx, "personnage");
+        modifierEtat(ctx, etat -> etat.sansMort(personnage));
+        ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.personnage.oublie", personnage), true);
+        return Command.SINGLE_SUCCESS;
     }
 
     private static Villager villageois(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {

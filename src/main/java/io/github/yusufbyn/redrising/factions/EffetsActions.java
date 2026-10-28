@@ -55,6 +55,16 @@ public final class EffetsActions {
         return new Variation(vol.loyaute(), 0, vol.suspicion());
     }
 
+    /**
+     * Le joueur a mis à terre un personnage canon essentiel (G6.4) : la Loyauté et la Suspicion du meurtre de sa Couleur,
+     * à chaque fois, mais jamais de Soutien. Frapper un essentiel coûte toujours et ne rapporte rien : pas de boucle, et
+     * rien dans les compteurs d'aide et de tort.
+     */
+    public static Variation ko(Couleur victime) {
+        Variation meurtre = tuer(victime);
+        return new Variation(meurtre.loyaute(), 0, meurtre.suspicion());
+    }
+
     /** Le joueur a dénoncé un PNJ du Rising à un Gris. */
     public static Variation denoncer() {
         return new Variation(5, -10, -5);

@@ -169,13 +169,9 @@ public final class PatrouillePnj {
         return enCours == null ? null : enCours.suspect();
     }
 
-    private static void oublier(Villager pnj) {
-        PATROUILLEURS.remove(pnj);
-        EN_PAUSE.remove(pnj.getUUID());
+    /** Le contrôle que mène ce Gris s'arrête sans effet (il est à terre, G6.4). */
+    public static void interrompre(Villager pnj) {
         EnCours controle = CONTROLES.remove(pnj.getUUID());
-        FOUILLES.remove(pnj.getUUID());
-        // Le contrôleur disparaît (tué, retiré) en plein contrôle : le contrôle s'arrête sans effet, ce n'est pas une
-        // fuite. Un suspect déjà déconnecté garde sa marque (à l'arrêt du serveur, les joueurs partent avant les PNJ).
         MinecraftServer server = pnj.level().getServer();
         ServerPlayer suspect = controle == null || server == null ? null : server.getPlayerList().getPlayer(controle.suspect());
         if (suspect != null) {
@@ -183,9 +179,18 @@ public final class PatrouillePnj {
         }
     }
 
+    private static void oublier(Villager pnj) {
+        PATROUILLEURS.remove(pnj);
+        EN_PAUSE.remove(pnj.getUUID());
+        FOUILLES.remove(pnj.getUUID());
+        // Le contrôleur disparaît (tué, retiré) en plein contrôle : le contrôle s'arrête sans effet, ce n'est pas une
+        // fuite. Un suspect déjà déconnecté garde sa marque (à l'arrêt du serveur, les joueurs partent avant les PNJ).
+        interrompre(pnj);
+    }
+
     private static void agir(ServerLevel monde, Villager gris, long maintenant) {
-        if (gris.hasAttached(TraqueGris.CHASSEUR)) {
-            return; // en traque (G5.6) : il reprendra sa ronde après
+        if (gris.hasAttached(TraqueGris.CHASSEUR) || PnjEssentiels.inconscient(gris)) {
+            return; // en traque (G5.6), ou à terre (G6.4) : il reprendra sa ronde après
         }
         EnCours enCours = CONTROLES.get(gris.getUUID());
         if (enCours != null) {

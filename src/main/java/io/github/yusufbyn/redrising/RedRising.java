@@ -19,6 +19,7 @@ import io.github.yusufbyn.redrising.monde.CelluleRising;
 import io.github.yusufbyn.redrising.monde.PosteSociete;
 import io.github.yusufbyn.redrising.monde.Vue;
 import io.github.yusufbyn.redrising.pnj.PatrouillePnj;
+import io.github.yusufbyn.redrising.pnj.PnjEssentiels;
 import io.github.yusufbyn.redrising.pnj.TraqueGris;
 import net.fabricmc.api.ModInitializer;
 import org.slf4j.Logger;
@@ -44,6 +45,7 @@ public class RedRising implements ModInitializer {
         PosteSociete.init();
         CelluleRising.init();
         PatrouillePnj.init();
+        PnjEssentiels.init();
         TraqueGris.init();
         Vue.init();
         Contrebande.init();

@@ -507,6 +507,19 @@ PNJ qu'on peut **croiser et influencer**. Trois règles :
 - Une poignée de personnages par époque, dans des lieux précis (mine de Lykos, Institut, domaines de la Société).
 - 🟡 Liste v1 proposée : Darrow, Mustang, Sevro, Cassius, Ares, le Chacal, Octavia, Roque.
 
+### PNJ essentiels (décidés le 28/10 en G6.4)
+- ✅ **Déclaration** : un registre de personnages, en code comme les jalons (`Personnages.declarer("darrow", "triomphe")`) ; le PNJ ne porte que l'identifiant de son personnage. Les vrais personnages viendront en G15.2.
+- ✅ **Essentiel** tant que son jalon n'a pas d'issue, tuable ensuite. Un jalon fixe compte : **Eo est essentielle jusqu'à sa pendaison** (sinon on la tue avant et le jalon fixe casse). Seul un personnage déclaré sans aucun jalon n'est jamais essentiel.
+- 🟡 **À terre au lieu de mourir** : couché, immobile, invulnérable et témoin de rien pendant **30 secondes de jeu** ; il se relève avec **la moitié de sa vie**. Celui qui l'a mis à terre lit « … est à terre, sans connaissance », et des particules tournent au-dessus de lui.
+- ✅ **Pas de boucle** : un K.-O. vaut la Loyauté et la Suspicion du meurtre de sa Couleur, avec les témoins habituels (silence compris ; son contrôleur mis à terre par lui : témoin Gris), **jamais de Soutien**, à chaque fois. Frapper un essentiel coûte toujours et ne rapporte rien ; rien n'entre dans les compteurs d'aide et de tort.
+- ✅ **Morts hors combat** : une mort sans attaquant (lave, feu, vide, noyade, suffocation, `/kill`) le ramène d'abord à son **foyer** (là où il a reçu son personnage), où il tombe à terre. Chunk déchargé pendant l'inconscience : l'heure du réveil est sauvegardée, il se relève au rechargement s'il est passé.
+- ✅ **Conversions** : la foudre ne change pas un essentiel en sorcière (le coup de foudre est annulé). Un zombie ne le convertit pas : sa mort est annulée. Après son jalon, une conversion compte comme sa mort (pas par un joueur), et le converti n'incarne plus le personnage (sinon on guérirait un personnage mort).
+- ✅ **Arrestations** : la dénonciation à mains vides ignore un essentiel et prend le PNJ du Rising suivant ; s'il n'y en a pas, rien ne se passe.
+- ❓ **Un essentiel dans une cellule qui tombe** (proposé le 28/10, à trancher) : s'il a son foyer hors de la cellule, il y est renvoyé (il s'est échappé) ; si son foyer est dans la cellule, il est retiré du monde sans être tué et son personnage est marqué « en fuite » : pas mort pour le `Bilan`, sans PNJ, à replacer ailleurs (G15.2). En attendant la décision, il est arrêté comme les autres PNJ de la salle (retiré, sans mort enregistrée).
+- ✅ **Un personnage, un seul PNJ vivant** : `/rr pnj personnage` le retire à l'ancien porteur (tout de suite s'il est chargé, sinon à son prochain chargement). Un personnage mort ne se redonne pas sans `/rr personnage oublier`.
+- ✅ **Après le jalon** : sa mort est enregistrée dans l'état du monde (temps de jeu, joueur qui l'a tué), pour le `Bilan` des jalons suivants (`bilan.tue(...)`, `bilan.tueParUnJoueur(...)`). Le meurtre vaut celui de sa Couleur ; un poids propre au personnage pourra venir avec l'attitude (G6.5).
+- Debug : `/rr personnage list|tuer <pnj>|oublier <personnage>`, `/rr pnj personnage <pnj> <personnage>|aucun`, `/rr pnj ko|reveiller <pnj>`.
+
 ---
 
 ## 9. Équipement
@@ -564,6 +577,7 @@ PNJ qu'on peut **croiser et influencer**. Trois règles :
 - ✅ Même en solo, Minecraft tourne en client-serveur : synchronisation réseau obligatoire pour toutes les données joueur.
 - ✅ **Format de sauvegarde versionné dès la v1** : enregistrer proprement l'état du monde (issue de chaque jalon, jauges, zones contrôlées, Couleur, Sculpture) pour permettre le passage v1 → v2 sans migrations douloureuses.
   - ✅ Mis en place en G2.4 (schéma v1) : l'état du monde est un attachment global Fabric (`data/fabric/attachments.dat`, clé `redrising:etat_monde`) avec `schemaVersion`, `epoque` (`red_rising`, `golden_son`, `morning_star`), `jalons` (identifiant de jalon → `canon` ou `divergente`) et `zones` (identifiant de zone → `societe` ou `rising`). Couleur et jauges sont attachées au joueur, dans son fichier.
+  - ✅ Schéma v5 (G6.4) : + `morts` (personnage → temps de jeu, joueur qui l'a tué). Un monde v4 est migré sans mort. Sur le PNJ : `personnage`, `foyer`, `inconscient` ; global : `porteurs_personnages`.
   - ✅ Schéma v4 (G6.3) : + `effets` (identifiant → levier, niveau, jalon, début, fin) et `versements` (jauges et nouvelles des jalons). Un monde v3 est migré avec des listes vides. Sur le joueur : `arrivee` et `versements_recus`.
   - ✅ Schéma v3 (G6.2) : + `presence` dans l'horloge, `en_route` (jalon → horloge au moment de sa mise en route), `effets_en_attente` (jalons passés dont les effets ne sont pas appliqués). Un monde v2 est migré : présence = temps de jeu (comme à un seul joueur), rien en route, effets déjà appliqués.
   - ✅ Schéma v2 (G6.1) : + `horloge` (`temps`, `aide`, `tort`, voir section 8). Un monde v1 est migré en v2 à la lecture, avec une horloge à zéro (aucun monde n'avait été publié : pas besoin d'estimer le passé).

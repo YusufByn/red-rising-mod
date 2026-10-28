@@ -48,7 +48,7 @@ public final class Jalons {
     /** Le bilan depuis sa mise en route (ou depuis le début du monde, s'il n'est pas en route : jalon forcé). */
     public static Bilan bilan(Jalon jalon, EtatMonde etat) {
         Horloge depart = etat.enRoute().getOrDefault(jalon.id(), Horloge.ZERO);
-        return Bilan.entre(depart, etat.horloge(), etat.jalons(), etat.zones());
+        return Bilan.entre(depart, etat.horloge(), etat.jalons(), etat.zones(), etat.morts());
     }
 
     /** Délai total depuis sa mise en route, au rythme actuel. */
