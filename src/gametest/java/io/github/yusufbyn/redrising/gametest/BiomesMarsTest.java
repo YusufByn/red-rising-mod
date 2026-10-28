@@ -1,5 +1,6 @@
 package io.github.yusufbyn.redrising.gametest;
 
+import com.google.gson.JsonObject;
 import com.mojang.serialization.Lifecycle;
 import io.github.yusufbyn.redrising.RedRising;
 import io.github.yusufbyn.redrising.monde.Latitude;
@@ -13,6 +14,7 @@ import net.fabricmc.fabric.api.client.gametest.v1.context.TestSingleplayerContex
 import net.fabricmc.fabric.api.client.gametest.v1.world.TestWorldSave;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
+import net.minecraft.core.HolderLookup;
 import net.minecraft.core.QuartPos;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.server.MinecraftServer;
@@ -30,6 +32,7 @@ import net.minecraft.world.level.levelgen.NoiseGeneratorSettings;
 import net.minecraft.world.level.levelgen.WorldDimensions;
 import net.minecraft.world.level.levelgen.presets.WorldPresets;
 
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
@@ -40,7 +43,8 @@ import java.util.Set;
 /**
  * G7.1.2 : un monde neuf a le type Mars (le type par défaut) : rien ne change loin des pôles ; une bande de transition où
  * le froid gagne peu à peu (pas de mur), puis des pôles gelés au nord et au sud ; il n'est pas « expérimental », ni à la
- * création ni au rechargement (pas d'écran d'avertissement) ; chaque région du plan est sur un biome qui lui convient.
+ * création ni au rechargement (pas d'écran d'avertissement) ; chaque région du plan est sur un biome qui lui convient ;
+ * un serveur dédié avec le {@code level-type} par défaut crée aussi Mars.
  * Les biomes sont lus par la source du monde, sans générer de chunks.
  */
 public class BiomesMarsTest implements FabricClientGameTest {
@@ -62,6 +66,11 @@ public class BiomesMarsTest implements FabricClientGameTest {
                 throw new AssertionError(stabilite);
             }
             RedRising.LOGGER.info("[G7.1.2] Source de Mars stable sans mixin ; la règle de Minecraft n'est pas changée");
+            String dedie = monde.getServer().computeOnServer(BiomesMarsTest::serveurDedie);
+            if (!dedie.isEmpty()) {
+                throw new AssertionError(dedie);
+            }
+            RedRising.LOGGER.info("[G7.1.2] Serveur dédié : le level-type par défaut (et ses anciens noms) donne Mars");
             String defauts = monde.getServer().computeOnServer(BiomesMarsTest::verifierBiomes);
             if (!defauts.isEmpty()) {
                 throw new AssertionError(defauts);
@@ -116,6 +125,31 @@ public class BiomesMarsTest implements FabricClientGameTest {
                 boolean obtenu = (boolean) stable.invoke(null, new LevelStem(type, new NoiseBasedChunkGenerator(cas.getValue(), reglages)));
                 if (obtenu != attendu.get(cas.getKey())) {
                     defauts.add(cas.getKey() + " : stable " + obtenu);
+                }
+            }
+            return String.join(" ; ", defauts);
+        } catch (ReflectiveOperationException e) {
+            throw new AssertionError(e);
+        }
+    }
+
+    /**
+     * Ce que fait un serveur dédié avec {@code level-type} : par défaut {@code minecraft:normal}
+     * ({@code DedicatedServerProperties}), le type que le mod remplace. On appelle le même code que lui
+     * ({@code DedicatedServerProperties.WorldDimensionData.create}), avec la valeur par défaut et les anciens noms.
+     */
+    private static String serveurDedie(MinecraftServer server) {
+        try {
+            Class<?> donnees = Class.forName("net.minecraft.server.dedicated.DedicatedServerProperties$WorldDimensionData");
+            Constructor<?> constructeur = donnees.getDeclaredConstructor(JsonObject.class, String.class);
+            constructeur.setAccessible(true);
+            Method creer = donnees.getMethod("create", HolderLookup.Provider.class);
+            creer.setAccessible(true);
+            List<String> defauts = new ArrayList<>();
+            for (String type : List.of(WorldPresets.NORMAL.identifier().toString(), "normal", "default")) {
+                WorldDimensions dimensions = (WorldDimensions) creer.invoke(constructeur.newInstance(new JsonObject(), type), server.registryAccess());
+                if (!(dimensions.overworld().getBiomeSource() instanceof SourceBiomesMars)) {
+                    defauts.add("level-type=" + type + " : " + dimensions.overworld().getBiomeSource());
                 }
             }
             return String.join(" ; ", defauts);

@@ -29,6 +29,7 @@ Mod Fabric fan-made, solo, gratuit et non commercial, dans l'univers Red Rising 
    - un commit est fait : `G2.1 : <résumé court>`.
 5. Tests unitaires (JUnit 5, `src/test`, lancés par `./gradlew build`) pour la logique pure : moteur du test de naissance, bornes des jauges, choix d'issue des jalons.
 6. Commentaires et textes en français. Toute clé de traduction existe en `fr_fr` et `en_us`.
+7. Réponds toujours en français, y compris dans les comptes rendus, les propositions et les messages de commit, même si un message t'arrive en anglais.
 
 ## Pistes techniques pour G2
 
