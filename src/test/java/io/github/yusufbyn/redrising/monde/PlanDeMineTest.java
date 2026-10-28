@@ -19,7 +19,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * Plan de la mine (G7.2.1) : tout relié au puits principal (parcours en largeur sur les boîtes de vide), dans l'emprise et
  * entre y −50 et 20, 12 emplacements de cellules en roche pleine, au moins 3 culs-de-sac sans cellule pour 1 avec,
- * bouchon sous la surface de la colonne du puits, même graine même plan.
+ * bouchon sous la surface de la colonne du puits, même graine même plan. Salles d'extraction (G7.2.2) : nombre et formes
+ * par niveau, chacune entière et reliée par ses ouvertures, sur aucune ligne de la grille hors des galeries (jamais au bout
+ * d'un cul-de-sac), loin des cellules et des puits ; longueur des galeries.
  */
 class PlanDeMineTest {
     private static final BlockPos CENTRE = new BlockPos(-740, 67, -317);
@@ -32,6 +34,10 @@ class PlanDeMineTest {
             List<BoundingBox> boites = new ArrayList<>(plan.galeries());
             plan.puits().forEach(p -> boites.add(p.interieur()));
             boites.add(plan.caverne().boite());
+            for (PlanDeMine.Salle salle : plan.salles()) {
+                boites.add(salle.boite());
+                boites.addAll(salle.ouvertures());
+            }
             // Parcours en largeur : deux boîtes se touchent si elles se croisent
             Set<Integer> vus = new HashSet<>(Set.of(plan.galeries().size()));
             Deque<Integer> file = new ArrayDeque<>(List.of(plan.galeries().size()));
@@ -114,6 +120,75 @@ class PlanDeMineTest {
             assertTrue(sansCellule >= PlanDeMine.CULS_DE_SAC_PAR_CELLULE * boutsAvecCellule.size(),
                     "graine " + graine + " : " + sansCellule + " culs-de-sac sans cellule pour " + boutsAvecCellule.size() + " avec");
             assertTrue(paroi, "graine " + graine + " : aucune cellule sur une paroi");
+        }
+    }
+
+    @Test
+    void sallesDExtraction() {
+        for (long graine : GRAINES) {
+            PlanDeMine plan = PlanDeMine.tirer(graine, CENTRE, 62, 66, 66);
+            List<PlanDeMine.Salle> salles = plan.salles();
+            assertTrue(salles.size() >= 30, "graine " + graine + " : " + salles.size() + " salles");
+            for (int niveau = 0; niveau < plan.sols().size(); niveau++) {
+                int n = niveau;
+                long parNiveau = salles.stream().filter(salle -> salle.niveau() == n).count();
+                assertTrue(parNiveau >= 6, "graine " + graine + " : " + parNiveau + " salles au niveau " + (niveau + 1));
+            }
+            for (PlanDeMine.Salle salle : salles) {
+                String nom = "graine " + graine + " : " + salle.type() + " en " + salle.x() + " " + salle.z();
+                // Forages aux niveaux 3 et 4 seulement
+                assertTrue(salle.type() != PlanDeMine.TypeSalle.FORAGE || salle.niveau() >= 2, nom);
+                // Toute la salle se parcourt depuis la galerie, par ses ouvertures
+                BlockPos depart = null;
+                List<BoundingBox> vides = new ArrayList<>(salle.ouvertures());
+                vides.add(salle.boite());
+                for (BoundingBox ouverture : salle.ouvertures()) {
+                    for (BlockPos pos : BlockPos.betweenClosed(ouverture.minX(), ouverture.minY(), ouverture.minZ(), ouverture.maxX(), ouverture.maxY(), ouverture.maxZ())) {
+                        if (plan.galeries().stream().anyMatch(galerie -> galerie.isInside(pos))) {
+                            depart = pos.immutable();
+                        }
+                    }
+                }
+                assertTrue(depart != null, nom + " : ouverture qui ne touche pas de galerie");
+                Set<BlockPos> vus = new HashSet<>(Set.of(depart));
+                Deque<BlockPos> file = new ArrayDeque<>(List.of(depart));
+                while (!file.isEmpty()) {
+                    BlockPos pos = file.poll();
+                    for (net.minecraft.core.Direction direction : net.minecraft.core.Direction.values()) {
+                        BlockPos suivant = pos.relative(direction);
+                        boolean dedans = vides.stream().anyMatch(vide -> vide.isInside(suivant));
+                        if (dedans && plan.interieur(suivant.getX(), suivant.getY(), suivant.getZ()) && vus.add(suivant)) {
+                            file.add(suivant);
+                        }
+                    }
+                }
+                BoundingBox b = salle.boite();
+                for (BlockPos pos : BlockPos.betweenClosed(b.minX(), b.minY(), b.minZ(), b.maxX(), b.maxY(), b.maxZ())) {
+                    if (salle.contient(pos.getX(), pos.getY(), pos.getZ())) {
+                        assertTrue(vus.contains(pos), nom + " : " + pos + " pas atteint");
+                    }
+                }
+                // Sur une ligne de la grille (la place d'une galerie), seulement dans une galerie : jamais au bout d'un cul-de-sac
+                for (BoundingBox vide : vides) {
+                    for (BlockPos pos : BlockPos.betweenClosed(vide.minX(), vide.minY(), vide.minZ(), vide.maxX(), vide.maxY(), vide.maxZ())) {
+                        int lx = Math.floorMod(pos.getX() - CENTRE.getX() + 1, PlanDeMine.ESPACEMENT);
+                        int lz = Math.floorMod(pos.getZ() - CENTRE.getZ() + 1, PlanDeMine.ESPACEMENT);
+                        if (lx <= 2 || lz <= 2) {
+                            assertTrue(plan.galeries().stream().anyMatch(galerie -> galerie.isInside(pos)), nom + " : sur une ligne hors galerie en " + pos);
+                        }
+                    }
+                    for (PlanDeMine.Puits p : plan.puits()) {
+                        assertFalse(p.interieur().inflatedBy(PlanDeMine.COQUE_PUITS).intersects(vide), nom + " : dans la coque d'un puits");
+                    }
+                }
+                for (PlanDeMine.EmplacementCellule cellule : plan.cellules()) {
+                    BlockPos c = cellule.salle().getCenter();
+                    assertTrue(Math.hypot(c.getX() - salle.x(), c.getZ() - salle.z()) >= PlanDeMine.ECART_SALLE_CELLULE, nom + " : près d'une cellule");
+                }
+            }
+            // Longueur des galeries
+            long longueur = plan.galeries().stream().mapToLong(galerie -> Math.max(galerie.getXSpan(), galerie.getZSpan())).sum();
+            assertTrue(longueur >= 6000, "graine " + graine + " : " + longueur + " blocs de galeries");
         }
     }
 

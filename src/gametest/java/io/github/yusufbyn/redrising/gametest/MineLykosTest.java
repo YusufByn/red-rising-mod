@@ -62,6 +62,8 @@ public class MineLykosTest implements FabricClientGameTest {
     private static final double POSE_MOYENNE_MAX_MS = 20;
     private static final double POSE_MAX_MS = 100;
     private static final double TICK_MOYEN_MAX_MS = 50;
+    /** 🟡 Plafond du coût de la règle des décorations, par appel (G7.2.2). */
+    private static final double DECORATION_MAX_US = 1;
 
     @Override
     public void runTest(ClientGameTestContext context) {
@@ -87,6 +89,7 @@ public class MineLykosTest implements FabricClientGameTest {
                     charger(monde, 1);
                 }
                 colonneDuPuits(monde, graine);
+                comptage(monde, graine);
             }
         }
         RedRising.LOGGER.info("[G7.2.1] OK : mine au bon endroit, toute reliée, sans ouverture vers le ciel, sans autre structure");
@@ -112,12 +115,17 @@ public class MineLykosTest implements FabricClientGameTest {
 
     /** Charge (force) les chunks à cette distance (en chunks, en carré) du chunk de la mine, et mesure le temps par tick. */
     private static double charger(TestSingleplayerContext monde, int rayon) {
+        return charger(monde, rayon, 0, true);
+    }
+
+    /** Pareil, autour du chunk de la mine décalé de {@code decalage} chunks (en x et en z) ; {@code garder} : les laisser forcés. */
+    private static double charger(TestSingleplayerContext monde, int rayon, int decalage, boolean garder) {
         monde.getServer().runOnServer(server -> {
             MineLykos.remettreMesures();
             BlockPos centre = centre(server);
             for (int dx = -rayon; dx <= rayon; dx++) {
                 for (int dz = -rayon; dz <= rayon; dz++) {
-                    server.overworld().setChunkForced((centre.getX() >> 4) + dx, (centre.getZ() >> 4) + dz, true);
+                    server.overworld().setChunkForced((centre.getX() >> 4) + decalage + dx, (centre.getZ() >> 4) + decalage + dz, true);
                 }
             }
         });
@@ -129,13 +137,23 @@ public class MineLykosTest implements FabricClientGameTest {
             BlockPos centre = centre(server);
             for (int dx = -rayon; dx <= rayon; dx++) {
                 for (int dz = -rayon; dz <= rayon; dz++) {
-                    if (!server.overworld().hasChunk((centre.getX() >> 4) + dx, (centre.getZ() >> 4) + dz)) {
+                    if (!server.overworld().hasChunk((centre.getX() >> 4) + decalage + dx, (centre.getZ() >> 4) + decalage + dz)) {
                         return false;
                     }
                 }
             }
             return true;
         }, 6000);
+        if (!garder) {
+            monde.getServer().runOnServer(server -> {
+                BlockPos centre = centre(server);
+                for (int dx = -rayon; dx <= rayon; dx++) {
+                    for (int dz = -rayon; dz <= rayon; dz++) {
+                        server.overworld().setChunkForced((centre.getX() >> 4) + decalage + dx, (centre.getZ() >> 4) + decalage + dz, false);
+                    }
+                }
+            });
+        }
         return total[0] / Math.max(1, ticks[0]);
     }
 
@@ -147,6 +165,16 @@ public class MineLykosTest implements FabricClientGameTest {
         String mesures = monde.getServer().computeOnServer(server -> MineLykos.mesures());
         RedRising.LOGGER.info("[G7.2.1] Emprise générée ({} chunks) : pose {} ; {} ms par tick en moyenne", (2 * rayon + 1) * (2 * rayon + 1), mesures,
                 String.format(Locale.ROOT, "%.1f", tickMoyen));
+        // Coût de la règle des décorations : dans la mine (et un chunk autour), puis ailleurs (11 × 11 chunks loin de la mine)
+        double dedansUs = monde.getServer().computeOnServer(server -> MineLykos.DECORATIONS_DEDANS.moyenneUs());
+        String dedans = monde.getServer().computeOnServer(server -> MineLykos.DECORATIONS_DEDANS.toString());
+        charger(monde, 5, 40, false);
+        double horsUs = monde.getServer().computeOnServer(server -> MineLykos.DECORATIONS_HORS.moyenneUs());
+        String hors = monde.getServer().computeOnServer(server -> MineLykos.DECORATIONS_HORS.toString() + " (pour 121 chunks)");
+        RedRising.LOGGER.info("[G7.2.2] Règle des décorations : dans la mine {} ; hors de la mine {}", dedans, hors);
+        if (dedansUs > DECORATION_MAX_US || horsUs > DECORATION_MAX_US) {
+            throw new AssertionError("Coût de la règle des décorations : dans la mine " + dedans + ", hors " + hors);
+        }
         double moyenne = monde.getServer().computeOnServer(server -> MineLykos.tempsMoyenMs());
         double maximum = monde.getServer().computeOnServer(server -> MineLykos.tempsMaxMs());
         if (moyenne > POSE_MOYENNE_MAX_MS || maximum > POSE_MAX_MS || tickMoyen > TICK_MOYEN_MAX_MS) {
@@ -217,6 +245,10 @@ public class MineLykosTest implements FabricClientGameTest {
         List<BoundingBox> boites = new ArrayList<>(plan.galeries());
         plan.puits().forEach(p -> boites.add(p.interieur()));
         boites.add(plan.caverne().boite());
+        for (PlanDeMine.Salle salle : plan.salles()) {
+            boites.add(salle.boite());
+            boites.addAll(salle.ouvertures());
+        }
         for (BoundingBox boite : boites) {
             for (BlockPos pos : BlockPos.betweenClosed(boite.minX(), boite.minY(), boite.minZ(), boite.maxX(), boite.maxY(), boite.maxZ())) {
                 if (plan.interieur(pos.getX(), pos.getY(), pos.getZ())) {
@@ -280,12 +312,50 @@ public class MineLykosTest implements FabricClientGameTest {
             }
         }
         int attendus = interieur.size() - piliers.size();
-        RedRising.LOGGER.info("[G7.2.1] Parcours depuis le bas du puits : {} blocs atteints sur {} ; {} niveaux, {} galeries, {} puits, {} cellules réservées",
-                vus.size(), attendus, plan.sols().size(), plan.galeries().size(), plan.puits().size(), plan.cellules().size());
+        RedRising.LOGGER.info("[G7.2.1] Parcours depuis le bas du puits : {} blocs atteints sur {} ; {} niveaux, {} galeries, {} puits, {} cellules réservées, {} salles",
+                vus.size(), attendus, plan.sols().size(), plan.galeries().size(), plan.puits().size(), plan.cellules().size(), plan.salles().size());
         if (vus.size() != attendus) {
             defauts.add("parcours : " + vus.size() + " blocs atteints sur " + attendus);
         }
         return String.join(" ; ", defauts);
+    }
+
+    // --- Comptage (G7.2.2) ---
+
+    /** 🟡 Seuils du comptage : longueur des galeries, salles en tout et par niveau. */
+    private static final int GALERIES_MIN = 6000;
+    private static final int SALLES_MIN = 30;
+    private static final int SALLES_PAR_NIVEAU_MIN = 6;
+
+    /** Longueur des galeries, salles par niveau et par forme, sur le plan de ce monde (vraies hauteurs du terrain). */
+    private static void comptage(TestSingleplayerContext monde, long graine) {
+        String defauts = monde.getServer().computeOnServer(server -> {
+            PlanDeMine plan = plan(server);
+            List<String> liste = new ArrayList<>();
+            long longueur = plan.galeries().stream().mapToLong(galerie -> Math.max(galerie.getXSpan(), galerie.getZSpan())).sum();
+            if (longueur < GALERIES_MIN) {
+                liste.add(longueur + " blocs de galeries");
+            }
+            if (plan.salles().size() < SALLES_MIN) {
+                liste.add(plan.salles().size() + " salles");
+            }
+            StringBuilder parNiveau = new StringBuilder();
+            for (int niveau = 0; niveau < plan.sols().size(); niveau++) {
+                int n = niveau;
+                Map<PlanDeMine.TypeSalle, Long> formes = new java.util.EnumMap<>(PlanDeMine.TypeSalle.class);
+                plan.salles().stream().filter(salle -> salle.niveau() == n).forEach(salle -> formes.merge(salle.type(), 1L, Long::sum));
+                long total = formes.values().stream().mapToLong(Long::longValue).sum();
+                parNiveau.append(" niveau ").append(niveau + 1).append(" : ").append(formes);
+                if (total < SALLES_PAR_NIVEAU_MIN) {
+                    liste.add(total + " salles au niveau " + (niveau + 1));
+                }
+            }
+            RedRising.LOGGER.info("[G7.2.2] Graine {} : {} blocs de galeries, {} salles ;{}", graine, longueur, plan.salles().size(), parNiveau);
+            return String.join(" ; ", liste);
+        });
+        if (!defauts.isEmpty()) {
+            throw new AssertionError("Graine " + graine + " : " + defauts);
+        }
     }
 
     // --- Colonne du puits ---

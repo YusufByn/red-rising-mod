@@ -53,7 +53,7 @@ import java.util.concurrent.atomic.LongAccumulator;
  *     dans {@code data/redrising/worldgen/structure/mine.json}) : ni grotte de bruit ni aquifère dans le volume.</li>
  *     <li><b>Pose</b> : à la dernière étape de la génération ({@code top_layer_modification}), après les minerais, les
  *     géodes et les sources. Chaque morceau pose les blocs du plan qui touchent son chunk : coque de roche (seulement à
- *     la place du vide et des fluides), vide, étais, échelles, bouchon.</li>
+ *     la place du vide et des fluides), vide (galeries, puits, caverne, salles), étais, échelles, bouchon.</li>
  *     <li><b>Autour</b> : pas de carvers dans l'emprise, ni d'autre structure (sauf un fort), ni de décoration souterraine
  *     autre que les minerais dans le volume de la mine (mixins sur {@code NoiseBasedChunkGenerator.applyCarvers},
  *     {@code ChunkGenerator.tryGenerateStructure}, {@code ConfiguredFeature.place}).</li>
@@ -71,6 +71,47 @@ public final class MineLykos extends Structure {
     public static final int HAUT_DU_VOLUME = 32;
     /** Le long du puits principal, jusqu'à cette distance : ni structure ni décoration souterraine, jusqu'en haut. */
     static final int MARGE_PUITS = 32;
+
+    /** Coût de la règle des décorations ({@link #decorationRefusee}), dans l'emprise (et un chunk autour) et ailleurs. */
+    public static final Compteur DECORATIONS_DEDANS = new Compteur();
+    public static final Compteur DECORATIONS_HORS = new Compteur();
+
+    /** Un nombre d'appels et leur temps total (en nanosecondes), pour le test du coût. */
+    public static final class Compteur {
+        private final java.util.concurrent.atomic.LongAdder appels = new java.util.concurrent.atomic.LongAdder();
+        private final java.util.concurrent.atomic.LongAdder nanos = new java.util.concurrent.atomic.LongAdder();
+
+        void ajouter(long duree) {
+            appels.increment();
+            nanos.add(duree);
+        }
+
+        public long appels() {
+            return appels.sum();
+        }
+
+        /** Temps total, en millisecondes. */
+        public double totalMs() {
+            return nanos.sum() / 1e6;
+        }
+
+        /** Temps moyen par appel, en microsecondes (la mesure elle-même comprise). */
+        public double moyenneUs() {
+            long n = appels.sum();
+            return n == 0 ? 0 : nanos.sum() / 1e3 / n;
+        }
+
+        public void remettre() {
+            appels.reset();
+            nanos.reset();
+        }
+
+        @Override
+        public String toString() {
+            return appels() + " appels, " + String.format(java.util.Locale.ROOT, "%.2f", moyenneUs()) + " µs en moyenne, "
+                    + String.format(java.util.Locale.ROOT, "%.1f", totalMs()) + " ms en tout";
+        }
+    }
 
     /** Temps de pose des morceaux, pour le test du coût (en nanosecondes). */
     private static final AtomicLong POSES = new AtomicLong();
@@ -132,20 +173,23 @@ public final class MineLykos extends Structure {
      * vide. Les salles de monstres, nulle part dans l'emprise (un générateur à nu). La surface (arbres, herbe) ne change pas.
      */
     public static boolean decorationRefusee(WorldGenLevel monde, Feature<?> decoration, BlockPos origine) {
-        if (decoration instanceof OreFeature || decoration instanceof ScatteredOreFeature) {
-            return false;
-        }
+        long debut = System.nanoTime();
         BlockPos centre = centre();
-        if (centre == null || !monde.getLevel().dimension().equals(Level.OVERWORLD)) {
+        // Hors de l'emprise et d'un chunk autour : rien n'est refusé (le cas de presque toutes les décorations du monde)
+        boolean pres = centre != null && Math.abs((origine.getX() >> 4) - (centre.getX() >> 4)) <= PlanMars.EMPRISE_MINE + 1
+                && Math.abs((origine.getZ() >> 4) - (centre.getZ() >> 4)) <= PlanMars.EMPRISE_MINE + 1;
+        boolean refus = pres && refuser(monde, decoration, origine, centre);
+        (pres ? DECORATIONS_DEDANS : DECORATIONS_HORS).ajouter(System.nanoTime() - debut);
+        return refus;
+    }
+
+    private static boolean refuser(WorldGenLevel monde, Feature<?> decoration, BlockPos origine, BlockPos centre) {
+        if (decoration instanceof OreFeature || decoration instanceof ScatteredOreFeature || !monde.getLevel().dimension().equals(Level.OVERWORLD)) {
             return false;
         }
-        int dx = Math.abs((origine.getX() >> 4) - (centre.getX() >> 4));
-        int dz = Math.abs((origine.getZ() >> 4) - (centre.getZ() >> 4));
         if (decoration instanceof MonsterRoomFeature) {
-            return dx <= PlanMars.EMPRISE_MINE && dz <= PlanMars.EMPRISE_MINE;
-        }
-        if (dx > PlanMars.EMPRISE_MINE + 1 || dz > PlanMars.EMPRISE_MINE + 1) {
-            return false;
+            return Math.abs((origine.getX() >> 4) - (centre.getX() >> 4)) <= PlanMars.EMPRISE_MINE
+                    && Math.abs((origine.getZ() >> 4) - (centre.getZ() >> 4)) <= PlanMars.EMPRISE_MINE;
         }
         boolean presDuPuits = Math.abs(origine.getX() - centre.getX()) <= MARGE_PUITS && Math.abs(origine.getZ() - centre.getZ()) <= MARGE_PUITS;
         if (origine.getY() >= HAUT_DU_VOLUME && !presDuPuits) {
@@ -242,6 +286,8 @@ public final class MineLykos extends Structure {
         POSES.set(0);
         TEMPS_TOTAL.set(0);
         TEMPS_MAX.reset();
+        DECORATIONS_DEDANS.remettre();
+        DECORATIONS_HORS.remettre();
     }
 
     // --- Morceau ---
@@ -338,7 +384,7 @@ public final class MineLykos extends Structure {
             for (int x = zone.minX(); x <= zone.maxX(); x++) {
                 for (int z = zone.minZ(); z <= zone.maxZ(); z++) {
                     for (int y = zone.minY(); y <= zone.maxY(); y++) {
-                        if (interieur(plan, proches, x, y, z)) {
+                        if (plan.interieurParmi(proches, x, y, z)) {
                             continue;
                         }
                         pos.set(x, y, z);
@@ -359,7 +405,7 @@ public final class MineLykos extends Structure {
             for (int x = zone.minX(); x <= zone.maxX(); x++) {
                 for (int z = zone.minZ(); z <= zone.maxZ(); z++) {
                     for (int y = zone.minY(); y <= zone.maxY(); y++) {
-                        if (interieur(plan, proches, x, y, z)) {
+                        if (plan.interieurParmi(proches, x, y, z)) {
                             pos.set(x, y, z);
                             if (!monde.getBlockState(pos).is(Blocks.CAVE_AIR)) {
                                 monde.setBlock(pos, VIDE, Block.UPDATE_CLIENTS);
@@ -397,17 +443,6 @@ public final class MineLykos extends Structure {
             BlockPos.betweenClosed(bouchon.minX(), bouchon.minY(), bouchon.minZ(), bouchon.maxX(), bouchon.maxY(), bouchon.maxZ())
                     .forEach(bloc -> monde.setBlock(bloc, BOUCHON, Block.UPDATE_CLIENTS));
         }
-    }
-
-    /** Comme {@link PlanDeMine#interieur}, mais seulement parmi les éléments proches du chunk (bien plus rapide). */
-    private static boolean interieur(PlanDeMine plan, List<BoundingBox> proches, int x, int y, int z) {
-        BoundingBox caverne = plan.caverne().boite();
-        for (BoundingBox boite : proches) {
-            if (boite.isInside(x, y, z) && (!boite.equals(caverne) || plan.caverne().contient(x, y, z))) {
-                return true;
-            }
-        }
-        return false;
     }
 
     private static boolean estUnPuits(PlanDeMine plan, BoundingBox boite) {
