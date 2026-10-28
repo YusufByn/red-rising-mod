@@ -1,0 +1,48 @@
+{
+  "dimensions": {
+    "minecraft:overworld": {
+      "type": "minecraft:overworld",
+      "generator": {
+        "type": "minecraft:noise",
+        "biome_source": {
+          "type": "redrising:mars",
+          "base": {
+            "type": "minecraft:multi_noise",
+            "preset": "minecraft:overworld"
+          },
+          "plaine": "minecraft:snowy_plains",
+          "taiga": "minecraft:snowy_taiga",
+          "pentes": "minecraft:snowy_slopes",
+          "pics": "minecraft:frozen_peaks",
+          "pics_de_glace": "minecraft:ice_spikes",
+          "ocean": "minecraft:frozen_ocean",
+          "ocean_profond": "minecraft:deep_frozen_ocean",
+          "riviere": "minecraft:frozen_river",
+          "plage": "minecraft:snowy_beach"
+        },
+        "settings": "minecraft:overworld"
+      }
+    },
+    "minecraft:the_end": {
+      "type": "minecraft:the_end",
+      "generator": {
+        "type": "minecraft:noise",
+        "biome_source": {
+          "type": "minecraft:the_end"
+        },
+        "settings": "minecraft:end"
+      }
+    },
+    "minecraft:the_nether": {
+      "type": "minecraft:the_nether",
+      "generator": {
+        "type": "minecraft:noise",
+        "biome_source": {
+          "type": "minecraft:multi_noise",
+          "preset": "minecraft:nether"
+        },
+        "settings": "minecraft:nether"
+      }
+    }
+  }
+}

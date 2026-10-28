@@ -61,10 +61,10 @@ public class RegionsMarsTest implements FabricClientGameTest {
                     ServerLevel overworld = server.overworld();
                     BlockPos apparition = estimation.atY(overworld.getChunkSource().getGenerator().getBaseHeight(estimation.getX(), estimation.getZ(),
                             Heightmap.Types.OCEAN_FLOOR_WG, overworld, aleatoire));
-                    return PlanMars.tirer(graine, apparition, estimation, terrain(server, aleatoire));
+                    return PlanMars.tirer(graine, apparition, terrain(server, aleatoire), PlanMars.ChunksPrepares.AUCUN);
                 });
-                List<String> defauts = monde.getServer().computeOnServer(server -> autre.defauts(autre.apparition(),
-                        terrain(server, RandomState.create(server.registryAccess(), NoiseGeneratorSettings.OVERWORLD, graine))));
+                List<String> defauts = monde.getServer().computeOnServer(server -> autre.defauts(
+                        terrain(server, RandomState.create(server.registryAccess(), NoiseGeneratorSettings.OVERWORLD, graine)), PlanMars.ChunksPrepares.AUCUN));
                 if (!defauts.isEmpty()) {
                     throw new AssertionError("Graine " + graine + " : " + defauts);
                 }
@@ -103,15 +103,14 @@ public class RegionsMarsTest implements FabricClientGameTest {
         RedRising.LOGGER.info("[G7.1.1] OK : un monde neuf place les régions de façon cohérente ; un monde plat n'a pas de plan");
     }
 
+    /** Le plan, vérifié au moment du tirage sur l'état réel des chunks (emprise de la mine comprise). */
     private static void verifier(TestSingleplayerContext monde, PlanMars plan, long graine) {
-        List<String> defauts = monde.getServer().computeOnServer(server -> {
-            ServerLevel overworld = server.overworld();
-            RandomState aleatoire = overworld.getChunkSource().randomState();
-            return plan.defauts(aleatoire.sampler().findSpawnPosition(), terrain(server, aleatoire));
-        });
-        if (!defauts.isEmpty()) {
-            throw new AssertionError("Graine " + graine + " : " + defauts);
+        RegionsMars.Tirage tirage = Objects.requireNonNull(monde.getServer().computeOnServer(server -> RegionsMars.dernierTirage()));
+        if (!tirage.defauts().isEmpty()) {
+            throw new AssertionError("Graine " + graine + " : " + tirage.defauts());
         }
+        RedRising.LOGGER.info("[G7.1.1] Graine {} : chunks déjà préparés au tirage jusqu'à {} chunks (références) et {} (départs) ; mine à {} blocs",
+                graine, tirage.rayonReferences(), tirage.rayonDeparts(), tirage.distanceMine());
     }
 
     private static PlanMars.Terrain terrain(MinecraftServer server, RandomState aleatoire) {

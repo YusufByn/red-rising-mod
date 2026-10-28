@@ -18,6 +18,7 @@ import io.github.yusufbyn.redrising.jalons.MoteurJalons;
 import io.github.yusufbyn.redrising.monde.CelluleRising;
 import io.github.yusufbyn.redrising.monde.PosteSociete;
 import io.github.yusufbyn.redrising.monde.RegionsMars;
+import io.github.yusufbyn.redrising.monde.SourceBiomesMars;
 import io.github.yusufbyn.redrising.monde.Vue;
 import io.github.yusufbyn.redrising.pnj.PatrouillePnj;
 import io.github.yusufbyn.redrising.pnj.PnjEssentiels;
@@ -55,6 +56,7 @@ public class RedRising implements ModInitializer {
         MoteurJalons.init();
         EffetsMonde.init();
         RegionsMars.init();
+        SourceBiomesMars.init();
         CommandesDebug.init();
     }
 }

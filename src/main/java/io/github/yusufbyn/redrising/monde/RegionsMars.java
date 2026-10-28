@@ -2,23 +2,30 @@ package io.github.yusufbyn.redrising.monde;
 
 import io.github.yusufbyn.redrising.RedRising;
 import io.github.yusufbyn.redrising.data.EtatMondeServeur;
+import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
+import it.unimi.dsi.fastutil.longs.LongSet;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLevelEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.core.QuartPos;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ChunkHolder;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.BiomeTags;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LevelHeightAccessor;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.biome.BiomeSource;
 import net.minecraft.world.level.chunk.ChunkGenerator;
+import net.minecraft.world.level.chunk.status.ChunkStatus;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.levelgen.NoiseBasedChunkGenerator;
 import net.minecraft.world.level.levelgen.RandomState;
 import org.jspecify.annotations.Nullable;
+
+import java.util.List;
 
 /**
  * Le plan des régions de Mars côté serveur (G7.1.1). La logique est dans {@link PlanMars}.
@@ -71,13 +78,75 @@ public final class RegionsMars {
         }
         long debut = System.nanoTime();
         RandomState aleatoire = monde.getChunkSource().randomState();
-        BlockPos estimation = aleatoire.sampler().findSpawnPosition();
         BlockPos apparition = monde.getLevelData().getRespawnData().pos();
-        PlanMars plan = PlanMars.tirer(monde.getSeed(), apparition, estimation, terrain(generateur, aleatoire, monde));
+        Prepares prepares = prepares(monde, ChunkPos.containing(apparition));
+        PlanMars.Terrain terrain = terrain(generateur, aleatoire, monde);
+        PlanMars plan = PlanMars.tirer(monde.getSeed(), apparition, terrain, prepares);
         EtatMondeServeur.modifier(server, etat -> etat.avecPlan(plan));
         courant = plan;
+        BlockPos mine = plan.regions().get(Region.MINE);
+        dernierTirage = new Tirage(prepares.rayonReferences(), prepares.rayonDeparts(),
+                Math.round(Math.hypot(mine.getX() - apparition.getX(), mine.getZ() - apparition.getZ())), plan.defauts(terrain, prepares));
         RedRising.LOGGER.info("Plan de Mars tiré en {} ms (apparition {}) : {}", (System.nanoTime() - debut) / 1_000_000,
                 apparition.toShortString(), plan.regions());
+        RedRising.LOGGER.info("Plan de Mars : {}", dernierTirage);
+    }
+
+    /**
+     * Ce que le dernier tirage a vu (pour les tests et le journal) : jusqu'où, autour du point d'apparition, des chunks
+     * avaient déjà passé les étapes des références et des départs de structures (en chunks, en carré, -1 : aucun), la
+     * distance de la mine au point d'apparition, et les défauts du plan.
+     */
+    public record Tirage(int rayonReferences, int rayonDeparts, long distanceMine, List<String> defauts) {
+    }
+
+    private static volatile @Nullable Tirage dernierTirage;
+
+    public static @Nullable Tirage dernierTirage() {
+        return dernierTirage;
+    }
+
+    /** Portée du relevé des chunks déjà préparés, en chunks autour du point d'apparition : bien au-delà de la recherche (5). */
+    private static final int RELEVE = 48;
+
+    /** Les chunks déjà préparés autour du point d'apparition, relevés sur leur état réel dans la carte des chunks. */
+    private record Prepares(LongSet departs, LongSet references, int rayonDeparts, int rayonReferences) implements PlanMars.ChunksPrepares {
+        @Override
+        public boolean departs(int cx, int cz) {
+            return departs.contains(ChunkPos.pack(cx, cz));
+        }
+
+        @Override
+        public boolean references(int cx, int cz) {
+            return references.contains(ChunkPos.pack(cx, cz));
+        }
+    }
+
+    private static Prepares prepares(ServerLevel monde, ChunkPos centre) {
+        LongSet departs = new LongOpenHashSet();
+        LongSet references = new LongOpenHashSet();
+        int rayonDeparts = -1;
+        int rayonReferences = -1;
+        for (int dx = -RELEVE; dx <= RELEVE; dx++) {
+            for (int dz = -RELEVE; dz <= RELEVE; dz++) {
+                long cle = ChunkPos.pack(centre.x() + dx, centre.z() + dz);
+                ChunkHolder porteur = monde.getChunkSource().chunkMap.getUpdatingChunkIfPresent(cle);
+                ChunkStatus etat = porteur == null ? null : porteur.getPersistedStatus();
+                if (etat == null) {
+                    continue;
+                }
+                int rayon = Math.max(Math.abs(dx), Math.abs(dz));
+                if (etat.isOrAfter(ChunkStatus.STRUCTURE_STARTS)) {
+                    departs.add(cle);
+                    rayonDeparts = Math.max(rayonDeparts, rayon);
+                }
+                if (etat.isOrAfter(ChunkStatus.STRUCTURE_REFERENCES)) {
+                    references.add(cle);
+                    rayonReferences = Math.max(rayonReferences, rayon);
+                }
+            }
+        }
+        return new Prepares(departs, references, rayonDeparts, rayonReferences);
     }
 
     /**
