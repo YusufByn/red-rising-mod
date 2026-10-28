@@ -1,7 +1,9 @@
 package io.github.yusufbyn.redrising.gametest;
 
 import io.github.yusufbyn.redrising.RedRising;
+import io.github.yusufbyn.redrising.monde.FilonsDeMine;
 import io.github.yusufbyn.redrising.monde.MineLykos;
+import io.github.yusufbyn.redrising.monde.ObjetsMine;
 import io.github.yusufbyn.redrising.monde.PlanDeMine;
 import io.github.yusufbyn.redrising.monde.PlanMars;
 import io.github.yusufbyn.redrising.monde.Region;
@@ -16,8 +18,15 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.SpawnerBlockEntity;
@@ -40,6 +49,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * G7.2.1 : la mine sur de vrais mondes Mars neufs.
@@ -53,6 +63,8 @@ import java.util.Objects;
  *     bouchon, entre 3 et 5 blocs sous la surface de la colonne, sous de la roche pleine ; rien du puits ne voit le ciel ;
  *     pas de butte en surface.</li>
  *     <li>Forts : la distance du plus proche, et une mine écartée d'un fort posé exprès sur son chemin.</li>
+ *     <li>G7.2.2 : salles et filons comptés sur les trois graines (emprise entière) ; une salle de forage en capture ; le
+ *     minerai d'hélium-3 (lumière, pioche en pierre).</li>
  * </ul>
  */
 public class MineLykosTest implements FabricClientGameTest {
@@ -85,8 +97,9 @@ public class MineLykosTest implements FabricClientGameTest {
                 if (i == 0) {
                     emprise(monde, graine);
                     fortSurLeChemin(monde);
+                    forageEtHelium3(monde, context);
                 } else {
-                    charger(monde, 1);
+                    charger(monde, PlanMars.EMPRISE_MINE);
                 }
                 colonneDuPuits(monde, graine);
                 comptage(monde, graine);
@@ -326,6 +339,68 @@ public class MineLykosTest implements FabricClientGameTest {
     private static final int GALERIES_MIN = 6000;
     private static final int SALLES_MIN = 30;
     private static final int SALLES_PAR_NIVEAU_MIN = 6;
+    /** 🟡 Minerais visibles depuis la mine (qui touchent son vide), au moins ; hélium-3 dans tout le volume, au moins. */
+    private static final Map<FilonsDeMine.Minerai, Integer> VISIBLES_MIN = Map.of(FilonsDeMine.Minerai.CHARBON, 400, FilonsDeMine.Minerai.FER, 500,
+            FilonsDeMine.Minerai.CUIVRE, 220, FilonsDeMine.Minerai.OR, 160, FilonsDeMine.Minerai.REDSTONE, 210, FilonsDeMine.Minerai.HELIUM3, 60);
+    private static final int HELIUM3_VOLUME_MIN = 400;
+    /** 🟡 Plafonds : fer du volume par rapport à vanilla (sans nos filons), diamants visibles par rapport au squelette sans salles. */
+    private static final double FER_VOLUME_MAX = 1.25;
+    private static final double DIAMANTS_VISIBLES_MAX = 1.2;
+
+    /** Les blocs de chaque minerai (pierre et ardoise des profondeurs). */
+    private static Set<Block> blocs(FilonsDeMine.Minerai minerai) {
+        return switch (minerai) {
+            case CHARBON -> Set.of(Blocks.COAL_ORE, Blocks.DEEPSLATE_COAL_ORE);
+            case FER -> Set.of(Blocks.IRON_ORE, Blocks.DEEPSLATE_IRON_ORE);
+            case CUIVRE -> Set.of(Blocks.COPPER_ORE, Blocks.DEEPSLATE_COPPER_ORE);
+            case OR -> Set.of(Blocks.GOLD_ORE, Blocks.DEEPSLATE_GOLD_ORE);
+            case REDSTONE -> Set.of(Blocks.REDSTONE_ORE, Blocks.DEEPSLATE_REDSTONE_ORE);
+            case HELIUM3 -> Set.of(ObjetsMine.MINERAI_HELIUM3);
+        };
+    }
+
+    private static final Set<Block> DIAMANTS = Set.of(Blocks.DIAMOND_ORE, Blocks.DEEPSLATE_DIAMOND_ORE);
+
+    /** Le vide du plan (avec ou sans les salles), en positions. */
+    private static LongSet videDuPlan(PlanDeMine plan, boolean salles) {
+        LongSet vide = new LongOpenHashSet();
+        List<BoundingBox> boites = new ArrayList<>(plan.galeries());
+        plan.puits().forEach(p -> boites.add(p.interieur()));
+        boites.add(plan.caverne().boite());
+        if (salles) {
+            for (PlanDeMine.Salle salle : plan.salles()) {
+                boites.add(salle.boite());
+                boites.addAll(salle.ouvertures());
+            }
+        }
+        for (BoundingBox boite : boites) {
+            for (BlockPos pos : BlockPos.betweenClosed(boite.minX(), boite.minY(), boite.minZ(), boite.maxX(), boite.maxY(), boite.maxZ())) {
+                boolean dedans = salles ? plan.interieur(pos.getX(), pos.getY(), pos.getZ())
+                        : plan.galeries().stream().anyMatch(g -> g.isInside(pos)) || plan.puits().stream().anyMatch(p -> p.interieur().isInside(pos))
+                        || plan.caverne().contient(pos.getX(), pos.getY(), pos.getZ());
+                if (dedans) {
+                    vide.add(pos.asLong());
+                }
+            }
+        }
+        return vide;
+    }
+
+    /** Les blocs de ces sortes qui touchent ce vide (chacun compté une fois). */
+    private static int visibles(ServerLevel niveau, LongSet vide, Set<Block> sortes) {
+        LongSet vus = new LongOpenHashSet();
+        BlockPos.MutableBlockPos voisin = new BlockPos.MutableBlockPos();
+        for (long cle : vide) {
+            BlockPos pos = BlockPos.of(cle);
+            for (Direction direction : Direction.values()) {
+                voisin.setWithOffset(pos, direction);
+                if (!vide.contains(voisin.asLong()) && sortes.contains(niveau.getBlockState(voisin).getBlock())) {
+                    vus.add(voisin.asLong());
+                }
+            }
+        }
+        return vus.size();
+    }
 
     /** Longueur des galeries, salles par niveau et par forme, sur le plan de ce monde (vraies hauteurs du terrain). */
     private static void comptage(TestSingleplayerContext monde, long graine) {
@@ -351,11 +426,117 @@ public class MineLykosTest implements FabricClientGameTest {
                 }
             }
             RedRising.LOGGER.info("[G7.2.2] Graine {} : {} blocs de galeries, {} salles ;{}", graine, longueur, plan.salles().size(), parNiveau);
+
+            // Minerais : visibles depuis la mine, dans tout son volume, et ceux de nos filons
+            ServerLevel niveau = server.overworld();
+            LongSet vide = videDuPlan(plan, true);
+            Map<FilonsDeMine.Minerai, Integer> nos = new java.util.EnumMap<>(FilonsDeMine.Minerai.class);
+            Map<Block, Integer> manques = new java.util.HashMap<>();
+            for (FilonsDeMine.Bloc bloc : plan.filons()) {
+                Block reel = niveau.getBlockState(bloc.pos()).getBlock();
+                if (blocs(bloc.minerai()).contains(reel)) {
+                    nos.merge(bloc.minerai(), 1, Integer::sum);
+                } else {
+                    manques.merge(reel, 1, Integer::sum);
+                }
+            }
+            RedRising.LOGGER.info("[G7.2.2] Graine {} : blocs de filon pas posés (pas de roche à cet endroit) : {}", graine, manques);
+            BlockPos centre = plan.centre();
+            int r = PlanMars.EMPRISE_MINE;
+            int cx = centre.getX() >> 4;
+            int cz = centre.getZ() >> 4;
+            Map<Block, Integer> volume = new java.util.HashMap<>();
+            BlockPos.MutableBlockPos q = new BlockPos.MutableBlockPos();
+            for (int x = (cx - r) << 4; x <= ((cx + r) << 4) + 15; x++) {
+                for (int z = (cz - r) << 4; z <= ((cz + r) << 4) + 15; z++) {
+                    // Les tranches des niveaux (FilonsDeMine.dansLaTranche) : de 8 blocs sous le dernier sol au haut des boîtes
+                    for (int y = plan.sols().getLast() - 8; y <= plan.hautDesBoites(); y++) {
+                        volume.merge(niveau.getBlockState(q.set(x, y, z)).getBlock(), 1, Integer::sum);
+                    }
+                }
+            }
+            StringBuilder minerais = new StringBuilder();
+            for (FilonsDeMine.Minerai minerai : FilonsDeMine.Minerai.values()) {
+                int vus = visibles(niveau, vide, blocs(minerai));
+                int total = blocs(minerai).stream().mapToInt(bloc -> volume.getOrDefault(bloc, 0)).sum();
+                minerais.append(" ").append(minerai).append(" ").append(vus).append(" visibles, ").append(total).append(" dans le volume dont ")
+                        .append(nos.getOrDefault(minerai, 0)).append(" des filons ;");
+                if (vus < VISIBLES_MIN.get(minerai)) {
+                    liste.add(minerai + " : " + vus + " visibles");
+                }
+                if (minerai == FilonsDeMine.Minerai.HELIUM3 && total < HELIUM3_VOLUME_MIN) {
+                    liste.add("hélium-3 : " + total + " dans le volume");
+                }
+                if (minerai == FilonsDeMine.Minerai.FER) {
+                    double rapport = (double) total / Math.max(1, total - nos.getOrDefault(minerai, 0));
+                    minerais.append(String.format(Locale.ROOT, " (×%.2f vanilla)", rapport));
+                    if (rapport > FER_VOLUME_MAX) {
+                        liste.add(String.format(Locale.ROOT, "fer du volume ×%.2f", rapport));
+                    }
+                }
+            }
+            int diamants = visibles(niveau, vide, DIAMANTS);
+            int diamantsSquelette = visibles(niveau, videDuPlan(plan, false), DIAMANTS);
+            double rapportDiamants = (double) diamants / Math.max(1, diamantsSquelette);
+            minerais.append(String.format(Locale.ROOT, " diamants %d visibles (%d sans les salles, ×%.2f)", diamants, diamantsSquelette, rapportDiamants));
+            if (rapportDiamants > DIAMANTS_VISIBLES_MAX) {
+                liste.add(String.format(Locale.ROOT, "diamants visibles ×%.2f", rapportDiamants));
+            }
+            RedRising.LOGGER.info("[G7.2.2] Graine {} : filons{}", graine, minerais);
             return String.join(" ; ", liste);
         });
         if (!defauts.isEmpty()) {
             throw new AssertionError("Graine " + graine + " : " + defauts);
         }
+    }
+
+    // --- Salle de forage et hélium-3 ---
+
+    /**
+     * Le joueur dans une salle de forage (capture pour l'œil), puis le minerai d'hélium-3 : il éclaire (3), une pioche en
+     * pierre en tire de l'hélium-3, une pioche en bois rien.
+     */
+    private static void forageEtHelium3(TestSingleplayerContext monde, ClientGameTestContext context) {
+        PlanDeMine.Salle forage = monde.getServer().computeOnServer(server -> plan(server).salles().stream()
+                .filter(salle -> salle.type() == PlanDeMine.TypeSalle.FORAGE).findFirst().orElseThrow());
+        int sol = forage.boite().minY();
+        monde.getServer().runCommand("gamemode survival @a[limit=1]");
+        monde.getServer().runCommand("effect give @a[limit=1] minecraft:night_vision infinite 0 true");
+        monde.getServer().runCommand("effect give @a[limit=1] minecraft:resistance infinite 4 true");
+        monde.getServer().runCommand("tp @a[limit=1] " + (forage.x() + 0.5) + " " + sol + " " + (forage.z() + 5.5) + " 180 10");
+        context.waitTicks(60);
+        monde.getConnection().waitForChunksRender();
+        OutilsTest.garderCapture(context.takeScreenshot("mine-forage"));
+
+        BlockPos pos = new BlockPos(forage.x() + 3, sol, forage.z() + 3);
+        String defauts = monde.getServer().computeOnServer(server -> {
+            ServerLevel niveau = server.overworld();
+            ServerPlayer joueur = OutilsTest.joueur(server);
+            List<String> liste = new ArrayList<>();
+            for (boolean pierre : new boolean[]{true, false}) {
+                niveau.setBlockAndUpdate(pos, ObjetsMine.MINERAI_HELIUM3.defaultBlockState());
+                if (niveau.getBlockState(pos).getLightEmission() != 3) {
+                    liste.add("lumière du minerai " + niveau.getBlockState(pos).getLightEmission());
+                }
+                niveau.getEntitiesOfClass(ItemEntity.class, new AABB(pos).inflate(3)).forEach(ItemEntity::discard);
+                joueur.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(pierre ? Items.STONE_PICKAXE : Items.WOODEN_PICKAXE));
+                joueur.gameMode.destroyBlock(pos);
+                int helium = niveau.getEntitiesOfClass(ItemEntity.class, new AABB(pos).inflate(3)).stream()
+                        .filter(objet -> objet.getItem().is(ObjetsMine.HELIUM3)).mapToInt(objet -> objet.getItem().getCount()).sum();
+                if (!niveau.getBlockState(pos).isAir()) {
+                    liste.add("minerai pas cassé");
+                }
+                if (pierre ? helium < 1 : helium > 0) {
+                    liste.add((pierre ? "pioche en pierre : " : "pioche en bois : ") + helium + " hélium-3");
+                }
+            }
+            return String.join(" ; ", liste);
+        });
+        if (!defauts.isEmpty()) {
+            throw new AssertionError("Hélium-3 : " + defauts);
+        }
+        RedRising.LOGGER.info("[G7.2.2] Salle de forage en {} {} (capture mine-forage) ; minerai d'hélium-3 : lumière 3, pioche en pierre oui, en bois non",
+                forage.x(), forage.z());
     }
 
     // --- Colonne du puits ---

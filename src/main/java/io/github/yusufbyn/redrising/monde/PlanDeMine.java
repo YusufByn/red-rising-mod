@@ -39,6 +39,7 @@ import java.util.concurrent.ConcurrentHashMap;
  *     par la même roche : un cul-de-sac ne trahit pas une cellule.</li>
  *     <li><b>Salles d'extraction</b> (G7.2.2) : une par case libre de la grille, ouverte de côté sur une galerie ; chambres à
  *     piliers, fronts de taille, salles de forage (niveaux 3 et 4), {@value #SALLES_PAR_NIVEAU_4} par niveau.</li>
+ *     <li><b>Filons</b> (G7.2.2) : minerais riches et hélium-3, tirés avec le plan ({@link FilonsDeMine}).</li>
  * </ul>
  */
 public final class PlanDeMine {
@@ -202,6 +203,9 @@ public final class PlanDeMine {
     /** La salle de chaque boîte, par identité : ce sont les boîtes que rend {@link #boitesVers}. */
     private final Map<BoundingBox, Salle> sallesParBoite = new IdentityHashMap<>();
     private final BoundingBox boiteCaverne;
+    private final List<FilonsDeMine.Bloc> filons;
+    /** Les blocs de filon de chaque chunk, pour la pose. */
+    private final Map<Long, List<FilonsDeMine.Bloc>> filonsParChunk = new HashMap<>();
     private final Set<BlockPos> poteaux;
     private final Set<BlockPos> poutres;
     private final BoundingBox bouchon;
@@ -210,7 +214,7 @@ public final class PlanDeMine {
 
     private PlanDeMine(BlockPos centre, List<Integer> sols, List<BoundingBox> galeries, List<Integer> niveauxGaleries, List<Puits> puits,
                        Caverne caverne, Colonie colonie, List<EmplacementCellule> cellules, List<BlockPos> culsDeSac, List<Salle> salles,
-                       Set<BlockPos> poteaux, Set<BlockPos> poutres, BoundingBox bouchon, int hautDesBoites, int hautBoitePuits) {
+                       Set<BlockPos> poteaux, Set<BlockPos> poutres, BoundingBox bouchon, int hautDesBoites, int hautBoitePuits, Random hasard) {
         this.centre = centre;
         this.sols = List.copyOf(sols);
         this.galeries = List.copyOf(galeries);
@@ -228,6 +232,15 @@ public final class PlanDeMine {
         this.bouchon = bouchon;
         this.hautDesBoites = hautDesBoites;
         this.hautBoitePuits = hautBoitePuits;
+        // Les filons en dernier : ils lisent tout le reste du plan (le vide, les cellules, le bouchon)
+        this.filons = FilonsDeMine.tirer(this, hasard);
+        for (FilonsDeMine.Bloc bloc : filons) {
+            filonsParChunk.computeIfAbsent(cleChunk(bloc.pos().getX() >> 4, bloc.pos().getZ() >> 4), cle -> new ArrayList<>()).add(bloc);
+        }
+    }
+
+    private static long cleChunk(int cx, int cz) {
+        return ((long) cx << 32) ^ (cz & 0xFFFFFFFFL);
     }
 
     // --- Tirage ---
@@ -395,7 +408,7 @@ public final class PlanDeMine {
         poteaux.removeIf(pos -> caverne.contient(pos.getX(), pos.getY(), pos.getZ()) || dansUnPuits(puits, pos));
         poutres.removeIf(pos -> caverne.contient(pos.getX(), pos.getY(), pos.getZ()) || dansUnPuits(puits, pos));
         return new PlanDeMine(centre, sols, galeries, niveauxGaleries, puits, caverne, colonie, cellules, culsDeSac, salles, poteaux, poutres,
-                bouchon, hautDesBoites, hautBoitePuits);
+                bouchon, hautDesBoites, hautBoitePuits, hasard);
     }
 
     private static boolean dansUnPuits(List<Puits> puits, BlockPos pos) {
@@ -887,6 +900,16 @@ public final class PlanDeMine {
 
     public List<Salle> salles() {
         return salles;
+    }
+
+    /** Tous les blocs de filon (minerais riches et hélium-3). */
+    public List<FilonsDeMine.Bloc> filons() {
+        return filons;
+    }
+
+    /** Les blocs de filon de ce chunk. */
+    public List<FilonsDeMine.Bloc> filonsDuChunk(int cx, int cz) {
+        return filonsParChunk.getOrDefault(cleChunk(cx, cz), List.of());
     }
 
     public Set<BlockPos> poteaux() {

@@ -1,6 +1,7 @@
 package io.github.yusufbyn.redrising.gametest;
 
 import io.github.yusufbyn.redrising.RedRising;
+import io.github.yusufbyn.redrising.monde.ObjetsMine;
 import io.github.yusufbyn.redrising.couleur.Couleur;
 import io.github.yusufbyn.redrising.factions.Acces;
 import io.github.yusufbyn.redrising.factions.Boutique;
@@ -123,6 +124,24 @@ public class BoutiqueTest implements FabricClientGameTest {
         verifierCompte(monde, "lendemain", Boutiques.CREDIT, 4);
         fermer(monde, context);
         RedRising.LOGGER.info("[G5.9] Société : le lendemain, la vente rouvre");
+
+        // L'hélium-3 de la mine (G7.2.2) : 2 pour 3 crédits, 4 fois par jour, jauges inchangées
+        donner(monde, new ItemStack(ObjetsMine.HELIUM3, 10));
+        ouvrir(monde, context, commis, "23.5 -60 -38.5");
+        int helium = offre(monde, ObjetsMine.HELIUM3, true);
+        for (int i = 1; i <= 4; i++) {
+            if (!echanger(monde, helium)) {
+                throw new AssertionError("Vente d'hélium-3 n° " + i + " refusée");
+            }
+        }
+        if (echanger(monde, helium)) {
+            throw new AssertionError("Vente d'hélium-3 au-delà du plafond du jour acceptée");
+        }
+        verifierCompte(monde, "hélium-3 vendu", Boutiques.CREDIT, 4 + 4 * 3);
+        verifierCompte(monde, "hélium-3 vendu", ObjetsMine.HELIUM3, 10 - 4 * 2);
+        verifierJauges(monde, "après la vente d'hélium-3", new Jauges(50, 0, 0));
+        fermer(monde, context);
+        RedRising.LOGGER.info("[G7.2.2] Société : 4 ventes d'hélium-3 (3 crédits les 2), la 5e refusée, jauges inchangées");
 
         // Palier 60 : l'équipement apparaît
         jauges(monde, Acces.SEUIL_EQUIPEMENT_SOCIETE, 0, 0);

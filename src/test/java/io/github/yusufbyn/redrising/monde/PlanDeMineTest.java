@@ -193,6 +193,57 @@ class PlanDeMineTest {
     }
 
     @Test
+    void filons() {
+        for (long graine : GRAINES) {
+            long debut = System.nanoTime();
+            PlanDeMine plan = PlanDeMine.tirer(graine, CENTRE, 62, 66, 66);
+            double ms = (System.nanoTime() - debut) / 1e6;
+            java.util.Map<FilonsDeMine.Minerai, Integer> total = new java.util.EnumMap<>(FilonsDeMine.Minerai.class);
+            java.util.Map<FilonsDeMine.Minerai, Integer> visibles = new java.util.EnumMap<>(FilonsDeMine.Minerai.class);
+            Set<BlockPos> vus = new HashSet<>();
+            for (FilonsDeMine.Bloc bloc : plan.filons()) {
+                BlockPos pos = bloc.pos();
+                String nom = "graine " + graine + " : " + bloc.minerai() + " en " + pos;
+                assertTrue(vus.add(pos), nom + " en double");
+                assertFalse(plan.interieur(pos.getX(), pos.getY(), pos.getZ()), nom + " dans le vide");
+                for (PlanDeMine.EmplacementCellule cellule : plan.cellules()) {
+                    assertFalse(cellule.avecMurs().inflatedBy(1).isInside(pos), nom + " dans les murs d'une cellule");
+                }
+                // Le niveau du bloc (sa tranche) : chaque minerai à ses niveaux
+                int niveau = -1;
+                for (int i = 0; i < plan.sols().size(); i++) {
+                    if (FilonsDeMine.dansLaTranche(pos, i, plan.sols())) {
+                        niveau = i;
+                    }
+                }
+                assertTrue(niveau >= 0, nom + " hors des tranches");
+                switch (bloc.minerai()) {
+                    case CUIVRE -> assertTrue(niveau <= 1, nom);
+                    case OR, HELIUM3 -> assertTrue(niveau >= 2, nom);
+                    case REDSTONE -> assertTrue(niveau == 3, nom);
+                    case FER -> assertTrue(niveau >= 1, nom);
+                    default -> {
+                    }
+                }
+                total.merge(bloc.minerai(), 1, Integer::sum);
+                boolean touche = false;
+                for (net.minecraft.core.Direction direction : net.minecraft.core.Direction.values()) {
+                    BlockPos voisin = pos.relative(direction);
+                    touche |= plan.interieur(voisin.getX(), voisin.getY(), voisin.getZ());
+                }
+                if (touche) {
+                    visibles.merge(bloc.minerai(), 1, Integer::sum);
+                }
+            }
+            System.out.println("Filons, graine " + graine + " (" + Math.round(ms) + " ms) : " + total + " dont visibles " + visibles);
+            assertTrue(total.getOrDefault(FilonsDeMine.Minerai.HELIUM3, 0) >= 400, "graine " + graine + " : hélium-3 " + total);
+            assertTrue(visibles.getOrDefault(FilonsDeMine.Minerai.HELIUM3, 0) >= 60, "graine " + graine + " : hélium-3 visible " + visibles);
+            assertTrue(total.getOrDefault(FilonsDeMine.Minerai.HELIUM3, 0) - visibles.getOrDefault(FilonsDeMine.Minerai.HELIUM3, 0)
+                    >= FilonsDeMine.HELIUM3_CACHE * 8 / 10, "graine " + graine + " : hélium-3 caché " + total + " " + visibles);
+        }
+    }
+
+    @Test
     void colonieReservee() {
         PlanDeMine plan = PlanDeMine.tirer(42, CENTRE, 62, 66, 66);
         PlanDeMine.Caverne caverne = plan.caverne();
@@ -212,6 +263,8 @@ class PlanDeMineTest {
         assertEquals(a.galeries(), b.galeries());
         assertEquals(a.cellules(), b.cellules());
         assertEquals(a.puits(), b.puits());
+        assertEquals(a.salles(), b.salles());
+        assertEquals(a.filons(), b.filons());
         assertSame(PlanDeMine.de(5, CENTRE, 62, 66, 66), PlanDeMine.de(5, CENTRE, 62, 66, 66));
     }
 }

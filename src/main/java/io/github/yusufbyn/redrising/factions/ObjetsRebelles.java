@@ -1,6 +1,7 @@
 package io.github.yusufbyn.redrising.factions;
 
 import io.github.yusufbyn.redrising.RedRising;
+import io.github.yusufbyn.redrising.monde.ObjetsMine;
 import net.fabricmc.fabric.api.creativetab.v1.FabricCreativeModeTab;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -76,6 +77,8 @@ public final class ObjetsRebelles {
                     sortie.accept(FUMIGENE);
                     sortie.accept(CHAUSSE_TRAPPE_OBJET);
                     sortie.accept(Boutiques.CREDIT);
+                    sortie.accept(ObjetsMine.HELIUM3);
+                    sortie.accept(ObjetsMine.MINERAI_HELIUM3_OBJET);
                 })
                 .build());
     }

@@ -17,6 +17,7 @@ import io.github.yusufbyn.redrising.jalons.HorlogeMonde;
 import io.github.yusufbyn.redrising.jalons.MoteurJalons;
 import io.github.yusufbyn.redrising.monde.CelluleRising;
 import io.github.yusufbyn.redrising.monde.MineLykos;
+import io.github.yusufbyn.redrising.monde.ObjetsMine;
 import io.github.yusufbyn.redrising.monde.PosteSociete;
 import io.github.yusufbyn.redrising.monde.RegionsMars;
 import io.github.yusufbyn.redrising.monde.SourceBiomesMars;
@@ -59,6 +60,7 @@ public class RedRising implements ModInitializer {
         RegionsMars.init();
         SourceBiomesMars.init();
         MineLykos.init();
+        ObjetsMine.init();
         CommandesDebug.init();
     }
 }

@@ -11,6 +11,7 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.Identifier;
 import net.minecraft.util.RandomSource;
+import net.minecraft.tags.BlockTags;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.StructureManager;
@@ -53,7 +54,8 @@ import java.util.concurrent.atomic.LongAccumulator;
  *     dans {@code data/redrising/worldgen/structure/mine.json}) : ni grotte de bruit ni aquifère dans le volume.</li>
  *     <li><b>Pose</b> : à la dernière étape de la génération ({@code top_layer_modification}), après les minerais, les
  *     géodes et les sources. Chaque morceau pose les blocs du plan qui touchent son chunk : coque de roche (seulement à
- *     la place du vide et des fluides), vide (galeries, puits, caverne, salles), étais, échelles, bouchon.</li>
+ *     la place du vide et des fluides), vide (galeries, puits, caverne, salles), étais, échelles, bouchon ; et avant tout, les
+ *     filons de son chunk.</li>
  *     <li><b>Autour</b> : pas de carvers dans l'emprise, ni d'autre structure (sauf un fort), ni de décoration souterraine
  *     autre que les minerais dans le volume de la mine (mixins sur {@code NoiseBasedChunkGenerator.applyCarvers},
  *     {@code ChunkGenerator.tryGenerateStructure}, {@code ConfiguredFeature.place}).</li>
@@ -369,6 +371,8 @@ public final class MineLykos extends Structure {
     /** Pose, dans ce chunk, tout ce que le plan y met. */
     static void poser(WorldGenLevel monde, PlanDeMine plan, BoundingBox chunk) {
         BoundingBox colonne = new BoundingBox(chunk.minX(), monde.getMinY(), chunk.minZ(), chunk.maxX(), monde.getMaxY(), chunk.maxZ());
+        // Filons d'abord (G7.2.2) : un chunk sans vide de la mine peut en avoir (hélium-3 caché)
+        poserFilons(monde, plan, chunk);
         List<BoundingBox> proches = plan.boitesVers(colonne.inflatedBy(PlanDeMine.COQUE_PUITS));
         if (proches.isEmpty()) {
             return;
@@ -443,6 +447,39 @@ public final class MineLykos extends Structure {
             BlockPos.betweenClosed(bouchon.minX(), bouchon.minY(), bouchon.minZ(), bouchon.maxX(), bouchon.maxY(), bouchon.maxZ())
                     .forEach(bloc -> monde.setBlock(bloc, BOUCHON, Block.UPDATE_CLIENTS));
         }
+    }
+
+    /**
+     * Les filons de ce chunk (G7.2.2), posés avant le vide : un filon n'est jamais dans le vide du plan, et la coque ne remplace
+     * que le vide et les fluides. Seulement à la place de la roche (et des poches de gravier ou de terre), en pierre ou en
+     * ardoise des profondeurs selon elle.
+     */
+    private static void poserFilons(WorldGenLevel monde, PlanDeMine plan, BoundingBox chunk) {
+        for (FilonsDeMine.Bloc bloc : plan.filonsDuChunk(chunk.minX() >> 4, chunk.minZ() >> 4)) {
+            BlockState minerai = minerai(bloc.minerai(), monde.getBlockState(bloc.pos()), bloc.pos().getY());
+            if (minerai != null) {
+                monde.setBlock(bloc.pos(), minerai, Block.UPDATE_CLIENTS);
+            }
+        }
+    }
+
+    /** Le bloc de ce minerai qui remplace cette roche (variante pierre ou ardoise des profondeurs), ou {@code null} si ce n'est pas de la roche. */
+    private static @Nullable BlockState minerai(FilonsDeMine.Minerai minerai, BlockState roche, int y) {
+        boolean poche = roche.is(Blocks.GRAVEL) || roche.is(Blocks.DIRT);
+        if (!poche && !roche.is(BlockTags.DEEPSLATE_ORE_REPLACEABLES) && !roche.is(BlockTags.STONE_ORE_REPLACEABLES)) {
+            return null;
+        }
+        boolean ardoise = poche ? y < 0 : roche.is(BlockTags.DEEPSLATE_ORE_REPLACEABLES);
+        Block bloc = switch (minerai) {
+            case CHARBON -> ardoise ? Blocks.DEEPSLATE_COAL_ORE : Blocks.COAL_ORE;
+            case FER -> ardoise ? Blocks.DEEPSLATE_IRON_ORE : Blocks.IRON_ORE;
+            case CUIVRE -> ardoise ? Blocks.DEEPSLATE_COPPER_ORE : Blocks.COPPER_ORE;
+            case OR -> ardoise ? Blocks.DEEPSLATE_GOLD_ORE : Blocks.GOLD_ORE;
+            case REDSTONE -> ardoise ? Blocks.DEEPSLATE_REDSTONE_ORE : Blocks.REDSTONE_ORE;
+            // Une seule variante : la mine ne le pose que sous y = 0
+            case HELIUM3 -> ObjetsMine.MINERAI_HELIUM3;
+        };
+        return bloc.defaultBlockState();
     }
 
     private static boolean estUnPuits(PlanDeMine plan, BoundingBox boite) {

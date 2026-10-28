@@ -1,5 +1,6 @@
 package io.github.yusufbyn.redrising.factions;
 
+import io.github.yusufbyn.redrising.monde.ObjetsMine;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.Items;
 
@@ -10,7 +11,7 @@ import java.util.List;
  *
  * <ul>
  *     <li><b>Société</b>, en crédits ({@link Boutiques#CREDIT}) : elle achète de la production brute (minerais, charbon,
- *     récoltes) et vend des produits finis. Aucun objet n'est sur les deux listes : pas d'achat bas et de revente haute.
+ *     récoltes, hélium-3) et vend des produits finis. Aucun objet n'est sur les deux listes : pas d'achat bas et de revente haute.
  *     Elle n'achète jamais de contrebande, ni ce qu'on lui a volé.</li>
  *     <li><b>Rising</b>, en troc : il ne prend pas d'argent, il prend ce qui manque aux mines (poudre, fer, silex).
  *     Il ne paie jamais en crédits : rien ne revient vers la Société.</li>
@@ -36,6 +37,9 @@ public final class Catalogue {
             achete("or_brut", Items.RAW_GOLD, 2, 2),
             achete("ble", Items.WHEAT, 16, 3),
             achete("pommes_de_terre", Items.POTATO, 16, 3),
+            // L'hélium-3 de la mine (G7.2.2), ce que la Société veut de Mars : 2 pour 3 crédits, 4 fois par jour
+            new Article("helium3", Boutique.SOCIETE, ObjetsMine.HELIUM3, 2, null, 0, Boutiques.CREDIT, 3, Jauge.LOYAUTE,
+                    Acces.SEUIL_LOYAUTE_SOCIETE, 4),
             // Rising, en troc
             new Article("fumigene", Boutique.RISING, Items.GUNPOWDER, 2, Items.IRON_INGOT, 1,
                     ObjetsRebelles.FUMIGENE, 1, Jauge.SOUTIEN, Acces.SEUIL_FUMIGENE, 2),
