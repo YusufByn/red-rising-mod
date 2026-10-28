@@ -44,29 +44,33 @@ import static io.github.yusufbyn.redrising.jalons.Echeance.jours;
  * G6.5 : l'attitude d'un personnage de test change l'issue de son jalon (canon à 20 ou plus). Sans rien faire : divergente ;
  * après l'avoir aidé trois jours et volé la Société sous ses yeux : canon. Aussi : aide refusée le même jour, plafond des
  * gains du jour, silence des Rouges sans effet sur l'attitude, vol du Rising vu, mise à terre, compteurs d'aide et de tort
- * intacts, descente sur une cellule (personnage dedans, et personnage dont c'était le foyer), rechargement.
+ * intacts, descente sur une cellule (personnage dedans, et personnage dont c'était le foyer), cellule dénoncée carte en
+ * main, rechargement.
  */
 public class AttitudePnjTest implements FabricClientGameTest {
     private static final String JALON = "test_g65";
     private static final String PERSO = "perso_g65";
     private static final String DANS_LA_CELLULE = "perso_g65_cellule";
     private static final String FOYER_CELLULE = "perso_g65_foyer";
+    private static final String DENONCE = "perso_g65_denonce";
     private static final Vec3 DEVANT = new Vec3(0.5, -60, 2.5);
     /** Cellule vers le sud : entrée en (40, -60, 40), salle de x 38 à 42 et de z 41 à 45. */
     private static final BlockPos CELLULE = new BlockPos(40, -60, 40);
+    /** Cellule dénoncée carte en main : entrée en (80, -60, 40). */
+    private static final BlockPos CELLULE_DENONCEE = new BlockPos(80, -60, 40);
 
     @Override
     public void runTest(ClientGameTestContext context) {
         Jalons.declarer(Jalon.builder(JALON).epoque(Epoque.RED_RISING).echeance(jours(30), jours(30), jours(30), 0)
                 .issue(bilan -> bilan.attitude(PERSO) >= 20 ? Issue.CANON : Issue.DIVERGENTE).build());
-        for (String personnage : List.of(PERSO, DANS_LA_CELLULE, FOYER_CELLULE)) {
+        for (String personnage : List.of(PERSO, DANS_LA_CELLULE, FOYER_CELLULE, DENONCE)) {
             Personnages.declarer(personnage, JALON, Camp.RISING);
         }
         try {
             jouer(context);
         } finally {
             Jalons.retirer(JALON);
-            List.of(PERSO, DANS_LA_CELLULE, FOYER_CELLULE).forEach(Personnages::retirer);
+            List.of(PERSO, DANS_LA_CELLULE, FOYER_CELLULE, DENONCE).forEach(Personnages::retirer);
         }
         RedRising.LOGGER.info("[G6.5] OK : l'attitude d'un PNJ de test change l'issue de son jalon");
     }
@@ -150,6 +154,26 @@ public class AttitudePnjTest implements FabricClientGameTest {
             verifierAttitude(monde, DANS_LA_CELLULE, Attitude.CELLULE_REPEREE, "descente, personnage dans la cellule");
             verifierAttitude(monde, FOYER_CELLULE, Attitude.CELLULE_REPEREE, "descente, foyer dans la cellule");
             RedRising.LOGGER.info("[G6.5] Descente : -10 pour celui qui y était et celui dont c'était le foyer");
+
+            // --- Dénonciation carte en main d'une cellule connue : -30, même sans l'avoir vu ---
+            monde.getServer().runCommand("rr structure cellule " + CELLULE_DENONCEE.getX() + " " + CELLULE_DENONCEE.getY() + " " + CELLULE_DENONCEE.getZ() + " south");
+            pnjPersonnage(monde, new Vec3(80.5, -60, 43.5), DENONCE);
+            UUID gris = monde.getServer().computeOnServer(server -> {
+                Villager pnj = Objects.requireNonNull(PnjCouleur.creer(server.overworld(), new Vec3(80.5, -60, 31.5), 0, Couleur.GRIS));
+                pnj.setNoAi(true);
+                ServerPlayer joueur = OutilsTest.joueur(server);
+                joueur.setAttached(CelluleRising.CONNUES, List.of(CELLULE_DENONCEE));
+                joueur.getInventory().setSelectedItem(new ItemStack(Items.MAP));
+                return pnj.getUUID();
+            });
+            String position = "80.5 -60 34.5";
+            String regard = monde.getServer().computeOnServer(server -> OutilsTest.regard(position, villageois(server, gris)));
+            monde.getServer().runCommand("tp @a " + position + " " + regard);
+            monde.getConnection().waitForClientboundEntityUpdates(EntityTypes.VILLAGER);
+            aider(context);
+            monde.getServer().waitFor(server -> CelluleRising.contenant(server, CELLULE_DENONCEE.offset(0, 0, 3)) == null, 40);
+            verifierAttitude(monde, DENONCE, Attitude.CELLULE_DENONCEE, "dénonciation de sa cellule, carte en main");
+            RedRising.LOGGER.info("[G6.5] Cellule dénoncée carte en main : -30 pour le personnage qui y était");
             monde.getServer().runCommand("rr personnage list");
             sauvegarde = monde.getWorldSave();
         }
@@ -188,7 +212,7 @@ public class AttitudePnjTest implements FabricClientGameTest {
         });
     }
 
-    /** Accroupi, du pain en main, un clic droit sur le personnage devant le joueur, puis debout. */
+    /** Accroupi, un clic droit sur le PNJ devant le joueur (avec ce qu'il a en main), puis debout. */
     private static void aider(ClientGameTestContext context) {
         // Un vol ouvre l'écran du coffre côté client : le clic n'atteindrait pas le PNJ avant sa fermeture
         context.waitFor(mc -> mc.gui.screen() == null);

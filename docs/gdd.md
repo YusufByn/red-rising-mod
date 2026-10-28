@@ -342,7 +342,7 @@ Deux jauges séparées (pas une barre Société ↔ Rising) pour permettre **l'a
 | Retrait des Gris (abandon, toujours vu) | 90 | aucun |
 | Arrêté | 50 | Loyauté −15, 30 s d'interrogatoire, emmené au poste |
 
-- Relèvent d'autres tickets : les raids sur les cellules et des traques plus dures après certains jalons (G6.3, Triomphe G16.2) ; chasseurs partis des garnisons et prison (G8.1) ; fouille et objets volés confisqués (plus tard) ; traques entre joueurs (multijoueur, plus tard). Pour l'instant, les chasseurs apparaissent en surface (hauteur du terrain) : à revoir pour les mines (G7.2).
+- Relèvent d'autres tickets : les raids sur les cellules et des traques plus dures après certains jalons (G6.3, Triomphe G16.2) ; chasseurs partis des garnisons et prison (G8.1) ; fouille et objets volés confisqués (plus tard) ; traques entre joueurs (multijoueur, plus tard). Pour l'instant, les chasseurs apparaissent en surface (hauteur du terrain) ; dans la mine, ils apparaîtront dans les galeries (G7.2.4).
 
 ### Commerce (G5.9, décidé le 27/10)
 - ✅ **Monnaie** : la Société paie et vend en **crédits** (objet du mod, la monnaie du lore ; elle seule en donne). Le **Rising ne prend pas d'argent** : il troque contre ce qui manque aux mines (poudre, fer, silex). Écartés : les émeraudes de Minecraft (villageois ordinaires et fermes à émeraudes rendraient les prix dérisoires, et un Rising qui prend de l'argent sonne faux), le troc partout (chaînes d'échanges impossibles à équilibrer, rien à gérer pour l'Argent).
@@ -412,6 +412,16 @@ Deux jauges séparées (pas une barre Société ↔ Rising) pour permettre **l'a
 
 - Moment fort à garder : un Rouge commence persuadé que la surface est inhabitable. La découvrir est son premier vrai moment, comme Darrow.
 - Vigilance : les mines doivent être assez riches pour qu'un Rouge y joue plusieurs heures, sinon la Couleur devient un simple tutoriel.
+
+### Génération de Mars (décidée le 28/10, découpage de G7.1 et G7.2)
+- ✅ **Mars reste l'Overworld**, avec les biomes vanilla, et un type de monde « Mars » par défaut à la création (G7.1.2). Les tests en jeu gardent leur type de monde.
+- ✅ **Plan des régions** tiré de la graine, en ne lisant que les biomes et la hauteur du terrain (aucun chunk généré), puis **sauvegardé** dans l'état du monde au premier démarrage : une version suivante du mod ne déplace pas les régions d'un monde existant, et la génération lit le plan sauvegardé, jamais un recalcul. Un monde sans plan (tests, monde d'avant G7) marche comme avant : `/rr structure` et le reste ne dépendent pas des régions.
+- 🟡 **Distances** : la mine à 200 à 400 blocs du point d'apparition (pas dessous : on la trouverait en creusant au spawn, et les joueurs sans lit y réapparaissent au-dessus), la garnison à environ 600, la cité à environ 900, les zones à environ 1 200, les pôles au-delà de |z| = 3 000. Pas de région dans l'océan ; la cité sur du terrain plat.
+- ✅ **Une seule grande mine (Lykos) par monde** en v1, générée par le code au chargement des chunks (pas de gros bloc posé d'un coup), avec l'hélium-3 (minerai et objet du mod) et des minerais vanilla plus riches.
+- ✅ **Pas d'ouverture naturelle** : les grottes vanilla sont bouchées dans le volume de la mine, et son puits principal est fermé par un simple bouchon. Pas de coque ni de bloc incassable : un Rouge, qui mine plus vite que tout le monde, peut toujours creuser vers le haut.
+- ✅ **Découverte de la surface** (G7.9) : elle se déclenche à la **première exposition au ciel**, quel que soit le chemin (puits, galerie creusée, cellule). L'accès à la surface se tranche en G7.9.
+- ✅ **Traque dans la mine** (G7.2.4) : les chasseurs y apparaissent sous terre, dans les galeries.
+- ⚠️ **Cellules en nombre fini** dans une seule mine : il faudra des emplacements de réserve ou des cellules qui se reforment (G7.5), pour les cellules tombées et pour le retour des personnages en fuite (G6.4).
 
 ### Institut ✅
 - **Dimension séparée** (carte fixe : vallée, châteaux des Maisons).
