@@ -229,5 +229,6 @@
   "commande.redrising.personnage.tue": "NPC %s killed (essential or not)",
   "commande.redrising.personnage.oublie": "Death of character %s forgotten: it can be played again",
   "commande.redrising.personnage.inconnu": "No character declared as %s",
-  "commande.redrising.personnage.refuse_mort": "Character %s is dead (/rr personnage oublier to give it again)"
+  "commande.redrising.personnage.refuse_mort": "Character %s is dead (/rr personnage oublier to give it again)",
+  "commande.redrising.personnage.en_fuite": "on the run since play time %s"
 }

@@ -43,7 +43,8 @@ class EtatMondeTest {
                 .avecEffet("pendaison_eo/canon/0", new EffetEnCours(Levier.ALERTE_PATROUILLES, 1, "pendaison_eo", 100, 24_100))
                 .avecVersement(new Versement("pendaison_eo/canon/1", "pendaison_eo", Issue.CANON, Optional.of(Couleur.ROUGE),
                         new Variation(0, 10, 0), false, 100))
-                .avecMort("eo", new MortPersonnage(5_000, Optional.of(UUID.fromString("2654e3c3-150d-3857-a426-0b141796a4e0"))));
+                .avecMort("eo", new MortPersonnage(5_000, Optional.of(UUID.fromString("2654e3c3-150d-3857-a426-0b141796a4e0"))))
+                .avecFuite("ares", 6_000);
         JsonElement json = EtatMonde.CODEC.encodeStart(JsonOps.INSTANCE, etat).getOrThrow();
         assertEquals(etat, EtatMonde.CODEC.parse(JsonOps.INSTANCE, json).getOrThrow());
     }
@@ -56,11 +57,11 @@ class EtatMondeTest {
 
     @Test
     void numeroDeVersionLu() {
-        EtatMonde lu = lire("{\"schemaVersion\": 5, \"epoque\": \"morning_star\", \"jalons\": {\"pendaison_eo\": \"divergente\"},"
+        EtatMonde lu = lire("{\"schemaVersion\": 6, \"epoque\": \"morning_star\", \"jalons\": {\"pendaison_eo\": \"divergente\"},"
                 + " \"horloge\": {\"temps\": 24000, \"presence\": 48000, \"aide\": 7, \"tort\": 3},"
                 + " \"en_route\": {\"triomphe\": {\"temps\": 100, \"presence\": 100, \"aide\": 1, \"tort\": 0}},"
                 + " \"effets_en_attente\": [\"pendaison_eo\"]}").getOrThrow();
-        assertEquals(5, lu.schemaVersion());
+        assertEquals(6, lu.schemaVersion());
         assertEquals(Epoque.MORNING_STAR, lu.epoque());
         assertEquals(Map.of("pendaison_eo", Issue.DIVERGENTE), lu.jalons());
         assertEquals(new Horloge(24_000, 48_000, 7, 3), lu.horloge());
@@ -70,12 +71,22 @@ class EtatMondeTest {
         assertEquals(Map.of(), lu.zones());
     }
 
+    /** Un état du monde v5 (G6.4, avant les fuites) : aucun personnage en fuite, les morts intactes. */
+    @Test
+    void mondeV5Migre() {
+        EtatMonde lu = lire("{\"schemaVersion\": 5, \"epoque\": \"red_rising\", \"horloge\": {\"temps\": 10, \"aide\": 0, \"tort\": 0},"
+                + " \"morts\": {\"eo\": {\"temps\": 5}}}").getOrThrow();
+        assertEquals(6, lu.schemaVersion());
+        assertEquals(Map.of("eo", new MortPersonnage(5, Optional.empty())), lu.morts());
+        assertEquals(Map.of(), lu.enFuite());
+    }
+
     /** Un état du monde v4, tel que G6.3 l'écrivait : aucun personnage mort, le reste intact. */
     @Test
     void mondeV4Migre() {
         EtatMonde lu = lire("{\"schemaVersion\": 4, \"epoque\": \"red_rising\", \"jalons\": {\"pendaison_eo\": \"canon\"},"
                 + " \"horloge\": {\"temps\": 50000, \"presence\": 60000, \"aide\": 30, \"tort\": 12}}").getOrThrow();
-        assertEquals(5, lu.schemaVersion());
+        assertEquals(EtatMonde.VERSION_SCHEMA, lu.schemaVersion());
         assertEquals(Map.of("pendaison_eo", Issue.CANON), lu.jalons());
         assertEquals(Map.of(), lu.morts());
     }

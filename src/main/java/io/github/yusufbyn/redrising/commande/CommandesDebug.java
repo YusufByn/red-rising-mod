@@ -789,7 +789,9 @@ public final class CommandesDebug {
         Map<String, UUID> porteurs = PnjEssentiels.porteurs(server);
         for (Personnage personnage : Personnages.tous()) {
             MortPersonnage mort = etat.morts().get(personnage.id());
+            Long fuite = etat.enFuite().get(personnage.id());
             Component statut = mort != null ? Component.translatable("commande.redrising.personnage.mort", temps(mort.temps()))
+                    : fuite != null ? Component.translatable("commande.redrising.personnage.en_fuite", temps(fuite))
                     : Component.translatable(Personnages.essentiel(personnage, etat) ? "commande.redrising.personnage.essentiel" : "commande.redrising.personnage.tuable");
             UUID porteur = porteurs.get(personnage.id());
             ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.personnage.ligne", personnage.id(),

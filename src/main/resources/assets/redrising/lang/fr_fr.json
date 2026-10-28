@@ -229,5 +229,6 @@
   "commande.redrising.personnage.tue": "PNJ %s tué (essentiel ou non)",
   "commande.redrising.personnage.oublie": "Mort du personnage %s oubliée : il peut de nouveau être incarné",
   "commande.redrising.personnage.inconnu": "Aucun personnage déclaré sous le nom %s",
-  "commande.redrising.personnage.refuse_mort": "Le personnage %s est mort (/rr personnage oublier pour le redonner)"
+  "commande.redrising.personnage.refuse_mort": "Le personnage %s est mort (/rr personnage oublier pour le redonner)",
+  "commande.redrising.personnage.en_fuite": "en fuite depuis le temps de jeu %s"
 }

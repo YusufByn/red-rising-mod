@@ -26,6 +26,7 @@ import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Pose;
 import net.minecraft.world.entity.npc.villager.Villager;
+import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.Nullable;
 
@@ -50,6 +51,9 @@ import java.util.function.Consumer;
  *     ne l'incarne plus (sinon on guérirait un personnage mort).</li>
  *     <li><b>Un personnage, un seul PNJ vivant</b> ({@link #PORTEURS}). Un personnage mort ne se redonne pas.</li>
  *     <li>La mort d'un personnage est enregistrée dans l'état du monde, pour le {@code Bilan} des jalons suivants.</li>
+ *     <li><b>Cellule qui tombe</b> : un essentiel n'est pas arrêté. Son foyer hors de la cellule : il y est renvoyé ;
+ *     dans la cellule : il est retiré du monde sans être tué, et son personnage est « en fuite » (dans l'état du monde,
+ *     jusqu'à ce qu'on le redonne à un PNJ). Il doit réapparaître plus tard (G7.5, G15.2).</li>
  * </ul>
  */
 public final class PnjEssentiels {
@@ -240,6 +244,34 @@ public final class PnjEssentiels {
         pnj.setDeltaMovement(Vec3.ZERO);
     }
 
+    // --- Cellule qui tombe ---
+
+    /**
+     * Ce PNJ essentiel était dans une cellule qui tombe (G6.4) : renvoyé à son foyer s'il est hors de la cellule, sinon
+     * retiré du monde sans être tué, son personnage en fuite.
+     */
+    public static void echapper(Villager pnj, BoundingBox cellule) {
+        String personnage = pnj.getAttached(PERSONNAGE);
+        GlobalPos foyer = pnj.getAttached(FOYER);
+        if (personnage == null) {
+            return;
+        }
+        if (inconscient(pnj)) {
+            reveiller(pnj);
+        }
+        if (foyer != null && foyer.dimension().equals(pnj.level().dimension()) && !cellule.isInside(foyer.pos())) {
+            ramenerAuFoyer(pnj);
+            RedRising.LOGGER.info("Personnage {} : s'échappe de la cellule vers son foyer", personnage);
+            return;
+        }
+        MinecraftServer server = pnj.level().getServer();
+        long temps = HorlogeMonde.get(server).temps();
+        EtatMondeServeur.modifier(server, etat -> etat.avecFuite(personnage, temps));
+        liberer(pnj);
+        pnj.discard();
+        RedRising.LOGGER.info("Personnage {} : en fuite (sa cellule est tombée)", personnage);
+    }
+
     // --- Morts ---
 
     private static void enregistrerMort(MinecraftServer server, String personnage, @Nullable ServerPlayer joueur, String cause) {
@@ -295,6 +327,8 @@ public final class PnjEssentiels {
         }
         liberer(pnj);
         modifierPorteurs(server, porteurs -> porteurs.put(personnage, pnj.getUUID()));
+        // Redonné à un PNJ : il n'est plus en fuite
+        EtatMondeServeur.modifier(server, etat -> etat.sansFuite(personnage));
         pnj.setAttached(PERSONNAGE, personnage);
         pnj.setAttached(FOYER, GlobalPos.of(pnj.level().dimension(), pnj.blockPosition()));
         return Incarnation.DONNE;

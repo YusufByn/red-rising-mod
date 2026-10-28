@@ -12,6 +12,7 @@ import io.github.yusufbyn.redrising.factions.Camp;
 import io.github.yusufbyn.redrising.factions.EffetsActions;
 import io.github.yusufbyn.redrising.factions.JaugesJoueur;
 import io.github.yusufbyn.redrising.pnj.PnjCouleur;
+import io.github.yusufbyn.redrising.pnj.PnjEssentiels;
 import io.github.yusufbyn.redrising.pnj.TraqueGris;
 import net.fabricmc.fabric.api.attachment.v1.AttachmentRegistry;
 import net.fabricmc.fabric.api.attachment.v1.AttachmentType;
@@ -458,7 +459,12 @@ public final class CelluleRising {
     public static void tomber(ServerLevel monde, Cellule cellule, String cause) {
         int drapeaux = Block.UPDATE_ALL;
         for (Villager pnj : monde.getEntities(EntityTypes.VILLAGER, AABB.of(cellule.interieur()).inflate(0.5), pnj -> true)) {
-            pnj.discard();
+            if (PnjEssentiels.essentiel(pnj)) {
+                // Un personnage essentiel n'est pas arrêté (G6.4) : il s'échappe vers son foyer, ou part en fuite
+                PnjEssentiels.echapper(pnj, cellule.interieur());
+            } else {
+                pnj.discard();
+            }
         }
         BlockPos.betweenClosedStream(cellule.interieur()).forEach(pos -> {
             BlockEntity bloc = monde.getBlockEntity(pos);
