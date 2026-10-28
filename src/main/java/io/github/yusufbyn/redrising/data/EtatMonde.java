@@ -11,6 +11,7 @@ import io.github.yusufbyn.redrising.jalons.Horloge;
 import io.github.yusufbyn.redrising.jalons.Issue;
 import io.github.yusufbyn.redrising.jalons.MortPersonnage;
 import io.github.yusufbyn.redrising.jalons.Versement;
+import io.github.yusufbyn.redrising.monde.PlanMars;
 import net.minecraft.core.UUIDUtil;
 
 import java.util.ArrayList;
@@ -28,7 +29,7 @@ import java.util.stream.Collectors;
  * État du monde sauvegardé (G2.4) : époque, issue de chaque jalon passé, camp qui contrôle chaque zone, horloge du monde
  * (temps de jeu et Soutien Rising cumulé, G6.1), jalons en route et effets de jalon pas encore appliqués (G6.2), effets
  * en cours et versements des jalons (G6.3), morts et fuites des personnages canon (G6.4), attitude des personnages
- * canon envers chaque joueur (G6.5).
+ * canon envers chaque joueur (G6.5), plan des régions de Mars (G7.1.1).
  *
  * <p>Le format est versionné ({@code schemaVersion}) pour que les mondes v1 restent lisibles en v2 (GDD section 10).
  * Règle : toute modification du format sauvegardé incrémente {@link #VERSION_SCHEMA} et ajoute une étape
@@ -47,11 +48,13 @@ import java.util.stream.Collectors;
  *                   fuite (G6.4, schéma v6)
  * @param attitudes  attitude de chaque personnage canon envers chaque joueur qui l'a croisé, par personnage puis par
  *                   joueur (G6.5, schéma v7)
+ * @param plan       plan des régions de Mars, tiré au premier démarrage d'un monde neuf (G7.1.1, schéma v8) ; vide pour un
+ *                   monde plat (tests) ou créé avant G7 : rien ne doit en dépendre pour marcher
  */
 public record EtatMonde(int schemaVersion, Epoque epoque, Map<String, Issue> jalons, Map<String, Camp> zones, Horloge horloge,
                         Map<String, Horloge> enRoute, Set<String> effetsEnAttente, Map<String, EffetEnCours> effets,
                         List<Versement> versements, Map<String, MortPersonnage> morts, Map<String, Long> enFuite,
-                        Map<String, Map<UUID, Attitude>> attitudes) {
+                        Map<String, Map<UUID, Attitude>> attitudes, Optional<PlanMars> plan) {
     /**
      * Version actuelle du format.
      * <ul>
@@ -62,12 +65,13 @@ public record EtatMonde(int schemaVersion, Epoque epoque, Map<String, Issue> jal
      *     <li>v5 (G6.4) : + morts des personnages canon.</li>
      *     <li>v6 (G6.4) : + personnages canon en fuite.</li>
      *     <li>v7 (G6.5) : + attitudes des personnages canon.</li>
+     *     <li>v8 (G7.1.1) : + plan des régions de Mars.</li>
      * </ul>
      */
-    public static final int VERSION_SCHEMA = 7;
+    public static final int VERSION_SCHEMA = 8;
 
     /** État d'un monde neuf : début du tome 1, aucun jalon passé ni en route, aucune zone attribuée, horloge à zéro. */
-    public static final EtatMonde NOUVEAU = new EtatMonde(VERSION_SCHEMA, Epoque.RED_RISING, Map.of(), Map.of(), Horloge.ZERO, Map.of(), Set.of(), Map.of(), List.of(), Map.of(), Map.of(), Map.of());
+    public static final EtatMonde NOUVEAU = new EtatMonde(VERSION_SCHEMA, Epoque.RED_RISING, Map.of(), Map.of(), Horloge.ZERO, Map.of(), Set.of(), Map.of(), List.of(), Map.of(), Map.of(), Map.of(), Optional.empty());
 
     /** Format brut, tel qu'il est écrit sur le disque, sans migration. */
     private static final Codec<EtatMonde> CODEC_BRUT = RecordCodecBuilder.create(instance -> instance.group(
@@ -86,7 +90,8 @@ public record EtatMonde(int schemaVersion, Epoque epoque, Map<String, Issue> jal
             Codec.unboundedMap(Codec.STRING, MortPersonnage.CODEC).optionalFieldOf("morts", Map.of()).forGetter(EtatMonde::morts),
             Codec.unboundedMap(Codec.STRING, Codec.LONG).optionalFieldOf("en_fuite", Map.of()).forGetter(EtatMonde::enFuite),
             Codec.unboundedMap(Codec.STRING, Codec.unboundedMap(UUIDUtil.STRING_CODEC, Attitude.CODEC))
-                    .optionalFieldOf("attitudes", Map.of()).forGetter(EtatMonde::attitudes)
+                    .optionalFieldOf("attitudes", Map.of()).forGetter(EtatMonde::attitudes),
+            PlanMars.CODEC.optionalFieldOf("plan").forGetter(EtatMonde::plan)
     ).apply(instance, EtatMonde::new));
 
     /** Codec de sauvegarde : à la lecture, le numéro de version est lu puis l'état est migré au format actuel. */
@@ -134,6 +139,9 @@ public record EtatMonde(int schemaVersion, Epoque epoque, Map<String, Issue> jal
         if (etat.schemaVersion() == 6) {
             etat = migrerV6VersV7(etat);
         }
+        if (etat.schemaVersion() == 7) {
+            etat = migrerV7VersV8(etat);
+        }
         return DataResult.success(etat);
     }
 
@@ -142,7 +150,7 @@ public record EtatMonde(int schemaVersion, Epoque epoque, Map<String, Issue> jal
      * cumulé à la mise à jour (aucun monde n'avait été publié : pas besoin d'estimer le passé).
      */
     private static EtatMonde migrerV1VersV2(EtatMonde v1) {
-        return new EtatMonde(2, v1.epoque(), v1.jalons(), v1.zones(), Horloge.ZERO, Map.of(), Set.of(), Map.of(), List.of(), Map.of(), Map.of(), Map.of());
+        return new EtatMonde(2, v1.epoque(), v1.jalons(), v1.zones(), Horloge.ZERO, Map.of(), Set.of(), Map.of(), List.of(), Map.of(), Map.of(), Map.of(), Optional.empty());
     }
 
     /**
@@ -151,63 +159,78 @@ public record EtatMonde(int schemaVersion, Epoque epoque, Map<String, Issue> jal
      * (il n'y avait pas encore d'effets).
      */
     private static EtatMonde migrerV2VersV3(EtatMonde v2) {
-        return new EtatMonde(3, v2.epoque(), v2.jalons(), v2.zones(), v2.horloge().avecPresence(v2.horloge().temps()), Map.of(), Set.of(), Map.of(), List.of(), Map.of(), Map.of(), Map.of());
+        return new EtatMonde(3, v2.epoque(), v2.jalons(), v2.zones(), v2.horloge().avecPresence(v2.horloge().temps()), Map.of(), Set.of(), Map.of(), List.of(), Map.of(), Map.of(), Map.of(), Optional.empty());
     }
 
     /** v3 → v4 (G6.3) : aucun effet en cours ni versement (aucun jalon n'avait d'effet). */
     private static EtatMonde migrerV3VersV4(EtatMonde v3) {
-        return new EtatMonde(4, v3.epoque(), v3.jalons(), v3.zones(), v3.horloge(), v3.enRoute(), v3.effetsEnAttente(), Map.of(), List.of(), Map.of(), Map.of(), Map.of());
+        return new EtatMonde(4, v3.epoque(), v3.jalons(), v3.zones(), v3.horloge(), v3.enRoute(), v3.effetsEnAttente(), Map.of(), List.of(), Map.of(), Map.of(), Map.of(), Optional.empty());
     }
 
     /** v4 → v5 (G6.4) : aucun personnage mort (il n'y en avait pas encore). */
     private static EtatMonde migrerV4VersV5(EtatMonde v4) {
         return new EtatMonde(5, v4.epoque(), v4.jalons(), v4.zones(), v4.horloge(), v4.enRoute(), v4.effetsEnAttente(), v4.effets(),
-                v4.versements(), Map.of(), Map.of(), Map.of());
+                v4.versements(), Map.of(), Map.of(), Map.of(), Optional.empty());
     }
 
     /** v5 → v6 (G6.4) : aucun personnage en fuite. */
     private static EtatMonde migrerV5VersV6(EtatMonde v5) {
         return new EtatMonde(6, v5.epoque(), v5.jalons(), v5.zones(), v5.horloge(), v5.enRoute(), v5.effetsEnAttente(), v5.effets(),
-                v5.versements(), v5.morts(), Map.of(), Map.of());
+                v5.versements(), v5.morts(), Map.of(), Map.of(), Optional.empty());
     }
 
     /** v6 → v7 (G6.5) : aucune attitude (personne n'a encore croisé de personnage). */
     private static EtatMonde migrerV6VersV7(EtatMonde v6) {
         return new EtatMonde(7, v6.epoque(), v6.jalons(), v6.zones(), v6.horloge(), v6.enRoute(), v6.effetsEnAttente(), v6.effets(),
-                v6.versements(), v6.morts(), v6.enFuite(), Map.of());
+                v6.versements(), v6.morts(), v6.enFuite(), Map.of(), Optional.empty());
+    }
+
+    /**
+     * v7 → v8 (G7.1.1) : pas de plan. Un monde d'avant G7 a déjà généré ses chunks autour du point d'apparition : on ne
+     * pose pas de régions après coup.
+     */
+    private static EtatMonde migrerV7VersV8(EtatMonde v7) {
+        return new EtatMonde(8, v7.epoque(), v7.jalons(), v7.zones(), v7.horloge(), v7.enRoute(), v7.effetsEnAttente(), v7.effets(),
+                v7.versements(), v7.morts(), v7.enFuite(), v7.attitudes(), Optional.empty());
+    }
+
+    /** Le plan des régions (posé une fois, au premier démarrage). */
+    public EtatMonde avecPlan(PlanMars nouveau) {
+        return new EtatMonde(schemaVersion, epoque, jalons, zones, horloge, enRoute, effetsEnAttente, effets, versements, morts, enFuite, attitudes,
+                Optional.of(nouveau));
     }
 
     public EtatMonde avecEpoque(Epoque nouvelle) {
-        return new EtatMonde(schemaVersion, nouvelle, jalons, zones, horloge, enRoute, effetsEnAttente, effets, versements, morts, enFuite, attitudes);
+        return new EtatMonde(schemaVersion, nouvelle, jalons, zones, horloge, enRoute, effetsEnAttente, effets, versements, morts, enFuite, attitudes, plan);
     }
 
     public EtatMonde avecIssue(String jalon, Issue issue) {
         Map<String, Issue> copie = new HashMap<>(jalons);
         copie.put(jalon, issue);
-        return new EtatMonde(schemaVersion, epoque, copie, zones, horloge, enRoute, effetsEnAttente, effets, versements, morts, enFuite, attitudes);
+        return new EtatMonde(schemaVersion, epoque, copie, zones, horloge, enRoute, effetsEnAttente, effets, versements, morts, enFuite, attitudes, plan);
     }
 
     public EtatMonde avecZone(String zone, Camp camp) {
         Map<String, Camp> copie = new HashMap<>(zones);
         copie.put(zone, camp);
-        return new EtatMonde(schemaVersion, epoque, jalons, copie, horloge, enRoute, effetsEnAttente, effets, versements, morts, enFuite, attitudes);
+        return new EtatMonde(schemaVersion, epoque, jalons, copie, horloge, enRoute, effetsEnAttente, effets, versements, morts, enFuite, attitudes, plan);
     }
 
     public EtatMonde avecHorloge(Horloge nouvelle) {
-        return new EtatMonde(schemaVersion, epoque, jalons, zones, nouvelle, enRoute, effetsEnAttente, effets, versements, morts, enFuite, attitudes);
+        return new EtatMonde(schemaVersion, epoque, jalons, zones, nouvelle, enRoute, effetsEnAttente, effets, versements, morts, enFuite, attitudes, plan);
     }
 
     /** Ce jalon se met en route : on garde l'horloge de ce moment, d'où se mesure son échéance. */
     public EtatMonde avecMiseEnRoute(String jalon, Horloge depart) {
         Map<String, Horloge> copie = new HashMap<>(enRoute);
         copie.put(jalon, depart);
-        return new EtatMonde(schemaVersion, epoque, jalons, zones, horloge, copie, effetsEnAttente, effets, versements, morts, enFuite, attitudes);
+        return new EtatMonde(schemaVersion, epoque, jalons, zones, horloge, copie, effetsEnAttente, effets, versements, morts, enFuite, attitudes, plan);
     }
 
     public EtatMonde sansMiseEnRoute(String jalon) {
         Map<String, Horloge> copie = new HashMap<>(enRoute);
         copie.remove(jalon);
-        return new EtatMonde(schemaVersion, epoque, jalons, zones, horloge, copie, effetsEnAttente, effets, versements, morts, enFuite, attitudes);
+        return new EtatMonde(schemaVersion, epoque, jalons, zones, horloge, copie, effetsEnAttente, effets, versements, morts, enFuite, attitudes, plan);
     }
 
     /** Les effets de ce jalon passé restent à appliquer (ou, {@code false}, sont appliqués). */
@@ -218,20 +241,20 @@ public record EtatMonde(int schemaVersion, Epoque epoque, Map<String, Issue> jal
         } else {
             copie.remove(jalon);
         }
-        return new EtatMonde(schemaVersion, epoque, jalons, zones, horloge, enRoute, copie, effets, versements, morts, enFuite, attitudes);
+        return new EtatMonde(schemaVersion, epoque, jalons, zones, horloge, enRoute, copie, effets, versements, morts, enFuite, attitudes, plan);
     }
 
     /** Pose (ou remplace) cet effet. */
     public EtatMonde avecEffet(String id, EffetEnCours effet) {
         Map<String, EffetEnCours> copie = new HashMap<>(effets);
         copie.put(id, effet);
-        return new EtatMonde(schemaVersion, epoque, jalons, zones, horloge, enRoute, effetsEnAttente, copie, versements, morts, enFuite, attitudes);
+        return new EtatMonde(schemaVersion, epoque, jalons, zones, horloge, enRoute, effetsEnAttente, copie, versements, morts, enFuite, attitudes, plan);
     }
 
     public EtatMonde sansEffet(String id) {
         Map<String, EffetEnCours> copie = new HashMap<>(effets);
         copie.remove(id);
-        return new EtatMonde(schemaVersion, epoque, jalons, zones, horloge, enRoute, effetsEnAttente, copie, versements, morts, enFuite, attitudes);
+        return new EtatMonde(schemaVersion, epoque, jalons, zones, horloge, enRoute, effetsEnAttente, copie, versements, morts, enFuite, attitudes, plan);
     }
 
     /** Ajoute ce versement, s'il n'y en a pas déjà un de même identifiant (un rejeu ne double rien). */
@@ -241,7 +264,7 @@ public record EtatMonde(int schemaVersion, Epoque epoque, Map<String, Issue> jal
         }
         List<Versement> copie = new ArrayList<>(versements);
         copie.add(versement);
-        return new EtatMonde(schemaVersion, epoque, jalons, zones, horloge, enRoute, effetsEnAttente, effets, copie, morts, enFuite, attitudes);
+        return new EtatMonde(schemaVersion, epoque, jalons, zones, horloge, enRoute, effetsEnAttente, effets, copie, morts, enFuite, attitudes, plan);
     }
 
     /** La mort de ce personnage (la première compte : une mort enregistrée n'est pas remplacée). */
@@ -251,21 +274,21 @@ public record EtatMonde(int schemaVersion, Epoque epoque, Map<String, Issue> jal
         }
         Map<String, MortPersonnage> copie = new HashMap<>(morts);
         copie.put(personnage, mort);
-        return new EtatMonde(schemaVersion, epoque, jalons, zones, horloge, enRoute, effetsEnAttente, effets, versements, copie, enFuite, attitudes);
+        return new EtatMonde(schemaVersion, epoque, jalons, zones, horloge, enRoute, effetsEnAttente, effets, versements, copie, enFuite, attitudes, plan);
     }
 
     /** Oublie la mort de ce personnage (debug) : il peut de nouveau être incarné. */
     public EtatMonde sansMort(String personnage) {
         Map<String, MortPersonnage> copie = new HashMap<>(morts);
         copie.remove(personnage);
-        return new EtatMonde(schemaVersion, epoque, jalons, zones, horloge, enRoute, effetsEnAttente, effets, versements, copie, enFuite, attitudes);
+        return new EtatMonde(schemaVersion, epoque, jalons, zones, horloge, enRoute, effetsEnAttente, effets, versements, copie, enFuite, attitudes, plan);
     }
 
     /** Ce personnage est en fuite depuis ce temps de jeu (sans PNJ, pas mort). */
     public EtatMonde avecFuite(String personnage, long temps) {
         Map<String, Long> copie = new HashMap<>(enFuite);
         copie.put(personnage, temps);
-        return new EtatMonde(schemaVersion, epoque, jalons, zones, horloge, enRoute, effetsEnAttente, effets, versements, morts, copie, attitudes);
+        return new EtatMonde(schemaVersion, epoque, jalons, zones, horloge, enRoute, effetsEnAttente, effets, versements, morts, copie, attitudes, plan);
     }
 
     /** Il n'est plus en fuite (on l'a redonné à un PNJ). */
@@ -275,7 +298,7 @@ public record EtatMonde(int schemaVersion, Epoque epoque, Map<String, Issue> jal
         }
         Map<String, Long> copie = new HashMap<>(enFuite);
         copie.remove(personnage);
-        return new EtatMonde(schemaVersion, epoque, jalons, zones, horloge, enRoute, effetsEnAttente, effets, versements, morts, copie, attitudes);
+        return new EtatMonde(schemaVersion, epoque, jalons, zones, horloge, enRoute, effetsEnAttente, effets, versements, morts, copie, attitudes, plan);
     }
 
     /** L'attitude de ce personnage envers ce joueur ({@link Attitude#NEUTRE} s'il ne l'a jamais croisé). */
@@ -298,14 +321,14 @@ public record EtatMonde(int schemaVersion, Epoque epoque, Map<String, Issue> jal
         Map<UUID, Attitude> parJoueur = new HashMap<>(copie.getOrDefault(personnage, Map.of()));
         parJoueur.put(joueur, attitude);
         copie.put(personnage, parJoueur);
-        return new EtatMonde(schemaVersion, epoque, jalons, zones, horloge, enRoute, effetsEnAttente, effets, versements, morts, enFuite, copie);
+        return new EtatMonde(schemaVersion, epoque, jalons, zones, horloge, enRoute, effetsEnAttente, effets, versements, morts, enFuite, copie, plan);
     }
 
     /** Copie sans l'issue de ce jalon (comme s'il n'était pas encore passé) : ni effets en attente, ni mise en route. */
     public EtatMonde sansIssue(String jalon) {
         Map<String, Issue> copie = new HashMap<>(jalons);
         copie.remove(jalon);
-        return new EtatMonde(schemaVersion, epoque, copie, zones, horloge, enRoute, effetsEnAttente, effets, versements, morts, enFuite, attitudes)
+        return new EtatMonde(schemaVersion, epoque, copie, zones, horloge, enRoute, effetsEnAttente, effets, versements, morts, enFuite, attitudes, plan)
                 .avecEffetsEnAttente(jalon, false).sansMiseEnRoute(jalon);
     }
 
@@ -313,6 +336,6 @@ public record EtatMonde(int schemaVersion, Epoque epoque, Map<String, Issue> jal
     public EtatMonde sansZone(String zone) {
         Map<String, Camp> copie = new HashMap<>(zones);
         copie.remove(zone);
-        return new EtatMonde(schemaVersion, epoque, jalons, copie, horloge, enRoute, effetsEnAttente, effets, versements, morts, enFuite, attitudes);
+        return new EtatMonde(schemaVersion, epoque, jalons, copie, horloge, enRoute, effetsEnAttente, effets, versements, morts, enFuite, attitudes, plan);
     }
 }

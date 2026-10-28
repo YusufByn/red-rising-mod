@@ -234,5 +234,14 @@
   "commande.redrising.personnage.attitude": "Attitude de %s envers %s : %s (gains du jour : %s sur %s) ; moyenne pour le monde : %s",
   "commande.redrising.personnage.attitude.set": "Attitude de %s envers %s : %s",
   "personnage.redrising.attitude.mieux": "%s te regarde d'un meilleur œil",
-  "personnage.redrising.attitude.pire": "%s te regarde de travers"
+  "personnage.redrising.attitude.pire": "%s te regarde de travers",
+  "region.redrising.mine": "mine",
+  "region.redrising.garnison": "garnison",
+  "region.redrising.cite": "cité",
+  "region.redrising.zones": "zones industrielles et agricoles",
+  "region.redrising.poles": "pôles",
+  "commande.redrising.region.aucun_plan": "Ce monde n'a pas de plan des régions (monde plat, ou créé avant G7)",
+  "commande.redrising.region.apparition": "Plan de Mars, tiré depuis le point d'apparition %s :",
+  "commande.redrising.region.ligne": "%s : %s, à %s blocs du point d'apparition",
+  "commande.redrising.region.tp": "%s téléporté à la région %s (%s)"
 }

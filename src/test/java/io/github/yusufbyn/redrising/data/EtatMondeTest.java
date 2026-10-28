@@ -15,6 +15,9 @@ import io.github.yusufbyn.redrising.jalons.Issue;
 import io.github.yusufbyn.redrising.jalons.Levier;
 import io.github.yusufbyn.redrising.jalons.MortPersonnage;
 import io.github.yusufbyn.redrising.jalons.Versement;
+import io.github.yusufbyn.redrising.monde.PlanMars;
+import io.github.yusufbyn.redrising.monde.Region;
+import net.minecraft.core.BlockPos;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -46,7 +49,8 @@ class EtatMondeTest {
                         new Variation(0, 10, 0), false, 100))
                 .avecMort("eo", new MortPersonnage(5_000, Optional.of(UUID.fromString("2654e3c3-150d-3857-a426-0b141796a4e0"))))
                 .avecFuite("ares", 6_000)
-                .avecAttitude("darrow", UUID.fromString("2654e3c3-150d-3857-a426-0b141796a4e0"), new Attitude(25, 3, 10));
+                .avecAttitude("darrow", UUID.fromString("2654e3c3-150d-3857-a426-0b141796a4e0"), new Attitude(25, 3, 10))
+                .avecPlan(new PlanMars(new BlockPos(8, 70, -4), Map.of(Region.MINE, new BlockPos(300, 64, 20), Region.POLES, new BlockPos(8, 62, -3400))));
         JsonElement json = EtatMonde.CODEC.encodeStart(JsonOps.INSTANCE, etat).getOrThrow();
         assertEquals(etat, EtatMonde.CODEC.parse(JsonOps.INSTANCE, json).getOrThrow());
     }
@@ -59,11 +63,11 @@ class EtatMondeTest {
 
     @Test
     void numeroDeVersionLu() {
-        EtatMonde lu = lire("{\"schemaVersion\": 7, \"epoque\": \"morning_star\", \"jalons\": {\"pendaison_eo\": \"divergente\"},"
+        EtatMonde lu = lire("{\"schemaVersion\": 8, \"epoque\": \"morning_star\", \"jalons\": {\"pendaison_eo\": \"divergente\"},"
                 + " \"horloge\": {\"temps\": 24000, \"presence\": 48000, \"aide\": 7, \"tort\": 3},"
                 + " \"en_route\": {\"triomphe\": {\"temps\": 100, \"presence\": 100, \"aide\": 1, \"tort\": 0}},"
                 + " \"effets_en_attente\": [\"pendaison_eo\"]}").getOrThrow();
-        assertEquals(7, lu.schemaVersion());
+        assertEquals(8, lu.schemaVersion());
         assertEquals(Epoque.MORNING_STAR, lu.epoque());
         assertEquals(Map.of("pendaison_eo", Issue.DIVERGENTE), lu.jalons());
         assertEquals(new Horloge(24_000, 48_000, 7, 3), lu.horloge());
@@ -73,12 +77,22 @@ class EtatMondeTest {
         assertEquals(Map.of(), lu.zones());
     }
 
+    /** Un état du monde v7 (G6.5, avant le plan de Mars) : pas de plan, les attitudes intactes. */
+    @Test
+    void mondeV7Migre() {
+        EtatMonde lu = lire("{\"schemaVersion\": 7, \"epoque\": \"red_rising\", \"horloge\": {\"temps\": 10, \"aide\": 0, \"tort\": 0},"
+                + " \"attitudes\": {\"darrow\": {\"2654e3c3-150d-3857-a426-0b141796a4e0\": {\"valeur\": 12, \"jour\": 2, \"gains_du_jour\": 5}}}}").getOrThrow();
+        assertEquals(8, lu.schemaVersion());
+        assertEquals(Optional.empty(), lu.plan());
+        assertEquals(12, lu.attitudeMoyenne("darrow"));
+    }
+
     /** Un état du monde v6 (G6.4, avant les attitudes) : aucune attitude, les fuites intactes. */
     @Test
     void mondeV6Migre() {
         EtatMonde lu = lire("{\"schemaVersion\": 6, \"epoque\": \"red_rising\", \"horloge\": {\"temps\": 10, \"aide\": 0, \"tort\": 0},"
                 + " \"en_fuite\": {\"ares\": 7}}").getOrThrow();
-        assertEquals(7, lu.schemaVersion());
+        assertEquals(EtatMonde.VERSION_SCHEMA, lu.schemaVersion());
         assertEquals(Map.of("ares", 7L), lu.enFuite());
         assertEquals(Map.of(), lu.attitudes());
         assertEquals(0, lu.attitudeMoyenne("ares"));

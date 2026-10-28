@@ -50,7 +50,10 @@ import io.github.yusufbyn.redrising.jalons.MoteurJalons;
 import io.github.yusufbyn.redrising.jalons.Personnage;
 import io.github.yusufbyn.redrising.jalons.Personnages;
 import io.github.yusufbyn.redrising.monde.CelluleRising;
+import io.github.yusufbyn.redrising.monde.PlanMars;
 import io.github.yusufbyn.redrising.monde.PosteSociete;
+import io.github.yusufbyn.redrising.monde.Region;
+import io.github.yusufbyn.redrising.monde.RegionsMars;
 import io.github.yusufbyn.redrising.monde.Vue;
 import io.github.yusufbyn.redrising.factions.Ronde;
 import io.github.yusufbyn.redrising.factions.Traque;
@@ -79,6 +82,7 @@ import net.minecraft.world.level.block.entity.BarrelBlockEntity;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.level.levelgen.Heightmap;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -125,6 +129,8 @@ public final class CommandesDebug {
             pos -> Component.translatable("commande.redrising.structure.absente", pos));
     private static final SimpleCommandExceptionType PNJ_REFUSE = new SimpleCommandExceptionType(
             Component.translatable("commande.redrising.pnj.refuse"));
+    private static final SimpleCommandExceptionType PAS_DE_PLAN = new SimpleCommandExceptionType(
+            Component.translatable("commande.redrising.region.aucun_plan"));
     private static final DynamicCommandExceptionType ZONE_ABSENTE = new DynamicCommandExceptionType(
             zone -> Component.translatable("commande.redrising.etat.zone.absente", zone));
 
@@ -200,6 +206,12 @@ public final class CommandesDebug {
                                                 .then(Commands.argument("valeur", IntegerArgumentType.integer())
                                                         .executes(ctx -> changerAttitude(ctx, ctx.getSource().getPlayerOrException(), true))
                                                         .then(argJoueur((ctx, joueur) -> changerAttitude(ctx, joueur, true))))))))
+                // Plan des régions de Mars (G7.1.1)
+                .then(Commands.literal("region")
+                        .then(Commands.literal("list").executes(CommandesDebug::listerRegions))
+                        .then(Commands.literal("tp")
+                                .then(argEnum("region", Region.values()).executes(ctx -> allerALaRegion(ctx, ctx.getSource().getPlayerOrException()))
+                                        .then(argJoueur(CommandesDebug::allerALaRegion)))))
                 .then(Commands.literal("structure")
                         .then(Commands.literal("list").executes(CommandesDebug::listerStructures))
                         .then(Commands.literal("poste")
@@ -454,6 +466,40 @@ public final class CommandesDebug {
     }
 
     // --- Structures (G5.3, G5.4) ---
+
+    // --- Plan des régions de Mars (G7.1.1) ---
+
+    /** Chaque région du plan : son centre et sa distance au point d'apparition ; ou pas de plan. */
+    private static int listerRegions(CommandContext<CommandSourceStack> ctx) {
+        PlanMars plan = RegionsMars.plan(ctx.getSource().getServer());
+        if (plan == null) {
+            ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.region.aucun_plan"), false);
+            return 0;
+        }
+        ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.region.apparition", plan.apparition().toShortString()), false);
+        for (Region region : Region.values()) {
+            BlockPos pos = plan.regions().get(region);
+            long distance = Math.round(Math.hypot(pos.getX() - plan.apparition().getX(), pos.getZ() - plan.apparition().getZ()));
+            ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.region.ligne", nom("region", region), pos.toShortString(), distance), false);
+        }
+        return plan.regions().size();
+    }
+
+    /** Téléporte le joueur au-dessus du centre de la région (génère les chunks de là-bas). */
+    private static int allerALaRegion(CommandContext<CommandSourceStack> ctx, ServerPlayer joueur) throws CommandSyntaxException {
+        Region region = lireEnum(ctx, "region", Region.values());
+        PlanMars plan = RegionsMars.plan(ctx.getSource().getServer());
+        if (plan == null) {
+            throw PAS_DE_PLAN.create();
+        }
+        BlockPos centre = plan.regions().get(region);
+        ServerLevel monde = ctx.getSource().getServer().overworld();
+        int y = monde.getHeight(Heightmap.Types.MOTION_BLOCKING, centre.getX(), centre.getZ());
+        joueur.teleportTo(monde, centre.getX() + 0.5, y, centre.getZ() + 0.5, Set.of(), joueur.getYRot(), joueur.getXRot(), true);
+        ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.region.tp", joueur.getDisplayName(), nom("region", region),
+                new BlockPos(centre.getX(), y, centre.getZ()).toShortString()), true);
+        return Command.SINGLE_SUCCESS;
+    }
 
     private static int listerStructures(CommandContext<CommandSourceStack> ctx) {
         List<PosteSociete.Poste> postes = PosteSociete.postes(ctx.getSource().getServer());

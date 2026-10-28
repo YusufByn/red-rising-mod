@@ -234,5 +234,14 @@
   "commande.redrising.personnage.attitude": "Attitude of %s towards %s: %s (gains today: %s out of %s); world average: %s",
   "commande.redrising.personnage.attitude.set": "Attitude of %s towards %s: %s",
   "personnage.redrising.attitude.mieux": "%s looks at you more kindly",
-  "personnage.redrising.attitude.pire": "%s eyes you warily"
+  "personnage.redrising.attitude.pire": "%s eyes you warily",
+  "region.redrising.mine": "mine",
+  "region.redrising.garnison": "garrison",
+  "region.redrising.cite": "city",
+  "region.redrising.zones": "industrial and farming zones",
+  "region.redrising.poles": "poles",
+  "commande.redrising.region.aucun_plan": "This world has no region plan (flat world, or created before G7)",
+  "commande.redrising.region.apparition": "Plan of Mars, drawn from the spawn point %s:",
+  "commande.redrising.region.ligne": "%s: %s, %s blocks from the spawn point",
+  "commande.redrising.region.tp": "%s teleported to the %s region (%s)"
 }
