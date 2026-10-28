@@ -34,6 +34,8 @@ import io.github.yusufbyn.redrising.factions.RegistreChausseTrappes;
 import io.github.yusufbyn.redrising.jalons.Bilan;
 import io.github.yusufbyn.redrising.jalons.ContributionDuJour;
 import io.github.yusufbyn.redrising.jalons.Echeance;
+import io.github.yusufbyn.redrising.jalons.EffetEnCours;
+import io.github.yusufbyn.redrising.jalons.EffetsMonde;
 import io.github.yusufbyn.redrising.jalons.Epoque;
 import io.github.yusufbyn.redrising.jalons.Horloge;
 import io.github.yusufbyn.redrising.jalons.HorlogeMonde;
@@ -41,6 +43,7 @@ import io.github.yusufbyn.redrising.jalons.Issue;
 import io.github.yusufbyn.redrising.jalons.Jalon;
 import io.github.yusufbyn.redrising.jalons.Jalons;
 import io.github.yusufbyn.redrising.jalons.JalonsEvents;
+import io.github.yusufbyn.redrising.jalons.Levier;
 import io.github.yusufbyn.redrising.jalons.MoteurJalons;
 import io.github.yusufbyn.redrising.monde.CelluleRising;
 import io.github.yusufbyn.redrising.monde.PosteSociete;
@@ -78,6 +81,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.UUID;
@@ -100,6 +104,8 @@ public final class CommandesDebug {
             jalon -> Component.translatable("commande.redrising.jalon.inconnu", jalon));
     private static final DynamicCommandExceptionType JALON_DEJA_PASSE = new DynamicCommandExceptionType(
             jalon -> Component.translatable("commande.redrising.jalon.deja_passe", jalon));
+    private static final DynamicCommandExceptionType EFFET_ABSENT = new DynamicCommandExceptionType(
+            effet -> Component.translatable("commande.redrising.effet.absent", effet));
     private static final DynamicCommandExceptionType PAS_UN_VILLAGEOIS = new DynamicCommandExceptionType(
             entite -> Component.translatable("commande.redrising.pnj.pas_villageois", entite));
     private static final DynamicCommandExceptionType PAS_UN_COFFRE = new DynamicCommandExceptionType(
@@ -254,6 +260,25 @@ public final class CommandesDebug {
                                 .then(Commands.argument("jalon", StringArgumentType.word())
                                         .then(Commands.literal("appliques").executes(ctx -> marquerEffets(ctx, false)))
                                         .then(Commands.literal("en_attente").executes(ctx -> marquerEffets(ctx, true))))))
+                // Effets des jalons (G6.3)
+                .then(Commands.literal("effet")
+                        .then(Commands.literal("list").executes(CommandesDebug::listerEffets))
+                        .then(Commands.literal("poser")
+                                .then(argEnum("levier", Levier.values())
+                                        .then(Commands.argument("niveau", IntegerArgumentType.integer(0))
+                                                .executes(ctx -> poserEffet(ctx, EffetEnCours.PERMANENT))
+                                                .then(Commands.argument("ticks", LongArgumentType.longArg(1))
+                                                        .executes(ctx -> poserEffet(ctx, LongArgumentType.getLong(ctx, "ticks")))))))
+                        .then(Commands.literal("retirer")
+                                .then(Commands.argument("id", StringArgumentType.greedyString())
+                                        .suggests((ctx, builder) -> SharedSuggestionProvider.suggest(
+                                                EtatMondeServeur.get(ctx.getSource().getServer()).effets().keySet(), builder))
+                                        .executes(CommandesDebug::retirerEffet)))
+                        .then(Commands.literal("recus")
+                                .then(Commands.literal("get").executes(ctx -> lireRecus(ctx, ctx.getSource().getPlayerOrException()))
+                                        .then(argJoueur(CommandesDebug::lireRecus)))
+                                .then(Commands.literal("reset").executes(ctx -> effacerRecus(ctx, ctx.getSource().getPlayerOrException()))
+                                        .then(argJoueur(CommandesDebug::effacerRecus)))))
                 .then(Commands.literal("etat").executes(CommandesDebug::lireEtat)
                         .then(Commands.literal("naissance")
                                 .then(argEnum("mode", ModeNaissance.values()).executes(CommandesDebug::changerModeNaissance)))
@@ -833,8 +858,76 @@ public final class CommandesDebug {
                 liste(etat.jalons(), "issue"),
                 liste(etat.zones(), "camp"),
                 temps(horloge.temps()), temps(horloge.presence()),
-                horloge.aide(), horloge.tort(), horloge.net()), false);
+                horloge.aide(), horloge.tort(), horloge.net(), effets(etat)), false);
         return etat.schemaVersion();
+    }
+
+    // --- Effets des jalons (G6.3) ---
+
+    /** « id : levier niveau N (jalon), encore X » pour chaque effet en cours, ou « aucun ». */
+    private static Component effets(EtatMonde etat) {
+        if (etat.effets().isEmpty()) {
+            return Component.translatable("commande.redrising.aucun");
+        }
+        MutableComponent resultat = Component.empty();
+        boolean premier = true;
+        for (Map.Entry<String, EffetEnCours> entree : new TreeMap<>(etat.effets()).entrySet()) {
+            EffetEnCours effet = entree.getValue();
+            Component duree = effet.fin() == EffetEnCours.PERMANENT ? Component.translatable("commande.redrising.effet.permanent")
+                    : Component.translatable("commande.redrising.effet.reste", temps(Math.max(0, effet.fin() - etat.horloge().temps())));
+            if (!premier) {
+                resultat.append(" ; ");
+            }
+            resultat.append(Component.translatable("commande.redrising.effet.ligne", entree.getKey(), nom("levier", effet.levier()),
+                    effet.niveau(), effet.jalon(), duree));
+            premier = false;
+        }
+        return resultat;
+    }
+
+    private static int listerEffets(CommandContext<CommandSourceStack> ctx) {
+        EtatMonde etat = EtatMondeServeur.get(ctx.getSource().getServer());
+        ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.effet.list", effets(etat)), false);
+        return etat.effets().size();
+    }
+
+    /** Pose un levier à la main (identifiant {@code debug/<levier>}, remplacé s'il existe), permanent ou pour un temps de jeu. */
+    private static int poserEffet(CommandContext<CommandSourceStack> ctx, long duree) throws CommandSyntaxException {
+        Levier levier = lireEnum(ctx, "levier", Levier.values());
+        int niveau = IntegerArgumentType.getInteger(ctx, "niveau");
+        MinecraftServer server = ctx.getSource().getServer();
+        long temps = HorlogeMonde.get(server).temps();
+        String id = "debug/" + levier.getSerializedName();
+        EffetEnCours effet = new EffetEnCours(levier, niveau, "debug", temps, duree == EffetEnCours.PERMANENT ? EffetEnCours.PERMANENT : temps + duree);
+        modifierEtat(ctx, etat -> etat.avecEffet(id, effet));
+        ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.effet.pose", id, nom("levier", levier), effet.niveau()), true);
+        return Command.SINGLE_SUCCESS;
+    }
+
+    private static int retirerEffet(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        String id = StringArgumentType.getString(ctx, "id");
+        if (!EtatMondeServeur.get(ctx.getSource().getServer()).effets().containsKey(id)) {
+            throw EFFET_ABSENT.create(id);
+        }
+        modifierEtat(ctx, etat -> etat.sansEffet(id));
+        ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.effet.retire", id), true);
+        return Command.SINGLE_SUCCESS;
+    }
+
+    private static int lireRecus(CommandContext<CommandSourceStack> ctx, ServerPlayer joueur) {
+        Set<String> recus = joueur.getAttachedOrElse(EffetsMonde.RECUS, Set.of());
+        Long arrivee = joueur.getAttached(EffetsMonde.ARRIVEE);
+        ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.effet.recus.get", joueur.getDisplayName(),
+                arrivee == null ? Component.translatable("commande.redrising.aucun") : temps(arrivee),
+                recus.isEmpty() ? Component.translatable("commande.redrising.aucun") : Component.literal(String.join(", ", new TreeSet<>(recus)))), false);
+        return recus.size();
+    }
+
+    /** Oublie ce que le joueur a reçu : les versements dont il a l'âge lui seront de nouveau livrés. */
+    private static int effacerRecus(CommandContext<CommandSourceStack> ctx, ServerPlayer joueur) {
+        joueur.removeAttached(EffetsMonde.RECUS);
+        ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.effet.recus.reset", joueur.getDisplayName()), true);
+        return Command.SINGLE_SUCCESS;
     }
 
     /** Temps de jeu en jours et heures de jeu (24 000 et 1 000 ticks), suivi du nombre de ticks. */

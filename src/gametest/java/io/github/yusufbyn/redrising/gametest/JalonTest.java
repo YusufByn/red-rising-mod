@@ -11,7 +11,6 @@ import io.github.yusufbyn.redrising.jalons.Issue;
 import io.github.yusufbyn.redrising.jalons.Jalon;
 import io.github.yusufbyn.redrising.jalons.Jalons;
 import io.github.yusufbyn.redrising.jalons.JalonsEvents;
-import io.github.yusufbyn.redrising.jalons.MoteurJalons;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestSingleplayerContext;
@@ -25,7 +24,6 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Set;
 
 import static io.github.yusufbyn.redrising.jalons.Echeance.jours;
 
@@ -33,7 +31,7 @@ import static io.github.yusufbyn.redrising.jalons.Echeance.jours;
  * G6.2 : un jalon de test se déclenche avec chacune des deux issues. Aussi : l'aide l'avance et le tort le recule ;
  * il passe quelle que soit la dimension du joueur, sauf un jalon {@code surPlace} qui attend un joueur dans l'Overworld ;
  * l'époque change ; un jalon fixe garde son issue ; le passage est sur le disque tout de suite ; un jalon passé ne
- * repasse pas au rechargement, mais ses effets restés en attente font repartir l'événement, une fois ; un jalon en
+ * repasse pas au rechargement, mais des effets restés en attente (crash) font repartir l'événement, une fois ; un jalon en
  * route garde son départ au rechargement ; {@code /rr jalon declencher}.
  *
  * <p>Les jalons de test sont déclarés par le test et retirés à la fin : les vrais mondes ne les voient jamais.</p>
@@ -95,7 +93,8 @@ public class JalonTest implements FabricClientGameTest {
             monde.getServer().waitFor(server -> EtatMondeServeur.get(server).jalons().containsKey(TEST), 60);
             verifierEvenements("aide", List.of(TEST + " canon echeance"));
             EtatMonde etat = etat(monde);
-            if (etat.epoque() != Epoque.GOLDEN_SON || !etat.effetsEnAttente().contains(TEST) || etat.enRoute().containsKey(TEST)) {
+            // Les effets (G6.3) sont appliqués aussitôt : le drapeau est posé
+            if (etat.epoque() != Epoque.GOLDEN_SON || etat.effetsEnAttente().contains(TEST) || etat.enRoute().containsKey(TEST)) {
                 throw new AssertionError("Après le passage : " + etat);
             }
             // Sauvegardé tout de suite
@@ -120,11 +119,8 @@ public class JalonTest implements FabricClientGameTest {
             }
             RedRising.LOGGER.info("[G6.2] Jalon fixe : canon malgré 500 de tort");
 
-            // Les effets de deux jalons sont appliqués (ce que fera G6.3), ceux du premier restent en attente
-            monde.getServer().runOnServer(server -> {
-                MoteurJalons.effetsAppliques(server, SUR_PLACE);
-                MoteurJalons.effetsAppliques(server, FIXE);
-            });
+            // Comme un crash entre la sauvegarde du passage et l'application des effets : le drapeau du premier repasse à faux
+            monde.getServer().runOnServer(server -> EtatMondeServeur.modifier(server, actuel -> actuel.avecEffetsEnAttente(TEST, true)));
             sauvegarde = monde.getWorldSave();
         }
 
@@ -136,10 +132,10 @@ public class JalonTest implements FabricClientGameTest {
             context.waitTicks(60);
             verifierEvenements("rechargement, effets en attente", List.of(TEST + " canon rejeu"));
             avant = etat(monde);
-            if (avant.epoque() != Epoque.GOLDEN_SON || avant.jalons().size() != 3 || !avant.effetsEnAttente().equals(Set.of(TEST))) {
+            // Le rejeu applique les effets (G6.3), qui posent le drapeau ; ni nouvelle issue ni changement d'époque
+            if (avant.epoque() != Epoque.GOLDEN_SON || avant.jalons().size() != 3 || !avant.effetsEnAttente().isEmpty()) {
                 throw new AssertionError("Après le rejeu : " + avant);
             }
-            monde.getServer().runOnServer(server -> MoteurJalons.effetsAppliques(server, TEST));
         }
         EVENEMENTS.clear();
         try (TestSingleplayerContext monde = sauvegarde.open()) {
@@ -172,8 +168,8 @@ public class JalonTest implements FabricClientGameTest {
         }
         try (TestSingleplayerContext monde = sauvegarde.open()) {
             monde.getServer().waitFor(server -> !server.getPlayerList().getPlayers().isEmpty(), 100);
-            // Le jalon forcé a ses effets en attente : son événement repart au chargement
-            verifierEvenements("rechargement après un jalon forcé", List.of(SUR_PLACE + " canon rejeu"));
+            // Le jalon forcé a ses effets appliqués : rien ne repart au chargement
+            verifierEvenements("rechargement après un jalon forcé", List.of());
             EVENEMENTS.clear();
             if (!depart.equals(etat(monde).enRoute().get(TEST))) {
                 throw new AssertionError("Jalon en route : départ " + etat(monde).enRoute().get(TEST) + " après rechargement, " + depart + " avant");

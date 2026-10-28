@@ -10,6 +10,8 @@ import io.github.yusufbyn.redrising.factions.Controle;
 import io.github.yusufbyn.redrising.factions.EffetsActions;
 import io.github.yusufbyn.redrising.factions.JaugesJoueur;
 import io.github.yusufbyn.redrising.factions.Ronde;
+import io.github.yusufbyn.redrising.jalons.EffetsMonde;
+import io.github.yusufbyn.redrising.jalons.Levier;
 import io.github.yusufbyn.redrising.monde.Vue;
 import net.fabricmc.fabric.api.attachment.v1.AttachmentRegistry;
 import net.fabricmc.fabric.api.attachment.v1.AttachmentType;
@@ -170,8 +172,15 @@ public final class PatrouillePnj {
     private static void oublier(Villager pnj) {
         PATROUILLEURS.remove(pnj);
         EN_PAUSE.remove(pnj.getUUID());
-        CONTROLES.remove(pnj.getUUID());
+        EnCours controle = CONTROLES.remove(pnj.getUUID());
         FOUILLES.remove(pnj.getUUID());
+        // Le contrôleur disparaît (tué, retiré) en plein contrôle : le contrôle s'arrête sans effet, ce n'est pas une
+        // fuite. Un suspect déjà déconnecté garde sa marque (à l'arrêt du serveur, les joueurs partent avant les PNJ).
+        MinecraftServer server = pnj.level().getServer();
+        ServerPlayer suspect = controle == null || server == null ? null : server.getPlayerList().getPlayer(controle.suspect());
+        if (suspect != null) {
+            suspect.removeAttached(CONTROLE_EN_COURS);
+        }
     }
 
     private static void agir(ServerLevel monde, Villager gris, long maintenant) {
@@ -240,12 +249,16 @@ public final class PatrouillePnj {
         gris.getBrain().setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(ronde.pointEnCours(), VITESSE_RONDE, 1));
     }
 
-    /** Un joueur au palier de contrôle, assez proche, visible, pas contrôlé récemment ni déjà par un autre Gris. */
+    /**
+     * Un joueur au palier de contrôle, assez proche, visible, pas contrôlé récemment ni déjà par un autre Gris. Pendant
+     * une alerte des patrouilles (G6.3), le Gris voit plus loin, contrôle plus tôt et plus souvent.
+     */
     private static @Nullable ServerPlayer chercherSuspect(ServerLevel monde, Villager gris, long maintenant) {
+        int alerte = EffetsMonde.niveau(monde.getServer(), Levier.ALERTE_PATROUILLES);
         for (ServerPlayer joueur : monde.players()) {
-            if (joueur.isSpectator() || !joueur.isAlive() || !Acces.estControle(JaugesJoueur.get(joueur))
-                    || gris.distanceTo(joueur) > Controle.DETECTION
-                    || maintenant - suivi(joueur).dernierControle() < Controle.ATTENTE_ENTRE_CONTROLES
+            if (joueur.isSpectator() || !joueur.isAlive() || !Acces.estControle(JaugesJoueur.get(joueur), alerte)
+                    || gris.distanceTo(joueur) > Controle.detection(alerte)
+                    || maintenant - suivi(joueur).dernierControle() < Controle.attenteEntreControles(alerte)
                     || dejaControle(joueur) || !Vue.voit(gris, joueur)) {
                 continue;
             }

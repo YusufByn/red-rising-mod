@@ -261,6 +261,7 @@ Deux jauges séparées (pas une barre Société ↔ Rising) pour permettre **l'a
 ### Témoins (G5.5)
 - ✅ **Qui compte** : un PNJ de Couleur vivant, à moins de 16 blocs, avec une ligne de vue sur le joueur au moment de l'action. Ne comptent pas : les PNJ du Rising (ils ne parlent pas à la Société), la victime, les villageois sans Couleur, les autres joueurs. S'il y a plusieurs témoins, un Gris l'emporte. Le témoin compte au moment de l'action : le tuer ensuite n'efface rien.
 - ✅ **Actions concernées** : tuer, voler (ouvrir ou casser le coffre), effraction d'un poste. Aider et dénoncer ne le sont pas : le PNJ aidé ou le Gris à qui l'on parle est lui-même témoin.
+- ✅ **Silence d'une Couleur** (effet de jalon, G6.3) : ses PNJ ne sont plus témoins des actions **contre la Société** : voler un coffre de la Société (ouvrir, casser, faire sauter), l'effraction d'un poste, tuer un PNJ de l'élite ou de l'ordre (chasseurs compris). Ils restent témoins de ce qui les touche : tuer un PNJ du peuple, voler un coffre du Rising. Les Rouges ne couvrent pas celui qui s'en prend à eux.
 - ✅ Le joueur est prévenu : « Quelqu'un a tout vu » ou « Un Gris a tout vu » (formulé pour ne pas s'accorder avec le joueur).
 - 🟡 **Effet** (dans `EffetsActions.selonTemoins`) ; le Soutien ne change jamais, le Rising apprend tout par les siens :
 
@@ -286,7 +287,7 @@ Deux jauges séparées (pas une barre Société ↔ Rising) pour permettre **l'a
 ### Patrouilles et contrôles (G5.5)
 - ✅ **Patrouille** : un PNJ Gris qui suit une ronde (des points dans l'ordre, en boucle, avec 3 secondes d'arrêt à chacun), de jour comme de nuit. Créée par `/rr patrouille creer` en attendant les garnisons (G8.1). La ronde (`factions/Ronde`) ne sait pas qui marche : le joueur Gris recevra les mêmes rondes en G8.4 ; le contrôle (`factions/Controle`) servira au joueur Gris qui contrôle un suspect en G8.3.
 - 🟡 **Paliers de Suspicion** (seuils dans `factions/Acces`) : 0 à 39, les Gris t'ignorent ; **40 à 99, contrôle** ; 100, traque (G5.6).
-- ✅ **Contrôle** : un Gris en patrouille qui voit un joueur au palier de contrôle à moins de 12 blocs l'arrête (« Halte ! Contrôle. »), vient à lui, puis le contrôle pendant 5 secondes avant de reprendre sa ronde. Un joueur n'est pas contrôlé plus d'une fois toutes les 5 minutes de jeu. Le contrôle est abandonné, sans effet, si le Gris n'arrive pas en 20 secondes.
+- ✅ **Contrôle** : un Gris en patrouille qui voit un joueur au palier de contrôle à moins de 12 blocs l'arrête (« Halte ! Contrôle. »), vient à lui, puis le contrôle pendant 5 secondes avant de reprendre sa ronde. Un joueur n'est pas contrôlé plus d'une fois toutes les 5 minutes de jeu. Le contrôle est abandonné, sans effet, si le Gris n'arrive pas en 20 secondes, ou s'il disparaît (tué, retiré) en plein contrôle (corrigé en G6.3 : le joueur était puni comme un fuyard à sa reconnexion suivante). Pendant une alerte des patrouilles (G6.3), la détection, l'attente et le seuil changent (voir « Effets des jalons »).
   - **Obéir** (rester jusqu'au bout) : Suspicion −5, **une fois par jour de jeu au plus** (sinon on se blanchit en allant voir les patrouilles). Message « Contrôle terminé : tu peux circuler ».
   - **Fuir** : s'éloigner à plus de 16 blocs du Gris, **dès le « Halte »**, approche comprise : Loyauté −5, Suspicion +10. Une seule limite de distance, plus grande que la distance de détection, pour qu'on ne soit pas en fuite dès le « Halte ».
   - **Se déconnecter** pendant un contrôle (ou passer un portail) compte comme une fuite (correction du 27/10). La fuite d'un joueur déconnecté est comptée à son retour. Mourir pendant un contrôle l'annule, sans effet.
@@ -471,6 +472,32 @@ Le monde démarre **au début du tome 1, avant la mort d'Eo**. La Société domi
 - ✅ **G6.2 n'a aucun effet sur le monde** : il enregistre l'issue et envoie l'événement, auquel G6.3 s'abonnera.
 - Debug : `/rr jalon prochains` (temps restant, délai et ce qui le compose, issue si c'était maintenant), `/rr jalon declencher <jalon> [issue]` (passage complet), `/rr jalon effets <jalon> appliques|en_attente`.
 
+### Effets des jalons (décidés le 28/10 en G6.3)
+- ✅ **Deux sortes d'effets, rejouables** (règle de G6.2) : des **leviers**, états qu'on pose (« les patrouilles sont en alerte ») et que le code concerné lit ; des **versements**, donnés une fois à chaque joueur. Déclarés avec le jalon, par issue : `.effets(Issue.CANON, effets -> effets.levier(...).jauges(...))`. Rien de chiffré pour les vrais jalons (G7.10, G16.1).
+- ✅ **Ce qu'un jalon peut changer aujourd'hui** (les patrouilles générées viennent en G8.1, les villages n'ont pas de jauge) :
+  - **Alerte des patrouilles** (`ALERTE_PATROUILLES`, niveaux 1 et 2) : les Gris existants deviennent plus vigilants. La densité des patrouilles s'ajoutera en G8.1.
+  - **Silence d'une Couleur** (`SILENCE_ROUGE`) : ses PNJ ne témoignent plus des actions contre la Société (liste dans « Témoins »). Traduction de « Soutien Rising en hausse dans les villages rouges ».
+  - **Versement de jauges** aux joueurs d'une Couleur, ou à tous.
+  - Écartées pour l'instant : les zones (rien ne les lit avant G7 ou G8), des traques plus dures (plus tard, Triomphe).
+- 🟡 **Valeurs de l'alerte** (dans `Controle` et `Acces`) :
+
+| Niveau | Détection | Attente entre deux contrôles | Seuil de contrôle |
+|---|---|---|---|
+| 0 (normal) | 12 blocs | 5 min | 40 |
+| 1 | 18 blocs | 2 min 30 | 30 |
+| 2 | 24 blocs | 1 min 15 | 20 |
+
+- ✅ **Durée** : un levier est permanent ou dure un temps de jeu donné (une alerte ne s'use pas quand personne ne joue). Les effets finis sont retirés de l'état du monde.
+- ✅ **Deux jalons sur le même levier** : le niveau le plus fort l'emporte, chacun garde sa durée ; quand le plus fort finit, le suivant reprend. Les versements, eux, s'ajoutent (ce sont des événements).
+- ✅ **Rejeu sans doublon** : identifiants stables (`jalon/issue/numéro`) ; poser n'ajoute que ce qui manque et ne relance pas une durée ; leviers, versements et drapeau « effets appliqués » sont écrits d'un coup.
+- ✅ **Versements** :
+  - seuls les joueurs **arrivés dans le monde avant le jalon** sont concernés (temps de jeu de la première connexion, sur le joueur) ;
+  - **décidé une seule fois par joueur**, à la première livraison où il a une Couleur : concerné, il le reçoit ; pas concerné, le versement est marqué reçu sans rien. Changer de Couleur plus tard (Sculpture) ne donne rien après coup. Un joueur en pleine naissance attend d'avoir sa Couleur ;
+  - livrés au passage, à l'arrivée du joueur (hors ligne au passage : à son retour), puis toutes les 5 secondes ;
+  - ils ne nourrissent ni l'aide ni le tort (G6.1 : les jalons ne s'alimentent pas eux-mêmes).
+- ✅ **Message en jeu** : au passage (pas au rejeu), un titre à l'écran et une ligne dans le chat (`jalon.redrising.<jalon>.<issue>`, `.titre`). Un joueur absent (ou en pleine naissance) le reçoit ensuite dans le chat, « Pendant ton absence : … » : c'est un versement comme les autres.
+- Debug : `/rr etat` et `/rr effet list` montrent les effets en cours ; `/rr effet poser <levier> <niveau> [ticks]`, `/rr effet retirer <id>`, `/rr effet recus get|reset [joueur]`.
+
 ### Personnages canon ✅
 PNJ qu'on peut **croiser et influencer**. Trois règles :
 1. **Essentiels avant leur jalon** (tombent inconscients au lieu de mourir, façon Skyrim), tuables après. Tuer un personnage important déclenche l'issue divergente du jalon suivant.
@@ -537,6 +564,7 @@ PNJ qu'on peut **croiser et influencer**. Trois règles :
 - ✅ Même en solo, Minecraft tourne en client-serveur : synchronisation réseau obligatoire pour toutes les données joueur.
 - ✅ **Format de sauvegarde versionné dès la v1** : enregistrer proprement l'état du monde (issue de chaque jalon, jauges, zones contrôlées, Couleur, Sculpture) pour permettre le passage v1 → v2 sans migrations douloureuses.
   - ✅ Mis en place en G2.4 (schéma v1) : l'état du monde est un attachment global Fabric (`data/fabric/attachments.dat`, clé `redrising:etat_monde`) avec `schemaVersion`, `epoque` (`red_rising`, `golden_son`, `morning_star`), `jalons` (identifiant de jalon → `canon` ou `divergente`) et `zones` (identifiant de zone → `societe` ou `rising`). Couleur et jauges sont attachées au joueur, dans son fichier.
+  - ✅ Schéma v4 (G6.3) : + `effets` (identifiant → levier, niveau, jalon, début, fin) et `versements` (jauges et nouvelles des jalons). Un monde v3 est migré avec des listes vides. Sur le joueur : `arrivee` et `versements_recus`.
   - ✅ Schéma v3 (G6.2) : + `presence` dans l'horloge, `en_route` (jalon → horloge au moment de sa mise en route), `effets_en_attente` (jalons passés dont les effets ne sont pas appliqués). Un monde v2 est migré : présence = temps de jeu (comme à un seul joueur), rien en route, effets déjà appliqués.
   - ✅ Schéma v2 (G6.1) : + `horloge` (`temps`, `aide`, `tort`, voir section 8). Un monde v1 est migré en v2 à la lecture, avec une horloge à zéro (aucun monde n'avait été publié : pas besoin d'estimer le passé).
   - Règle : toute modification du format incrémente `EtatMonde.VERSION_SCHEMA` et ajoute une étape de migration dans `EtatMonde.migrer`. Un monde au schéma plus récent que le mod est refusé.

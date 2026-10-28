@@ -23,6 +23,24 @@ public final class Controle {
     public static final double DETECTION = 12;
     /** Un joueur n'est pas contrôlé plus d'une fois toutes les 5 minutes de jeu. */
     public static final int ATTENTE_ENTRE_CONTROLES = 6000;
+
+    /** 🟡 Détection selon l'alerte des patrouilles (G6.3, levier {@code ALERTE_PATROUILLES}) : 12, 18, 24 blocs. */
+    public static double detection(int alerte) {
+        return switch (alerte) {
+            case 0 -> DETECTION;
+            case 1 -> 18;
+            default -> 24;
+        };
+    }
+
+    /** 🟡 Attente entre deux contrôles d'un même joueur selon l'alerte : 5 min, 2 min 30, 1 min 15. */
+    public static int attenteEntreControles(int alerte) {
+        return switch (alerte) {
+            case 0 -> ATTENTE_ENTRE_CONTROLES;
+            case 1 -> ATTENTE_ENTRE_CONTROLES / 2;
+            default -> ATTENTE_ENTRE_CONTROLES / 4;
+        };
+    }
     /**
      * Contrôle : fuite au-delà de 16 blocs, dès le « Halte » (plus que {@link #DETECTION}, pour qu'on ne soit pas en fuite
      * dès le « Halte ») ; contrôleur arrivé à 2,5 blocs ; 5 secondes de contrôle ; abandon, sans effet, s'il n'arrive pas

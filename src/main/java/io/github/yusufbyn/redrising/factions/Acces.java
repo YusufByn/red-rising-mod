@@ -36,6 +36,16 @@ public final class Acces {
         return jauges.soutien() >= SEUIL_SOUTIEN_RISING;
     }
 
+    /** 🟡 Seuil de contrôle selon l'alerte des patrouilles (G6.3) : 40, 30, 20. */
+    public static int seuilControle(int alerte) {
+        return Math.max(0, SEUIL_CONTROLE - 10 * alerte);
+    }
+
+    /** Palier de contrôle pendant une alerte des patrouilles (G6.3) : le seuil baisse, la traque reste à 100. */
+    public static boolean estControle(Jauges jauges, int alerte) {
+        return jauges.suspicion() >= seuilControle(alerte) && jauges.suspicion() < SEUIL_TRAQUE;
+    }
+
     /** Palier de contrôle : de {@link #SEUIL_CONTROLE} à juste sous {@link #SEUIL_TRAQUE}. */
     public static boolean estControle(Jauges jauges) {
         return jauges.suspicion() >= SEUIL_CONTROLE && jauges.suspicion() < SEUIL_TRAQUE;

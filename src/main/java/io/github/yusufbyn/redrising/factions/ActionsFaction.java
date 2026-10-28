@@ -3,6 +3,7 @@ package io.github.yusufbyn.redrising.factions;
 import com.mojang.serialization.Codec;
 import io.github.yusufbyn.redrising.RedRising;
 import io.github.yusufbyn.redrising.couleur.Couleur;
+import io.github.yusufbyn.redrising.jalons.EffetsMonde;
 import io.github.yusufbyn.redrising.jalons.HorlogeMonde;
 import io.github.yusufbyn.redrising.monde.CelluleRising;
 import io.github.yusufbyn.redrising.monde.Vue;
@@ -105,7 +106,7 @@ public final class ActionsFaction {
                     // Un chasseur tué pendant une traque ne rapporte pas de Soutien (G5.6)
                     boolean chasseur = pnj.hasAttached(TraqueGris.CHASSEUR);
                     agirDevantTemoins(joueur, chasseur ? "tue un chasseur" : "tue un PNJ " + couleur.getSerializedName(),
-                            chasseur ? EffetsActions.tuerChasseur() : EffetsActions.tuer(couleur), pnj);
+                            chasseur ? EffetsActions.tuerChasseur() : EffetsActions.tuer(couleur), pnj, contreLaSociete(couleur));
                 }
             }
         });
@@ -145,7 +146,8 @@ public final class ActionsFaction {
         PlayerBlockBreakEvents.AFTER.register((monde, joueur, pos, etat, bloc) -> {
             Camp camp = bloc == null ? null : bloc.getAttached(CAMP);
             if (camp != null && joueur instanceof ServerPlayer serveur) {
-                agirDevantTemoins(serveur, "casse un coffre " + camp.getSerializedName(), volDuJour(serveur, List.of(bloc), EffetsActions.voler(camp)), null);
+                agirDevantTemoins(serveur, "casse un coffre " + camp.getSerializedName(), volDuJour(serveur, List.of(bloc), EffetsActions.voler(camp)), null,
+                        camp == Camp.SOCIETE);
             }
         });
 
@@ -257,7 +259,7 @@ public final class ActionsFaction {
         Camp camp = campDuCoffre(coffre);
         if (camp != null && joueur instanceof ServerPlayer serveur && nombreObjets(coffre) < objetsAOuverture) {
             agirDevantTemoins(serveur, "vole un coffre " + camp.getSerializedName(),
-                    volDuJour(serveur, List.of((BlockEntity) coffre), EffetsActions.voler(camp)), null);
+                    volDuJour(serveur, List.of((BlockEntity) coffre), EffetsActions.voler(camp)), null, camp == Camp.SOCIETE);
         }
     }
 
@@ -288,9 +290,17 @@ public final class ActionsFaction {
         return joueur.level().getServer().overworld().getGameTime() / TICKS_PAR_JOUR;
     }
 
+    /**
+     * Tuer un PNJ de cette Couleur est-il une action contre la Société (G6.3) ? Oui pour l'élite et l'ordre (chasseurs
+     * compris) ; non pour le peuple : les Rouges ne couvrent pas celui qui s'en prend à eux.
+     */
+    static boolean contreLaSociete(Couleur victime) {
+        return GroupePnj.de(victime) != GroupePnj.PEUPLE;
+    }
+
     /** Le joueur est reconduit hors d'un poste de la Société où il était entré sans y être admis ({@code PosteSociete}). */
     public static void effraction(ServerPlayer joueur) {
-        agirDevantTemoins(joueur, "effraction d'un poste", EffetsActions.effraction(), null);
+        agirDevantTemoins(joueur, "effraction d'un poste", EffetsActions.effraction(), null, true);
     }
 
     /**
@@ -299,12 +309,21 @@ public final class ActionsFaction {
      * les villageois sans Couleur. Un Gris l'emporte sur un témoin ordinaire.
      */
     public static Temoin temoin(ServerPlayer joueur, @Nullable Entity exclu) {
+        return temoin(joueur, exclu, false);
+    }
+
+    /**
+     * Pour une action contre la Société ({@code contreLaSociete}), les PNJ d'une Couleur qui se tait (levier de silence,
+     * G6.3) ne comptent pas non plus. Ils voient toujours ce qui les touche : tuer un PNJ du peuple, voler le Rising.
+     */
+    public static Temoin temoin(ServerPlayer joueur, @Nullable Entity exclu, boolean contreLaSociete) {
         double portee = EffetsActions.PORTEE_TEMOIN;
         Temoin temoin = Temoin.AUCUN;
         for (Villager pnj : joueur.level().getEntities(EntityTypes.VILLAGER, joueur.getBoundingBox().inflate(portee),
                 pnj -> pnj != exclu && pnj.isAlive() && pnj.distanceTo(joueur) <= portee)) {
             Couleur couleur = PnjCouleur.couleur(pnj);
-            if (couleur == null || pnj.getAttached(CAMP) == Camp.RISING || !Vue.voit(pnj, joueur)) {
+            if (couleur == null || pnj.getAttached(CAMP) == Camp.RISING || !Vue.voit(pnj, joueur)
+                    || (contreLaSociete && EffetsMonde.silencieuse(joueur.level().getServer(), couleur))) {
                 continue;
             }
             if (couleur == Couleur.GRIS) {
@@ -335,16 +354,19 @@ public final class ActionsFaction {
             }
         }
         voles.forEach((camp, coffres) -> agirDevantTemoins(responsable, "fait sauter un coffre " + camp.getSerializedName(),
-                volDuJour(responsable, coffres, EffetsActions.voler(camp)), null));
+                volDuJour(responsable, coffres, EffetsActions.voler(camp)), null, camp == Camp.SOCIETE));
     }
 
     private static @Nullable ServerPlayer responsable(ServerExplosion explosion) {
         return explosion.getIndirectSourceEntity() instanceof ServerPlayer joueur ? joueur : null;
     }
 
-    /** Applique une action selon ses témoins, et prévient le joueur s'il a été vu. */
-    private static void agirDevantTemoins(ServerPlayer joueur, String action, Variation variation, @Nullable Entity exclu) {
-        Temoin temoin = temoin(joueur, exclu);
+    /**
+     * Applique une action selon ses témoins, et prévient le joueur s'il a été vu. {@code contreLaSociete} : une Couleur
+     * qui se tait (G6.3) n'en témoigne pas.
+     */
+    private static void agirDevantTemoins(ServerPlayer joueur, String action, Variation variation, @Nullable Entity exclu, boolean contreLaSociete) {
+        Temoin temoin = temoin(joueur, exclu, contreLaSociete);
         switch (temoin) {
             case AUCUN -> {
             }

@@ -29,7 +29,7 @@
   "commande.redrising.jalon.set": "Jalon %s : %s",
   "commande.redrising.jalon.clear": "Jalon %s effacé",
   "commande.redrising.jalon.absent": "Aucune issue enregistrée pour le jalon %s",
-  "commande.redrising.etat": "État du monde (schéma v%s) : naissance %s ; époque %s ; jalons : %s ; zones : %s ; temps de jeu %s ; présence %s ; Soutien Rising cumulé : aide %s, tort %s (net %s)",
+  "commande.redrising.etat": "État du monde (schéma v%s) : naissance %s ; époque %s ; jalons : %s ; zones : %s ; temps de jeu %s ; présence %s ; Soutien Rising cumulé : aide %s, tort %s (net %s) ; effets en cours : %s",
   "commande.redrising.etat.epoque": "Époque changée en %s",
   "commande.redrising.etat.zone.set": "Zone %s contrôlée par : %s",
   "commande.redrising.etat.zone.clear": "Zone %s libérée",
@@ -202,5 +202,17 @@
   "commande.redrising.jalon.inconnu": "Aucun jalon déclaré sous le nom %s",
   "commande.redrising.jalon.deja_passe": "Le jalon %s est déjà passé (/rr jalon clear pour l'effacer)",
   "commande.redrising.jalon.effets.appliques": "Effets du jalon %s : appliqués",
-  "commande.redrising.jalon.effets.en_attente": "Effets du jalon %s : en attente (l'événement repartira au chargement)"
+  "commande.redrising.jalon.effets.en_attente": "Effets du jalon %s : en attente (l'événement repartira au chargement)",
+  "commande.redrising.effet.ligne": "%s : %s niveau %s (jalon %s, %s)",
+  "commande.redrising.effet.permanent": "permanent",
+  "commande.redrising.effet.reste": "encore %s",
+  "commande.redrising.effet.list": "Effets en cours : %s",
+  "commande.redrising.effet.pose": "Effet %s posé : %s niveau %s",
+  "commande.redrising.effet.retire": "Effet %s retiré",
+  "commande.redrising.effet.absent": "Aucun effet en cours sous l'identifiant %s",
+  "commande.redrising.effet.recus.get": "%s : arrivée dans le monde au temps de jeu %s ; versements reçus : %s",
+  "commande.redrising.effet.recus.reset": "Versements reçus par %s oubliés",
+  "levier.redrising.alerte_patrouilles": "alerte des patrouilles",
+  "levier.redrising.silence_rouge": "silence des Rouges",
+  "jalon.redrising.pendant_absence": "Pendant ton absence : %s"
 }

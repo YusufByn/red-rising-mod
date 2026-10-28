@@ -5,10 +5,12 @@ import net.minecraft.world.level.Level;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.Consumer;
 import java.util.function.Function;
 
 /**
@@ -22,6 +24,7 @@ import java.util.function.Function;
  *         .echeance(jours(10), jours(5), jours(15), 0.2) // base, minimum, maximum, pente
  *         .issue(bilan -> bilan.rythme() >= 0 ? Issue.CANON : Issue.DIVERGENTE)
  *         .ouvre(Epoque.MORNING_STAR)                // passage d'époque, quelle que soit l'issue
+ *         .effets(Issue.CANON, effets -> effets.levier(Levier.ALERTE_PATROUILLES, 1, jours(5))) // G6.3
  *         .build();
  * }</pre>
  *
@@ -36,7 +39,7 @@ import java.util.function.Function;
  */
 public record Jalon(String id, Epoque epoque, List<Dependance> dependances, Echeance echeance,
                     @Nullable Function<Bilan, Issue> choix, @Nullable Issue fixe, @Nullable Epoque ouvre,
-                    @Nullable ResourceKey<Level> surPlace) {
+                    @Nullable ResourceKey<Level> surPlace, Map<Issue, EffetsJalon> effets) {
     /**
      * L'un de ces jalons est passé, avec cette issue ({@code null} : n'importe laquelle).
      */
@@ -55,6 +58,11 @@ public record Jalon(String id, Epoque epoque, List<Dependance> dependances, Eche
         return dependances.stream().allMatch(dependance -> dependance.satisfaite(passes));
     }
 
+    /** Les effets de cette issue (G6.3), aucun si rien n'est déclaré. */
+    public EffetsJalon effets(Issue issue) {
+        return effets.getOrDefault(issue, EffetsJalon.AUCUN);
+    }
+
     /** L'issue que ce jalon prendrait avec ce bilan (toujours la même pour un jalon fixe). */
     public Issue issue(Bilan bilan) {
         return fixe != null ? fixe : Objects.requireNonNull(Objects.requireNonNull(choix).apply(bilan), "issue nulle pour " + id);
@@ -69,6 +77,7 @@ public record Jalon(String id, Epoque epoque, List<Dependance> dependances, Eche
         private @Nullable Issue fixe;
         private @Nullable Epoque ouvre;
         private @Nullable ResourceKey<Level> surPlace;
+        private final Map<Issue, EffetsJalon> effets = new EnumMap<>(Issue.class);
 
         private Builder(String id) {
             this.id = id;
@@ -129,6 +138,14 @@ public record Jalon(String id, Epoque epoque, List<Dependance> dependances, Eche
             return this;
         }
 
+        /** Les effets de cette issue sur le monde (G6.3) : leviers et versements. */
+        public Builder effets(Issue issue, Consumer<EffetsJalon.Builder> declaration) {
+            EffetsJalon.Builder builder = new EffetsJalon.Builder();
+            declaration.accept(builder);
+            effets.put(issue, builder.build());
+            return this;
+        }
+
         public Jalon build() {
             if (epoque == null || echeance == null) {
                 throw new IllegalStateException("Jalon " + id + " : époque et échéance obligatoires");
@@ -136,7 +153,7 @@ public record Jalon(String id, Epoque epoque, List<Dependance> dependances, Eche
             if ((choix == null) == (fixe == null)) {
                 throw new IllegalStateException("Jalon " + id + " : soit .issue(...), soit .fixe(...)");
             }
-            return new Jalon(id, epoque, List.copyOf(dependances), echeance, choix, fixe, ouvre, surPlace);
+            return new Jalon(id, epoque, List.copyOf(dependances), echeance, choix, fixe, ouvre, surPlace, Map.copyOf(effets));
         }
     }
 }

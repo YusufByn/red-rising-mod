@@ -67,4 +67,19 @@ class ControleTest {
         // Au maximum, c'est la traque (G5.6)
         assertFalse(Acces.estControle(new Jauges(50, 0, 100)));
     }
+
+    @Test
+    void alerteDesPatrouilles() {
+        // G6.3 : détection, attente entre deux contrôles et seuil selon le niveau d'alerte
+        assertEquals(Controle.DETECTION, Controle.detection(0));
+        assertEquals(18, Controle.detection(1));
+        assertEquals(24, Controle.detection(2));
+        assertEquals(Controle.ATTENTE_ENTRE_CONTROLES, Controle.attenteEntreControles(0));
+        assertEquals(Controle.ATTENTE_ENTRE_CONTROLES / 2, Controle.attenteEntreControles(1));
+        assertFalse(Acces.estControle(new Jauges(50, 0, 35), 0));
+        assertTrue(Acces.estControle(new Jauges(50, 0, 35), 1));
+        assertTrue(Acces.estControle(new Jauges(50, 0, 20), 2));
+        // La traque reste à 100
+        assertFalse(Acces.estControle(new Jauges(50, 0, 100), 2));
+    }
 }
