@@ -291,7 +291,7 @@ Deux jauges séparées (pas une barre Société ↔ Rising) pour permettre **l'a
   - **Obéir** (rester jusqu'au bout) : Suspicion −5, **une fois par jour de jeu au plus** (sinon on se blanchit en allant voir les patrouilles). Message « Contrôle terminé : tu peux circuler ».
   - **Fuir** : s'éloigner à plus de 16 blocs du Gris, **dès le « Halte »**, approche comprise : Loyauté −5, Suspicion +10. Une seule limite de distance, plus grande que la distance de détection, pour qu'on ne soit pas en fuite dès le « Halte ».
   - **Se déconnecter** pendant un contrôle (ou passer un portail) compte comme une fuite (correction du 27/10). La fuite d'un joueur déconnecté est comptée à son retour. Mourir pendant un contrôle l'annule, sans effet.
-  - Attaquer le Gris : c'est « tuer un PNJ de l'ordre », avec un Gris témoin.
+  - Attaquer le Gris : c'est « tuer un PNJ de l'ordre », avec un Gris témoin. Le contrôleur tué par son suspect est lui-même ce témoin, même seul avec lui (−10 / +4 / +20 avec les valeurs de base ; corrigé le 28/10 : il était exclu des témoins comme toute victime, et le tuer coûtait moins que fuir). Le contrôle s'arrête là, sans fuite en plus. Un contrôleur tué par un monstre ou un autre joueur : le contrôle s'arrête sans effet pour le suspect.
 - 🟡 Distances et durées dans `factions/Controle`, effets dans `EffetsActions`.
 - Pour plus tard : une fouille qui trouverait les objets volés (marqués depuis G5.9, voir Commerce) et la contrebande du Rising (section 9).
 

@@ -7,6 +7,7 @@ import io.github.yusufbyn.redrising.jalons.EffetsMonde;
 import io.github.yusufbyn.redrising.jalons.HorlogeMonde;
 import io.github.yusufbyn.redrising.monde.CelluleRising;
 import io.github.yusufbyn.redrising.monde.Vue;
+import io.github.yusufbyn.redrising.pnj.PatrouillePnj;
 import io.github.yusufbyn.redrising.pnj.PnjCouleur;
 import io.github.yusufbyn.redrising.pnj.TraqueGris;
 import net.fabricmc.fabric.api.attachment.v1.AttachmentRegistry;
@@ -105,8 +106,12 @@ public final class ActionsFaction {
                 if (couleur != null) {
                     // Un chasseur tué pendant une traque ne rapporte pas de Soutien (G5.6)
                     boolean chasseur = pnj.hasAttached(TraqueGris.CHASSEUR);
-                    agirDevantTemoins(joueur, chasseur ? "tue un chasseur" : "tue un PNJ " + couleur.getSerializedName(),
-                            chasseur ? EffetsActions.tuerChasseur() : EffetsActions.tuer(couleur), pnj, contreLaSociete(couleur));
+                    // Le Gris qui contrôle ce joueur, tué par lui : il était lui-même témoin (GDD, Contrôle). Le contrôle
+                    // s'arrête là, sans fuite en plus (PatrouillePnj.oublier)
+                    boolean sonControleur = joueur.getUUID().equals(PatrouillePnj.suspectControle(pnj));
+                    agirDevantTemoins(joueur, chasseur ? "tue un chasseur" : sonControleur ? "tue le Gris qui le contrôle" : "tue un PNJ " + couleur.getSerializedName(),
+                            chasseur ? EffetsActions.tuerChasseur() : EffetsActions.tuer(couleur), pnj, contreLaSociete(couleur),
+                            sonControleur ? Temoin.GRIS : Temoin.AUCUN);
                 }
             }
         });
@@ -147,7 +152,7 @@ public final class ActionsFaction {
             Camp camp = bloc == null ? null : bloc.getAttached(CAMP);
             if (camp != null && joueur instanceof ServerPlayer serveur) {
                 agirDevantTemoins(serveur, "casse un coffre " + camp.getSerializedName(), volDuJour(serveur, List.of(bloc), EffetsActions.voler(camp)), null,
-                        camp == Camp.SOCIETE);
+                        camp == Camp.SOCIETE, Temoin.AUCUN);
             }
         });
 
@@ -259,7 +264,7 @@ public final class ActionsFaction {
         Camp camp = campDuCoffre(coffre);
         if (camp != null && joueur instanceof ServerPlayer serveur && nombreObjets(coffre) < objetsAOuverture) {
             agirDevantTemoins(serveur, "vole un coffre " + camp.getSerializedName(),
-                    volDuJour(serveur, List.of((BlockEntity) coffre), EffetsActions.voler(camp)), null, camp == Camp.SOCIETE);
+                    volDuJour(serveur, List.of((BlockEntity) coffre), EffetsActions.voler(camp)), null, camp == Camp.SOCIETE, Temoin.AUCUN);
         }
     }
 
@@ -300,7 +305,7 @@ public final class ActionsFaction {
 
     /** Le joueur est reconduit hors d'un poste de la Société où il était entré sans y être admis ({@code PosteSociete}). */
     public static void effraction(ServerPlayer joueur) {
-        agirDevantTemoins(joueur, "effraction d'un poste", EffetsActions.effraction(), null, true);
+        agirDevantTemoins(joueur, "effraction d'un poste", EffetsActions.effraction(), null, true, Temoin.AUCUN);
     }
 
     /**
@@ -354,7 +359,7 @@ public final class ActionsFaction {
             }
         }
         voles.forEach((camp, coffres) -> agirDevantTemoins(responsable, "fait sauter un coffre " + camp.getSerializedName(),
-                volDuJour(responsable, coffres, EffetsActions.voler(camp)), null, camp == Camp.SOCIETE));
+                volDuJour(responsable, coffres, EffetsActions.voler(camp)), null, camp == Camp.SOCIETE, Temoin.AUCUN));
     }
 
     private static @Nullable ServerPlayer responsable(ServerExplosion explosion) {
@@ -363,10 +368,13 @@ public final class ActionsFaction {
 
     /**
      * Applique une action selon ses témoins, et prévient le joueur s'il a été vu. {@code contreLaSociete} : une Couleur
-     * qui se tait (G6.3) n'en témoigne pas.
+     * qui se tait (G6.3) n'en témoigne pas. {@code auMoins} : un témoin sûr, quoi que voient les autres (la victime
+     * elle-même, quand c'est le Gris qui contrôlait le joueur).
      */
-    private static void agirDevantTemoins(ServerPlayer joueur, String action, Variation variation, @Nullable Entity exclu, boolean contreLaSociete) {
-        Temoin temoin = temoin(joueur, exclu, contreLaSociete);
+    private static void agirDevantTemoins(ServerPlayer joueur, String action, Variation variation, @Nullable Entity exclu,
+                                          boolean contreLaSociete, Temoin auMoins) {
+        Temoin vus = temoin(joueur, exclu, contreLaSociete);
+        Temoin temoin = vus.ordinal() >= auMoins.ordinal() ? vus : auMoins;
         switch (temoin) {
             case AUCUN -> {
             }

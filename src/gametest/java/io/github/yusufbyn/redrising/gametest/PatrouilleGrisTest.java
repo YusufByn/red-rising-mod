@@ -101,8 +101,32 @@ public class PatrouilleGrisTest implements FabricClientGameTest {
                 throw new AssertionError("Suivi des contrôles perdu au rechargement");
             }
             RedRising.LOGGER.info("[G5.5] Après rechargement : ronde reprise (point {} puis suivant), suivi des contrôles gardé", depart + 1);
+
+            // --- Le contrôleur tué par son suspect, seul avec lui : un meurtre devant un Gris, sans fuite en plus ---
+            reprendreLesControles(monde);
+            jauges(monde, 50, 0, 40);
+            pres(monde, gris);
+            attendreDebutControle(monde, context, gris, "contrôleur bientôt tué");
+            Jauges avant = lireJauges(monde);
+            monde.getServer().runOnServer(server -> {
+                ServerPlayer joueur = OutilsTest.joueur(server);
+                Villager controleur = (Villager) Objects.requireNonNull(server.overworld().getEntity(gris));
+                controleur.hurtServer(server.overworld(), joueur.damageSources().playerAttack(joueur), Float.MAX_VALUE);
+            });
+            Jauges attendues = avant.plus(EffetsActions.selonTemoins(EffetsActions.tuer(Couleur.GRIS), Temoin.GRIS), Couleur.OR);
+            monde.getServer().waitFor(server -> JaugesJoueur.get(OutilsTest.joueur(server)).equals(attendues), 20);
+            context.waitTicks(20);
+            verifierJauges(monde, "contrôleur tué par son suspect", attendues);
+            RedRising.LOGGER.info("[G5.5] Contrôleur tué par son suspect : {} → {} (témoin Gris)", avant, attendues);
+            sauvegarde = monde.getWorldSave();
         }
-        RedRising.LOGGER.info("[G5.5] OK : témoins, ronde de nuit, contrôle ignoré à 39, obéi à 40 (une baisse par jour), fuite");
+        // À la reconnexion : pas de fuite en plus
+        try (TestSingleplayerContext monde = sauvegarde.open()) {
+            monde.getServer().waitFor(server -> !server.getPlayerList().getPlayers().isEmpty(), 100);
+            context.waitTicks(40);
+            verifierJauges(monde, "reconnexion après avoir tué son contrôleur", new Jauges(40, 4, 60));
+        }
+        RedRising.LOGGER.info("[G5.5] OK : témoins, ronde de nuit, contrôle ignoré à 39, obéi à 40 (une baisse par jour), fuite, contrôleur tué");
     }
 
     // --- Témoins ---
