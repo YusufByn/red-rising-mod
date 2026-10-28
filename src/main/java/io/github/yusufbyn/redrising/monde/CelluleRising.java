@@ -11,6 +11,8 @@ import io.github.yusufbyn.redrising.factions.Boutiques;
 import io.github.yusufbyn.redrising.factions.Camp;
 import io.github.yusufbyn.redrising.factions.EffetsActions;
 import io.github.yusufbyn.redrising.factions.JaugesJoueur;
+import io.github.yusufbyn.redrising.jalons.Attitude;
+import io.github.yusufbyn.redrising.pnj.AttitudesPnj;
 import io.github.yusufbyn.redrising.pnj.PnjCouleur;
 import io.github.yusufbyn.redrising.pnj.PnjEssentiels;
 import io.github.yusufbyn.redrising.pnj.TraqueGris;
@@ -51,6 +53,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.UnaryOperator;
 
@@ -455,9 +458,12 @@ public final class CelluleRising {
      * La cellule tombe (dénoncée, ou descente sur une cellule repérée) : ses PNJ sont arrêtés (ils disparaissent, la boutique
      * avec eux), le coffre du Rising et la planque sont saisis (vidés, sans camp), les lanternes retirées, l'entrée défoncée.
      * Il reste un trou et une salle vide et sombre, où l'on entre librement. La cellule sort de la liste.
+     *
+     * @return les personnages canon touchés (dans la salle, ou leur foyer y était), pour leur attitude (G6.5)
      */
-    public static void tomber(ServerLevel monde, Cellule cellule, String cause) {
+    public static Set<String> tomber(ServerLevel monde, Cellule cellule, String cause) {
         int drapeaux = Block.UPDATE_ALL;
+        Set<String> touches = PnjEssentiels.personnagesDe(monde, cellule.interieur());
         for (Villager pnj : monde.getEntities(EntityTypes.VILLAGER, AABB.of(cellule.interieur()).inflate(0.5), pnj -> true)) {
             if (PnjEssentiels.essentiel(pnj)) {
                 // Un personnage essentiel n'est pas arrêté (G6.4) : il s'échappe vers son foyer, ou part en fuite
@@ -484,6 +490,7 @@ public final class CelluleRising {
         cellules.removeIf(c -> c.entree().equals(cellule.entree()));
         monde.getServer().globalAttachments().setAttached(CELLULES, cellules);
         RedRising.LOGGER.info("Cellule du Rising en {} tombée ({})", cellule.entree().toShortString(), cause);
+        return touches;
     }
 
     /** Celui qui a mené les Gris à une cellule tombée perd du Soutien : tout de suite s'il est là, sinon à son retour. */
@@ -514,9 +521,12 @@ public final class CelluleRising {
         long maintenant = monde.getGameTime();
         for (Cellule cellule : cellules) {
             if (cellule.descente() >= 0 && maintenant >= cellule.descente()) {
-                tomber(monde, cellule, "descente de la Société");
+                Set<String> touches = tomber(monde, cellule, "descente de la Société");
                 // Celui qui a mené les Gris à la cellule : le Rising le sait, tout de suite ou à son retour
-                cellule.reperePar().ifPresent(id -> punirReperePar(monde.getServer(), id));
+                cellule.reperePar().ifPresent(id -> {
+                    punirReperePar(monde.getServer(), id);
+                    AttitudesPnj.celluleTombee(monde.getServer(), touches, id, Attitude.CELLULE_REPEREE, "a mené les Gris à sa cellule");
+                });
                 continue;
             }
             // Seulement si les PNJ de la salle sont chargés : sinon on ne sait pas si le Fils est là

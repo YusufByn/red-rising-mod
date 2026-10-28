@@ -333,7 +333,7 @@ public class PnjEssentielTest implements FabricClientGameTest {
 
     private static void verifierMort(TestSingleplayerContext monde, String personnage, boolean parUnJoueur) {
         EtatMonde etat = monde.getServer().computeOnServer(EtatMondeServeur::get);
-        Bilan bilan = Bilan.entre(Horloge.ZERO, etat.horloge(), etat.jalons(), etat.zones(), etat.morts(), etat.enFuite().keySet());
+        Bilan bilan = Bilan.depuis(Horloge.ZERO, etat);
         if (!bilan.tue(personnage) || bilan.tueParUnJoueur(personnage) != parUnJoueur) {
             throw new AssertionError("Mort de " + personnage + " : " + etat.morts().get(personnage) + " (tué par un joueur attendu : " + parUnJoueur + ")");
         }

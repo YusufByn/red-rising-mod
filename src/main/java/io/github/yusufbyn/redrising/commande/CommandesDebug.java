@@ -31,6 +31,7 @@ import io.github.yusufbyn.redrising.factions.Jauges;
 import io.github.yusufbyn.redrising.factions.JaugesJoueur;
 import io.github.yusufbyn.redrising.factions.Nuage;
 import io.github.yusufbyn.redrising.factions.RegistreChausseTrappes;
+import io.github.yusufbyn.redrising.jalons.Attitude;
 import io.github.yusufbyn.redrising.jalons.Bilan;
 import io.github.yusufbyn.redrising.jalons.ContributionDuJour;
 import io.github.yusufbyn.redrising.jalons.Echeance;
@@ -183,7 +184,22 @@ public final class CommandesDebug {
                         .then(Commands.literal("tuer")
                                 .then(Commands.argument("pnj", EntityArgument.entity()).executes(CommandesDebug::tuerPersonnage)))
                         .then(Commands.literal("oublier")
-                                .then(Commands.argument("personnage", StringArgumentType.word()).executes(CommandesDebug::oublierPersonnage))))
+                                .then(Commands.argument("personnage", StringArgumentType.word()).executes(CommandesDebug::oublierPersonnage)))
+                        // Attitude envers un joueur (G6.5)
+                        .then(Commands.literal("attitude")
+                                .then(Commands.literal("get")
+                                        .then(argPersonnageDeclare().executes(ctx -> lireAttitude(ctx, ctx.getSource().getPlayerOrException()))
+                                                .then(argJoueur(CommandesDebug::lireAttitude))))
+                                .then(Commands.literal("set")
+                                        .then(argPersonnageDeclare()
+                                                .then(Commands.argument("valeur", IntegerArgumentType.integer())
+                                                        .executes(ctx -> changerAttitude(ctx, ctx.getSource().getPlayerOrException(), false))
+                                                        .then(argJoueur((ctx, joueur) -> changerAttitude(ctx, joueur, false))))))
+                                .then(Commands.literal("add")
+                                        .then(argPersonnageDeclare()
+                                                .then(Commands.argument("valeur", IntegerArgumentType.integer())
+                                                        .executes(ctx -> changerAttitude(ctx, ctx.getSource().getPlayerOrException(), true))
+                                                        .then(argJoueur((ctx, joueur) -> changerAttitude(ctx, joueur, true))))))))
                 .then(Commands.literal("structure")
                         .then(Commands.literal("list").executes(CommandesDebug::listerStructures))
                         .then(Commands.literal("poste")
@@ -796,7 +812,8 @@ public final class CommandesDebug {
             UUID porteur = porteurs.get(personnage.id());
             ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.personnage.ligne", personnage.id(),
                     personnage.jalon() == null ? Component.translatable("commande.redrising.aucun") : Component.literal(personnage.jalon()), statut,
-                    porteur == null ? Component.translatable("commande.redrising.aucun") : Component.literal(porteur.toString())), false);
+                    porteur == null ? Component.translatable("commande.redrising.aucun") : Component.literal(porteur.toString()),
+                    String.format(Locale.ROOT, "%.1f", etat.attitudeMoyenne(personnage.id()))), false);
         }
         if (Personnages.tous().isEmpty()) {
             ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.personnage.aucun"), false);
@@ -816,6 +833,44 @@ public final class CommandesDebug {
         modifierEtat(ctx, etat -> etat.sansMort(personnage));
         ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.personnage.oublie", personnage), true);
         return Command.SINGLE_SUCCESS;
+    }
+
+    /** Argument : un personnage déclaré, avec l'autocomplétion. */
+    private static RequiredArgumentBuilder<CommandSourceStack, String> argPersonnageDeclare() {
+        return Commands.argument("personnage", StringArgumentType.word())
+                .suggests((ctx, builder) -> SharedSuggestionProvider.suggest(Personnages.tous().stream().map(Personnage::id), builder));
+    }
+
+    private static String personnageDeclare(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        String personnage = StringArgumentType.getString(ctx, "personnage");
+        if (Personnages.get(personnage) == null) {
+            throw PERSONNAGE_INCONNU.create(personnage);
+        }
+        return personnage;
+    }
+
+    /** L'attitude d'un personnage envers ce joueur, ses gains du jour, et sa moyenne pour le monde. */
+    private static int lireAttitude(CommandContext<CommandSourceStack> ctx, ServerPlayer joueur) throws CommandSyntaxException {
+        String personnage = personnageDeclare(ctx);
+        MinecraftServer server = ctx.getSource().getServer();
+        EtatMonde etat = EtatMondeServeur.get(server);
+        Attitude attitude = etat.attitude(personnage, joueur.getUUID());
+        long jour = server.overworld().getGameTime() / ActionsFaction.TICKS_PAR_JOUR;
+        int gains = attitude.jour() == jour ? attitude.gainsDuJour() : 0;
+        ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.personnage.attitude", personnage, joueur.getDisplayName(),
+                attitude.valeur(), gains, Attitude.PLAFOND_GAINS_PAR_JOUR, String.format(Locale.ROOT, "%.1f", etat.attitudeMoyenne(personnage))), false);
+        return attitude.valeur();
+    }
+
+    /** Debug : fixe ou ajoute, borné, sans plafond du jour (ni message au joueur). */
+    private static int changerAttitude(CommandContext<CommandSourceStack> ctx, ServerPlayer joueur, boolean ajout) throws CommandSyntaxException {
+        String personnage = personnageDeclare(ctx);
+        int saisie = IntegerArgumentType.getInteger(ctx, "valeur");
+        Attitude avant = EtatMondeServeur.get(ctx.getSource().getServer()).attitude(personnage, joueur.getUUID());
+        Attitude apres = avant.fixer(ajout ? avant.valeur() + saisie : saisie);
+        modifierEtat(ctx, etat -> etat.avecAttitude(personnage, joueur.getUUID(), apres));
+        ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.personnage.attitude.set", personnage, joueur.getDisplayName(), apres.valeur()), true);
+        return apres.valeur();
     }
 
     private static Villager villageois(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {

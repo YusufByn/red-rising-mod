@@ -141,7 +141,7 @@ public class EssentielCelluleTest implements FabricClientGameTest {
 
     private static void verifierFuite(TestSingleplayerContext monde, String personnage, boolean attendu) {
         EtatMonde etat = monde.getServer().computeOnServer(EtatMondeServeur::get);
-        Bilan bilan = Bilan.entre(Horloge.ZERO, etat.horloge(), etat.jalons(), etat.zones(), etat.morts(), etat.enFuite().keySet());
+        Bilan bilan = Bilan.depuis(Horloge.ZERO, etat);
         if (bilan.enFuite(personnage) != attendu || bilan.tue(personnage)) {
             throw new AssertionError(personnage + " : en fuite " + bilan.enFuite(personnage) + " (attendu " + attendu + "), mort " + bilan.tue(personnage));
         }

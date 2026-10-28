@@ -55,7 +55,7 @@ class PersonnagesTest {
         UUID joueur = UUID.fromString("2654e3c3-150d-3857-a426-0b141796a4e0");
         EtatMonde etat = EtatMonde.NOUVEAU.avecMort("darrow", new MortPersonnage(100, Optional.of(joueur)))
                 .avecMort("eo", new MortPersonnage(50, Optional.empty()));
-        Bilan bilan = Bilan.entre(Horloge.ZERO, etat.horloge(), etat.jalons(), etat.zones(), etat.morts(), etat.enFuite().keySet());
+        Bilan bilan = Bilan.depuis(Horloge.ZERO, etat);
         assertTrue(bilan.tue("darrow"));
         assertTrue(bilan.tueParUnJoueur("darrow"));
         assertTrue(bilan.tue("eo"));
@@ -67,7 +67,7 @@ class PersonnagesTest {
     void enFuiteDansLeBilan() {
         // Un Ares en fuite peut peser sur une issue : pas mort, mais lisible
         EtatMonde etat = EtatMonde.NOUVEAU.avecFuite("ares", 1_000);
-        Bilan bilan = Bilan.entre(Horloge.ZERO, etat.horloge(), etat.jalons(), etat.zones(), etat.morts(), etat.enFuite().keySet());
+        Bilan bilan = Bilan.depuis(Horloge.ZERO, etat);
         assertTrue(bilan.enFuite("ares"));
         assertFalse(bilan.tue("ares"));
         // Redonné à un PNJ : plus en fuite

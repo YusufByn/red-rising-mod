@@ -5,6 +5,7 @@ import com.mojang.serialization.codecs.RecordCodecBuilder;
 import io.github.yusufbyn.redrising.RedRising;
 import io.github.yusufbyn.redrising.data.EtatMondeServeur;
 import io.github.yusufbyn.redrising.factions.ActionsFaction;
+import io.github.yusufbyn.redrising.jalons.Attitude;
 import io.github.yusufbyn.redrising.jalons.HorlogeMonde;
 import io.github.yusufbyn.redrising.jalons.MortPersonnage;
 import io.github.yusufbyn.redrising.jalons.Personnage;
@@ -24,9 +25,11 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.Pose;
 import net.minecraft.world.entity.npc.villager.Villager;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.Nullable;
 
@@ -93,6 +96,15 @@ public final class PnjEssentiels {
             builder -> builder.persistent(Codec.unboundedMap(Codec.STRING, UUIDUtil.STRING_CODEC))
     );
 
+    /**
+     * Global : le foyer de chaque personnage incarné (G6.5). Une cellule qui tombe doit savoir qui y avait son foyer, même
+     * si son PNJ est ailleurs ou pas chargé.
+     */
+    private static final AttachmentType<Map<String, GlobalPos>> FOYERS = AttachmentRegistry.create(
+            Identifier.fromNamespaceAndPath(RedRising.MOD_ID, "foyers_personnages"),
+            builder -> builder.persistent(Codec.unboundedMap(Codec.STRING, GlobalPos.CODEC))
+    );
+
     private static final int PERIODE = 10;
     /** Inconscients chargés. */
     private static final Set<Villager> A_TERRE = new HashSet<>();
@@ -155,6 +167,7 @@ public final class PnjEssentiels {
             String personnage = pnj.getAttached(PERSONNAGE);
             if (raison != null && raison.shouldDestroy() && personnage != null && pnj.getUUID().equals(porteurs(monde.getServer()).get(personnage))) {
                 modifierPorteurs(monde.getServer(), porteurs -> porteurs.remove(personnage));
+                modifierFoyers(monde.getServer(), foyers -> foyers.remove(personnage));
             }
         });
         ServerTickEvents.END_SERVER_TICK.register(server -> {
@@ -205,6 +218,7 @@ public final class PnjEssentiels {
         if (source.getEntity() instanceof ServerPlayer joueur) {
             joueur.sendOverlayMessage(Component.translatable("personnage.redrising.a_terre", pnj.getDisplayName()));
             ActionsFaction.mettreKo(joueur, pnj);
+            AttitudesPnj.changer(joueur, pnj, Attitude.KO, "l'a mis à terre");
         }
     }
 
@@ -272,6 +286,23 @@ public final class PnjEssentiels {
         RedRising.LOGGER.info("Personnage {} : en fuite (sa cellule est tombée)", personnage);
     }
 
+    /**
+     * Les personnages touchés par la chute de cette cellule (G6.5) : ceux dont le PNJ est dedans, et ceux qui y avaient
+     * leur foyer. À demander avant la chute : un essentiel qui s'échappe perd son foyer.
+     */
+    public static Set<String> personnagesDe(ServerLevel monde, BoundingBox cellule) {
+        Set<String> touches = new HashSet<>();
+        for (Villager pnj : monde.getEntities(EntityTypes.VILLAGER, AABB.of(cellule).inflate(0.5), pnj -> pnj.hasAttached(PERSONNAGE))) {
+            touches.add(pnj.getAttached(PERSONNAGE));
+        }
+        foyers(monde.getServer()).forEach((personnage, foyer) -> {
+            if (foyer.dimension().equals(monde.dimension()) && cellule.isInside(foyer.pos())) {
+                touches.add(personnage);
+            }
+        });
+        return touches;
+    }
+
     // --- Morts ---
 
     private static void enregistrerMort(MinecraftServer server, String personnage, @Nullable ServerPlayer joueur, String cause) {
@@ -327,10 +358,12 @@ public final class PnjEssentiels {
         }
         liberer(pnj);
         modifierPorteurs(server, porteurs -> porteurs.put(personnage, pnj.getUUID()));
+        GlobalPos foyer = GlobalPos.of(pnj.level().dimension(), pnj.blockPosition());
+        modifierFoyers(server, foyers -> foyers.put(personnage, foyer));
         // Redonné à un PNJ : il n'est plus en fuite
         EtatMondeServeur.modifier(server, etat -> etat.sansFuite(personnage));
         pnj.setAttached(PERSONNAGE, personnage);
-        pnj.setAttached(FOYER, GlobalPos.of(pnj.level().dimension(), pnj.blockPosition()));
+        pnj.setAttached(FOYER, foyer);
         return Incarnation.DONNE;
     }
 
@@ -339,6 +372,7 @@ public final class PnjEssentiels {
         String personnage = pnj.getAttached(PERSONNAGE);
         if (personnage != null && pnj.getUUID().equals(porteurs(pnj.level().getServer()).get(personnage))) {
             modifierPorteurs(pnj.level().getServer(), porteurs -> porteurs.remove(personnage));
+            modifierFoyers(pnj.level().getServer(), foyers -> foyers.remove(personnage));
         }
         oublierPersonnage(pnj);
     }
@@ -353,6 +387,16 @@ public final class PnjEssentiels {
 
     public static Map<String, UUID> porteurs(MinecraftServer server) {
         return server.globalAttachments().getAttachedOrElse(PORTEURS, Map.of());
+    }
+
+    private static Map<String, GlobalPos> foyers(MinecraftServer server) {
+        return server.globalAttachments().getAttachedOrElse(FOYERS, Map.of());
+    }
+
+    private static void modifierFoyers(MinecraftServer server, Consumer<Map<String, GlobalPos>> modification) {
+        Map<String, GlobalPos> copie = new HashMap<>(foyers(server));
+        modification.accept(copie);
+        server.globalAttachments().setAttached(FOYERS, copie);
     }
 
     private static void modifierPorteurs(MinecraftServer server, Consumer<Map<String, UUID>> modification) {

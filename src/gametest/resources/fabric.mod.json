@@ -15,6 +15,7 @@
       "io.github.yusufbyn.redrising.gametest.EffetsJalonTest",
       "io.github.yusufbyn.redrising.gametest.PnjEssentielTest",
       "io.github.yusufbyn.redrising.gametest.EssentielCelluleTest",
+      "io.github.yusufbyn.redrising.gametest.AttitudePnjTest",
       "io.github.yusufbyn.redrising.gametest.CommandesDebugTest",
       "io.github.yusufbyn.redrising.gametest.HudJaugesTest",
       "io.github.yusufbyn.redrising.gametest.ApparenceCouleurTest",

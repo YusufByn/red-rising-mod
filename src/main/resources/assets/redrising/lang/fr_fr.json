@@ -221,7 +221,7 @@
   "commande.redrising.personnage.libere": "Le PNJ %s n'incarne plus personne",
   "commande.redrising.personnage.ko": "PNJ %s à terre",
   "commande.redrising.personnage.reveille": "PNJ %s relevé",
-  "commande.redrising.personnage.ligne": "%s : jalon %s ; %s ; PNJ %s",
+  "commande.redrising.personnage.ligne": "%s : jalon %s ; %s ; PNJ %s ; attitude moyenne %s",
   "commande.redrising.personnage.essentiel": "essentiel",
   "commande.redrising.personnage.tuable": "tuable",
   "commande.redrising.personnage.mort": "mort au temps de jeu %s",
@@ -230,5 +230,9 @@
   "commande.redrising.personnage.oublie": "Mort du personnage %s oubliée : il peut de nouveau être incarné",
   "commande.redrising.personnage.inconnu": "Aucun personnage déclaré sous le nom %s",
   "commande.redrising.personnage.refuse_mort": "Le personnage %s est mort (/rr personnage oublier pour le redonner)",
-  "commande.redrising.personnage.en_fuite": "en fuite depuis le temps de jeu %s"
+  "commande.redrising.personnage.en_fuite": "en fuite depuis le temps de jeu %s",
+  "commande.redrising.personnage.attitude": "Attitude de %s envers %s : %s (gains du jour : %s sur %s) ; moyenne pour le monde : %s",
+  "commande.redrising.personnage.attitude.set": "Attitude de %s envers %s : %s",
+  "personnage.redrising.attitude.mieux": "%s te regarde d'un meilleur œil",
+  "personnage.redrising.attitude.pire": "%s te regarde de travers"
 }

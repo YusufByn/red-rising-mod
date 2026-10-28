@@ -3,10 +3,12 @@ package io.github.yusufbyn.redrising.factions;
 import com.mojang.serialization.Codec;
 import io.github.yusufbyn.redrising.RedRising;
 import io.github.yusufbyn.redrising.couleur.Couleur;
+import io.github.yusufbyn.redrising.jalons.Attitude;
 import io.github.yusufbyn.redrising.jalons.EffetsMonde;
 import io.github.yusufbyn.redrising.jalons.HorlogeMonde;
 import io.github.yusufbyn.redrising.monde.CelluleRising;
 import io.github.yusufbyn.redrising.monde.Vue;
+import io.github.yusufbyn.redrising.pnj.AttitudesPnj;
 import io.github.yusufbyn.redrising.pnj.PatrouillePnj;
 import io.github.yusufbyn.redrising.pnj.PnjCouleur;
 import io.github.yusufbyn.redrising.pnj.PnjEssentiels;
@@ -46,6 +48,7 @@ import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -112,7 +115,7 @@ public final class ActionsFaction {
                     boolean sonControleur = joueur.getUUID().equals(PatrouillePnj.suspectControle(pnj));
                     agirDevantTemoins(joueur, chasseur ? "tue un chasseur" : sonControleur ? "tue le Gris qui le contrôle" : "tue un PNJ " + couleur.getSerializedName(),
                             chasseur ? EffetsActions.tuerChasseur() : EffetsActions.tuer(couleur), pnj, contreLaSociete(couleur),
-                            sonControleur ? Temoin.GRIS : Temoin.AUCUN);
+                            sonControleur ? Temoin.GRIS : Temoin.AUCUN, campDe(pnj, couleur), Attitude.Acte.VIOLENCE);
                 }
             }
         });
@@ -153,7 +156,7 @@ public final class ActionsFaction {
             Camp camp = bloc == null ? null : bloc.getAttached(CAMP);
             if (camp != null && joueur instanceof ServerPlayer serveur) {
                 agirDevantTemoins(serveur, "casse un coffre " + camp.getSerializedName(), volDuJour(serveur, List.of(bloc), EffetsActions.voler(camp)), null,
-                        camp == Camp.SOCIETE, Temoin.AUCUN);
+                        camp == Camp.SOCIETE, Temoin.AUCUN, camp, Attitude.Acte.VOL);
             }
         });
 
@@ -179,6 +182,7 @@ public final class ActionsFaction {
         nourriture.consume(1, joueur);
         joueur.sendOverlayMessage(Component.translatable("faction.redrising.aide", couleur.getDisplayName()));
         agir(joueur, "aide un PNJ " + couleur.getSerializedName(), EffetsActions.aider(couleur));
+        AttitudesPnj.aide(joueur, pnj);
     }
 
     private static void denoncer(ServerPlayer joueur) {
@@ -199,6 +203,7 @@ public final class ActionsFaction {
         rebelle.discard();
         joueur.sendOverlayMessage(Component.translatable("faction.redrising.denonce", rebelle.getDisplayName()));
         agir(joueur, "dénonce un PNJ du Rising", denonciation(joueur, EffetsActions.denoncer()));
+        AttitudesPnj.actionVue(joueur, rebelle, Camp.RISING, Attitude.Acte.DENONCIATION);
     }
 
     /**
@@ -212,10 +217,13 @@ public final class ActionsFaction {
             return;
         }
         carte.consume(1, joueur);
-        CelluleRising.tomber(joueur.level().getServer().overworld(), cellule, "dénoncée par " + joueur.getPlainTextName());
+        Set<String> touches = CelluleRising.tomber(joueur.level().getServer().overworld(), cellule, "dénoncée par " + joueur.getPlainTextName());
         CelluleRising.mettreEnQuarantaine(joueur);
         joueur.sendOverlayMessage(Component.translatable("faction.redrising.denonce.cellule"));
         agir(joueur, "dénonce une cellule du Rising", denonciation(joueur, EffetsActions.denoncerCellule()));
+        // Le Rising sait qui l'a trahi : ceux de la cellule l'apprennent, même sans l'avoir vu (G6.5)
+        AttitudesPnj.actionVue(joueur, gris, Camp.RISING, Attitude.Acte.DENONCIATION);
+        AttitudesPnj.celluleTombee(joueur.level().getServer(), touches, joueur.getUUID(), Attitude.CELLULE_DENONCEE, "a dénoncé sa cellule");
     }
 
     /** La baisse de Suspicion d'une dénonciation : une fois par jour de jeu, jamais pendant une traque. */
@@ -267,7 +275,8 @@ public final class ActionsFaction {
         Camp camp = campDuCoffre(coffre);
         if (camp != null && joueur instanceof ServerPlayer serveur && nombreObjets(coffre) < objetsAOuverture) {
             agirDevantTemoins(serveur, "vole un coffre " + camp.getSerializedName(),
-                    volDuJour(serveur, List.of((BlockEntity) coffre), EffetsActions.voler(camp)), null, camp == Camp.SOCIETE, Temoin.AUCUN);
+                    volDuJour(serveur, List.of((BlockEntity) coffre), EffetsActions.voler(camp)), null, camp == Camp.SOCIETE, Temoin.AUCUN,
+                    camp, Attitude.Acte.VOL);
         }
     }
 
@@ -309,7 +318,19 @@ public final class ActionsFaction {
         }
         boolean sonControleur = joueur.getUUID().equals(PatrouillePnj.suspectControle(pnj));
         agirDevantTemoins(joueur, "met à terre " + pnj.getAttached(PnjEssentiels.PERSONNAGE), EffetsActions.ko(couleur), pnj,
-                contreLaSociete(couleur), sonControleur ? Temoin.GRIS : Temoin.AUCUN);
+                contreLaSociete(couleur), sonControleur ? Temoin.GRIS : Temoin.AUCUN, campDe(pnj, couleur), Attitude.Acte.VIOLENCE);
+    }
+
+    /**
+     * Le camp d'un PNJ, pour l'attitude des personnages qui le voient attaquer (G6.5) : celui qu'il porte (Rising, ou un
+     * Gris d'un poste), sinon la Société pour l'élite et l'ordre ; aucun pour le peuple sans camp.
+     */
+    private static @Nullable Camp campDe(Villager pnj, Couleur couleur) {
+        Camp camp = pnj.getAttached(CAMP);
+        if (camp != null) {
+            return camp;
+        }
+        return contreLaSociete(couleur) ? Camp.SOCIETE : null;
     }
 
     /**
@@ -322,7 +343,7 @@ public final class ActionsFaction {
 
     /** Le joueur est reconduit hors d'un poste de la Société où il était entré sans y être admis ({@code PosteSociete}). */
     public static void effraction(ServerPlayer joueur) {
-        agirDevantTemoins(joueur, "effraction d'un poste", EffetsActions.effraction(), null, true, Temoin.AUCUN);
+        agirDevantTemoins(joueur, "effraction d'un poste", EffetsActions.effraction(), null, true, Temoin.AUCUN, null, Attitude.Acte.VOL);
     }
 
     /**
@@ -376,7 +397,7 @@ public final class ActionsFaction {
             }
         }
         voles.forEach((camp, coffres) -> agirDevantTemoins(responsable, "fait sauter un coffre " + camp.getSerializedName(),
-                volDuJour(responsable, coffres, EffetsActions.voler(camp)), null, camp == Camp.SOCIETE, Temoin.AUCUN));
+                volDuJour(responsable, coffres, EffetsActions.voler(camp)), null, camp == Camp.SOCIETE, Temoin.AUCUN, camp, Attitude.Acte.VOL));
     }
 
     private static @Nullable ServerPlayer responsable(ServerExplosion explosion) {
@@ -386,10 +407,11 @@ public final class ActionsFaction {
     /**
      * Applique une action selon ses témoins, et prévient le joueur s'il a été vu. {@code contreLaSociete} : une Couleur
      * qui se tait (G6.3) n'en témoigne pas. {@code auMoins} : un témoin sûr, quoi que voient les autres (la victime
-     * elle-même, quand c'est le Gris qui contrôlait le joueur).
+     * elle-même, quand c'est le Gris qui contrôlait le joueur). {@code lese} : le camp contre qui le joueur agit, pour
+     * l'attitude des personnages canon qui le voient (G6.5), silence ou pas ; {@code null} : aucun.
      */
     private static void agirDevantTemoins(ServerPlayer joueur, String action, Variation variation, @Nullable Entity exclu,
-                                          boolean contreLaSociete, Temoin auMoins) {
+                                          boolean contreLaSociete, Temoin auMoins, @Nullable Camp lese, Attitude.Acte acte) {
         Temoin vus = temoin(joueur, exclu, contreLaSociete);
         Temoin temoin = vus.ordinal() >= auMoins.ordinal() ? vus : auMoins;
         switch (temoin) {
@@ -399,6 +421,7 @@ public final class ActionsFaction {
             case GRIS -> joueur.sendOverlayMessage(Component.translatable("faction.redrising.temoin.gris"));
         }
         agir(joueur, action + " (témoin : " + temoin.name().toLowerCase() + ")", EffetsActions.selonTemoins(variation, temoin));
+        AttitudesPnj.actionVue(joueur, exclu, lese, acte);
     }
 
     /** Applique la variation d'une action ; son Soutien compte aussi pour l'horloge du monde (G6.1). */

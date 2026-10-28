@@ -221,7 +221,7 @@
   "commande.redrising.personnage.libere": "NPC %s no longer plays a character",
   "commande.redrising.personnage.ko": "NPC %s knocked down",
   "commande.redrising.personnage.reveille": "NPC %s back up",
-  "commande.redrising.personnage.ligne": "%s: milestone %s; %s; NPC %s",
+  "commande.redrising.personnage.ligne": "%s: milestone %s; %s; NPC %s; average attitude %s",
   "commande.redrising.personnage.essentiel": "essential",
   "commande.redrising.personnage.tuable": "killable",
   "commande.redrising.personnage.mort": "dead at play time %s",
@@ -230,5 +230,9 @@
   "commande.redrising.personnage.oublie": "Death of character %s forgotten: it can be played again",
   "commande.redrising.personnage.inconnu": "No character declared as %s",
   "commande.redrising.personnage.refuse_mort": "Character %s is dead (/rr personnage oublier to give it again)",
-  "commande.redrising.personnage.en_fuite": "on the run since play time %s"
+  "commande.redrising.personnage.en_fuite": "on the run since play time %s",
+  "commande.redrising.personnage.attitude": "Attitude of %s towards %s: %s (gains today: %s out of %s); world average: %s",
+  "commande.redrising.personnage.attitude.set": "Attitude of %s towards %s: %s",
+  "personnage.redrising.attitude.mieux": "%s looks at you more kindly",
+  "personnage.redrising.attitude.pire": "%s eyes you warily"
 }

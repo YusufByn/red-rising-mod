@@ -464,7 +464,7 @@ Le monde démarre **au début du tome 1, avant la mort d'Eo**. La Société domi
 - ✅ **Mise en route** : dès que ses dépendances sont passées et que le monde est à son époque. On garde alors l'horloge du moment ; tout se mesure depuis cette mise en route (la « période »).
 - ✅ **Rythme** : net de Soutien de la période par joueur et par jour de jeu (net ÷ présence, au moins un jour-joueur). Il ne dépend pas du nombre de joueurs. Limite : un joueur absent de son clavier dilue le rythme des autres.
 - ✅ **Échéance** : délai = borné(base − pente × rythme, minimum, maximum), recalculé une fois par seconde. Aider le Rising avance le jalon, le combattre le recule ; le minimum l'empêche d'arriver tout de suite, le maximum garantit qu'il arrive.
-- ✅ **Issue** : jugée au moment du jalon, sur le rythme de toute la période (`Bilan` : aide, tort, net, rythme, issues passées, zones ; plus tard attitudes des PNJ canon, G6.5, et personnages tués, G6.4). Pas de bascule de dernière minute : avec le plafond de 30 par jour (G6.1), un dernier jour ne déplace le rythme que de 30 / P sur une période de P jours-joueur. Il ne fait basculer qu'une issue déjà sur le fil ; les seuils de G16.1 en tiendront compte.
+- ✅ **Issue** : jugée au moment du jalon, sur le rythme de toute la période (`Bilan` : aide, tort, net, rythme, issues passées, zones, personnages tués ou en fuite (G6.4), attitude des personnages canon (G6.5)). Pas de bascule de dernière minute : avec le plafond de 30 par jour (G6.1), un dernier jour ne déplace le rythme que de 30 / P sur une période de P jours-joueur. Il ne fait basculer qu'une issue déjà sur le fil ; les seuils de G16.1 en tiendront compte.
 - ✅ **Ordre et branches** : `.apres("x")` attend que x soit passé, quelle que soit son issue (par défaut, les deux issues mènent au même jalon suivant : les branches se rejoignent) ; `.apres("x", Issue.DIVERGENTE)` pour un jalon propre à une branche ; `.apresUnDe("a", "b")` pour rejoindre deux branches. Plusieurs jalons peuvent être en route en même temps. Une époque différente selon l'issue s'ajoutera si G16.1 en a besoin.
 - ✅ **Un seul passage** : issue, fin de la mise en route, époque et effets en attente écrits d'un coup, sauvegarde immédiate du monde, puis l'événement `JalonsEvents.PASSE`. Un jalon qui a une issue ne repasse jamais. Crash avant la sauvegarde : le monde rechargé n'a rien vu, le jalon repassera.
 - ✅ **Effets après un crash** : chaque jalon passé a un drapeau « effets appliqués » (dans l'état du monde, l'ensemble `effets_en_attente`). L'événement part avec le drapeau à faux ; au chargement, un jalon passé dont les effets ne sont pas appliqués renvoie l'événement (raison « rejeu » : ni nouvelle issue ni changement d'époque). G6.3 pose le drapeau (`MoteurJalons.effetsAppliques`). **Règle pour G6.3 : des effets qui supportent d'être rejoués.**
@@ -520,8 +520,32 @@ PNJ qu'on peut **croiser et influencer**. Trois règles :
   - son foyer est dans la cellule : il est retiré du monde sans être tué, et son personnage est **en fuite**. Pas mort pour le `Bilan`, mais lisible avec `bilan.enFuite(...)` (un Ares en fuite peut peser sur une issue). Sauvegardé dans l'état du monde, visible dans `/rr personnage list`, effacé quand on redonne le personnage à un PNJ.
   - ⚠️ **Retour obligatoire** : un personnage en fuite doit réapparaître (par exemple dans une autre cellule après quelques jours), sinon une dénonciation retire un essentiel avant son jalon. À faire avec les cellules des mines (G7.5) et le placement des personnages (G15.2).
 - ✅ **Un personnage, un seul PNJ vivant** : `/rr pnj personnage` le retire à l'ancien porteur (tout de suite s'il est chargé, sinon à son prochain chargement). Un personnage mort ne se redonne pas sans `/rr personnage oublier`.
-- ✅ **Après le jalon** : sa mort est enregistrée dans l'état du monde (temps de jeu, joueur qui l'a tué), pour le `Bilan` des jalons suivants (`bilan.tue(...)`, `bilan.tueParUnJoueur(...)`). Le meurtre vaut celui de sa Couleur ; un poids propre au personnage pourra venir avec l'attitude (G6.5).
+- ✅ **Après le jalon** : sa mort est enregistrée dans l'état du monde (temps de jeu, joueur qui l'a tué), pour le `Bilan` des jalons suivants (`bilan.tue(...)`, `bilan.tueParUnJoueur(...)`). Le meurtre vaut celui de sa Couleur ; son poids propre passe par l'attitude des autres personnages qui le voient (G6.5).
 - Debug : `/rr personnage list|tuer <pnj>|oublier <personnage>`, `/rr pnj personnage <pnj> <personnage>|aucun`, `/rr pnj ko|reveiller <pnj>`.
+
+### Attitude des personnages canon (décidée le 28/10 en G6.5)
+- ✅ **Une valeur de −100 à +100, par personnage et par joueur**, à 0 au départ, dans l'état du monde (schéma v7). Jamais de chiffre affiché en jeu.
+- ✅ **Pour un jalon, une valeur pour le monde** : `bilan.attitude("darrow")`, la moyenne des joueurs qui ont une attitude envers lui (ceux qui l'ont croisé), 0 sinon. Le nombre de joueurs ne compte pas, comme pour le rythme (G6.2). Chaque jalon dit ce qui compte pour lui : `.issue(bilan -> bilan.attitude("darrow") >= 20 ? Issue.CANON : Issue.DIVERGENTE)`. Les seuils des vrais jalons : G16.1. C'est l'attitude du moment du jalon (elle se construit sur toute la partie). Un personnage mort ou en fuite garde la sienne.
+- ⚠️ **Limites de la moyenne en multijoueur** : un ami seul pèse autant que plusieurs joueurs indifférents, et un nouveau venu qui croise le personnage une fois dilue la moyenne. À revoir quand le multijoueur sera testé.
+- ✅ **Camp** : facultatif, donné à la déclaration (`Personnages.declarer("darrow", "triomphe", Camp.RISING)`) et lu par une seule fonction (`Personnages.camp`). Sans camp, ce qu'il voit ne change rien. ⚠️ Le camp devra pouvoir changer avec l'état du monde (Mustang, Cassius, Roque, Darrow Sculpté) : à traiter en G15.1 ou G16.1.
+- 🟡 **Ce qui la fait bouger** (valeurs dans `jalons/Attitude`) :
+
+| Action | Attitude |
+|---|---|
+| L'aider (nourriture, accroupi ; une fois par jour, la règle d'aide) | +5 |
+| Le mettre à terre (essentiel), à chaque fois | −20 |
+| Il voit voler ou dénoncer contre son camp | −5 |
+| Il voit tuer (ou mettre à terre) quelqu'un de son camp | −10 |
+| Il voit s'en prendre au camp adverse (vol, meurtre, dénonciation) | +3 |
+| Dénoncer sa cellule (il y était, ou c'était son foyer), même sans l'avoir vu | −30 |
+| Mener les Gris à sa cellule, qui tombe à la descente | −10 |
+
+- ✅ **Ce qu'il voit** : mêmes règles que les témoins (16 blocs, ligne de vue, ni mur ni fumée, pas à terre ; pas la victime). Le **silence d'une Couleur** (G6.3) ne joue pas : il ne touche que ce que la Société apprend. Un personnage Rouge voit toujours, pour lui-même, pendant `SILENCE_ROUGE`.
+- ✅ **Cellule repérée** : la perte tombe à la descente. Hors ligne, elle est écrite tout de suite dans l'état du monde (un jalon qui passe avant son retour en tient compte), et il l'apprend à son retour avec le message de la cellule tombée, comme pour le Soutien.
+- 🟡 **Pas de boucle** : gains plafonnés à **+10 par jour de jeu**, par personnage et par joueur (rouverts le lendemain) ; pertes non plafonnées ; bornes −100 et +100. L'attitude ne passe pas par les jauges : elle ne nourrit ni l'aide ni le tort. Pas de déclin avec le temps pour l'instant.
+- ✅ **Ce que le joueur voit** : des cœurs ou un nuage de colère au-dessus du personnage (pour lui seul), et une ligne grise dans le chat, « … te regarde d'un meilleur œil » ou « … te regarde de travers ». Dans le chat et pas au-dessus de la barre d'objets, pour ne pas effacer « Tu as été vu ». Rien quand le plafond du jour est atteint.
+- Plus tard, avec leur ticket : donner des objets autres que la nourriture, « couvrir » quelqu'un.
+- Debug : `/rr personnage attitude get <personnage> [joueur]`, `/rr personnage attitude set|add <personnage> <valeur> [joueur]` (bornés, sans plafond du jour) ; `/rr personnage list` montre l'attitude moyenne.
 
 ---
 
@@ -580,6 +604,7 @@ PNJ qu'on peut **croiser et influencer**. Trois règles :
 - ✅ Même en solo, Minecraft tourne en client-serveur : synchronisation réseau obligatoire pour toutes les données joueur.
 - ✅ **Format de sauvegarde versionné dès la v1** : enregistrer proprement l'état du monde (issue de chaque jalon, jauges, zones contrôlées, Couleur, Sculpture) pour permettre le passage v1 → v2 sans migrations douloureuses.
   - ✅ Mis en place en G2.4 (schéma v1) : l'état du monde est un attachment global Fabric (`data/fabric/attachments.dat`, clé `redrising:etat_monde`) avec `schemaVersion`, `epoque` (`red_rising`, `golden_son`, `morning_star`), `jalons` (identifiant de jalon → `canon` ou `divergente`) et `zones` (identifiant de zone → `societe` ou `rising`). Couleur et jauges sont attachées au joueur, dans son fichier.
+  - ✅ Schéma v7 (G6.5) : + `attitudes` (personnage → joueur → valeur, jour et gains du jour). Un monde v6 est migré sans attitude. Global : `foyers_personnages` (pour savoir qui avait son foyer dans une cellule qui tombe).
   - ✅ Schéma v6 (G6.4) : + `en_fuite` (personnage → temps de jeu de sa fuite). Un monde v5 est migré sans fuite.
   - ✅ Schéma v5 (G6.4) : + `morts` (personnage → temps de jeu, joueur qui l'a tué). Un monde v4 est migré sans mort. Sur le PNJ : `personnage`, `foyer`, `inconscient` ; global : `porteurs_personnages`.
   - ✅ Schéma v4 (G6.3) : + `effets` (identifiant → levier, niveau, jalon, début, fin) et `versements` (jauges et nouvelles des jalons). Un monde v3 est migré avec des listes vides. Sur le joueur : `arrivee` et `versements_recus`.
