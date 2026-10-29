@@ -225,10 +225,11 @@ Une fois les 14 Couleurs jouables, on construit ce qui les relie : l'Institut, l
 
 - [ ] **G17.1 Équilibrage des 14 Couleurs** : progression horizontale vérifiée, aucune Couleur ne sert d'early game. *Fini quand* : chaque Couleur a été jouée jusqu'à la fin d'une partie.
 - [ ] **G17.2 Sons**. *Fini quand* : plus aucun événement clé n'est muet.
-- [ ] **G17.3 Textures et modèles finaux** (Blockbench). *Fini quand* : plus aucun placeholder.
+- [ ] **G17.3 Textures et modèles finaux** (Blockbench), dont le rendu humain des PNJ (GDD section 6 : modèle proche de celui du joueur, tenue et allure de chaque Couleur, posé sur l'entité villageois, qui garde son cerveau). *Fini quand* : plus aucun placeholder.
 - [ ] **G17.4 Traduction EN** complète. *Fini quand* : aucune clé de traduction manquante.
 - [ ] **G17.5 Performance** : génération de monde et PNJ. *Fini quand* : pas de lag notable sur une machine moyenne.
 - [ ] **G17.6 Finitions de la naissance** (relevé en G4.5) : sur le vitrail, certaines Couleurs partagent un verre (Or et Jaune en jaune, Cuivre et Orange en orange, faute de teintures) ; sur l'écran des questions, les 4 boutons cachent le bas du joueur. *Fini quand* : chaque Couleur a sa teinte propre sur le vitrail et le joueur reste visible en entier pendant les questions.
+- [ ] **G17.7 Direction artistique des lieux** (après G17.3) : allure finale de la mine, de la colonie et des villes de la Société (blocs, décor, ambiance). Les blocs de la mine se changent dans sa palette (`monde/PaletteMine`) ; la géométrie (plan, largeur des galeries) ne change pas (GDD section 7). *Fini quand* : chaque lieu a son allure finale, validée par Yusuf en jeu, et les tests de la mine passent sans changement.
 
 ### G18 Publication v1
 

@@ -4,7 +4,6 @@ import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import io.github.yusufbyn.redrising.RedRising;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
 import net.minecraft.core.Registry;
 import net.minecraft.core.Vec3i;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -21,24 +20,16 @@ import net.minecraft.world.level.StructureManager;
 import net.minecraft.world.level.WorldGenLevel;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.ChestBlock;
 import net.minecraft.world.RandomizableContainer;
 import net.minecraft.world.level.storage.loot.LootTable;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.core.registries.Registries;
-import net.minecraft.world.level.block.LadderBlock;
-import net.minecraft.world.level.block.LanternBlock;
-import net.minecraft.world.level.block.WallSignBlock;
 import net.minecraft.nbt.NbtOps;
 import net.minecraft.nbt.Tag;
 import net.minecraft.resources.RegistryOps;
 import net.minecraft.world.level.block.entity.SignText;
-import net.minecraft.world.item.DyeColor;
 import net.minecraft.network.chat.Component;
 import java.util.Map;
-import net.minecraft.world.level.block.PoweredRailBlock;
-import net.minecraft.world.level.block.RailBlock;
-import net.minecraft.world.level.block.state.properties.RailShape;
 import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.vehicle.minecart.Minecart;
@@ -417,18 +408,8 @@ public final class MineLykos extends Structure {
 
     // --- Pose ---
 
+    /** Le vide de la mine (les blocs posés, eux, sont tous dans {@link PaletteMine}). */
     private static final BlockState VIDE = Blocks.CAVE_AIR.defaultBlockState();
-    private static final BlockState POTEAU = Blocks.SPRUCE_FENCE.defaultBlockState();
-    private static final BlockState POUTRE = Blocks.SPRUCE_PLANKS.defaultBlockState();
-    private static final BlockState PILIER = Blocks.SPRUCE_LOG.defaultBlockState();
-    private static final BlockState ECHELLE = Blocks.LADDER.defaultBlockState().setValue(LadderBlock.FACING, Direction.SOUTH);
-    private static final BlockState BOUCHON = Blocks.POLISHED_ANDESITE.defaultBlockState();
-    /** 🟡 Bande de couleur de l'axe, une teinte par niveau (du haut vers le bas, comptés pour 4 niveaux). */
-    static final BlockState[] BANDES = {Blocks.DYED_TERRACOTTA.pick(DyeColor.WHITE).defaultBlockState(),
-            Blocks.DYED_TERRACOTTA.pick(DyeColor.YELLOW).defaultBlockState(), Blocks.DYED_TERRACOTTA.pick(DyeColor.ORANGE).defaultBlockState(),
-            Blocks.DYED_TERRACOTTA.pick(DyeColor.RED).defaultBlockState()};
-    /** Butoir au bout d'une voie : un bloc plein, le même bois que les piliers. */
-    public static final BlockState BUTOIR = Blocks.SPRUCE_LOG.defaultBlockState();
     /** Tables de butin des coffres d'outils ({@code data/redrising/loot_table/chests/}). */
     public static final ResourceKey<LootTable> COFFRE_OUTILS = ResourceKey.create(Registries.LOOT_TABLE, id("chests/mine_outils"));
     public static final ResourceKey<LootTable> COFFRE_RARE = ResourceKey.create(Registries.LOOT_TABLE, id("chests/mine_outils_rare"));
@@ -459,7 +440,7 @@ public final class MineLykos extends Structure {
                         pos.set(x, y, z);
                         BlockState etat = monde.getBlockState(pos);
                         if (etat.isAir() || !etat.getFluidState().isEmpty() || etat.canBeReplaced()) {
-                            monde.setBlock(pos, y < 0 ? Blocks.DEEPSLATE.defaultBlockState() : Blocks.STONE.defaultBlockState(), Block.UPDATE_CLIENTS);
+                            monde.setBlock(pos, PaletteMine.roche(y), Block.UPDATE_CLIENTS);
                         }
                     }
                 }
@@ -487,12 +468,12 @@ public final class MineLykos extends Structure {
         // 3. Étais, échelles et leurs piliers, bouchon
         for (BlockPos poteau : plan.poteaux()) {
             if (colonne.isInside(poteau)) {
-                monde.setBlock(poteau, POTEAU, Block.UPDATE_CLIENTS);
+                monde.setBlock(poteau, PaletteMine.POTEAU, Block.UPDATE_CLIENTS);
             }
         }
         for (BlockPos poutre : plan.poutres()) {
             if (colonne.isInside(poutre)) {
-                monde.setBlock(poutre, POUTRE, Block.UPDATE_CLIENTS);
+                monde.setBlock(poutre, PaletteMine.POUTRE, Block.UPDATE_CLIENTS);
             }
         }
         for (PlanDeMine.Puits puits : plan.puits()) {
@@ -500,24 +481,24 @@ public final class MineLykos extends Structure {
                 BlockPos echelle = PlanDeMine.echelle(puits, y);
                 BlockPos pilier = PlanDeMine.pilier(puits, y);
                 if (colonne.isInside(pilier) && plan.interieur(pilier.getX(), y, pilier.getZ())) {
-                    monde.setBlock(pilier, PILIER, Block.UPDATE_CLIENTS);
+                    monde.setBlock(pilier, PaletteMine.PILIER_ECHELLE, Block.UPDATE_CLIENTS);
                 }
                 if (colonne.isInside(echelle)) {
-                    monde.setBlock(echelle, ECHELLE, Block.UPDATE_CLIENTS);
+                    monde.setBlock(echelle, PaletteMine.ECHELLE, Block.UPDATE_CLIENTS);
                 }
             }
         }
         // Lanternes du réseau éclairé (G7.2.3)
         for (PlanDeMine.Lanterne lanterne : plan.lanternes()) {
             if (colonne.isInside(lanterne.pos())) {
-                monde.setBlock(lanterne.pos(), Blocks.LANTERN.defaultBlockState().setValue(LanternBlock.HANGING, lanterne.suspendue()), Block.UPDATE_CLIENTS);
+                monde.setBlock(lanterne.pos(), PaletteMine.lanterne(lanterne.suspendue()), Block.UPDATE_CLIENTS);
             }
         }
         // Voies (G7.2.3) : butoirs, rails (une torche de redstone sous chaque rail de propulsion), voies de garage et wagonnets
         for (PlanDeMine.Voie voie : plan.voies()) {
             for (BlockPos butoir : List.of(voie.butoirPuits(), voie.butoirBout())) {
                 if (colonne.isInside(butoir)) {
-                    monde.setBlock(butoir, BUTOIR, Block.UPDATE_CLIENTS);
+                    monde.setBlock(butoir, PaletteMine.BUTOIR, Block.UPDATE_CLIENTS);
                 }
             }
             voie.rails().forEach(rail -> poserRail(monde, colonne, rail));
@@ -539,14 +520,14 @@ public final class MineLykos extends Structure {
             if (colonne.isInside(mur)) {
                 BlockState roche = monde.getBlockState(mur);
                 if (roche.is(BlockTags.STONE_ORE_REPLACEABLES) || roche.is(BlockTags.DEEPSLATE_ORE_REPLACEABLES)) {
-                    monde.setBlock(mur, BANDES[bande.getValue()], Block.UPDATE_CLIENTS);
+                    monde.setBlock(mur, PaletteMine.BANDES.get(bande.getValue()), Block.UPDATE_CLIENTS);
                 }
             }
         }
         for (PlanDeMine.Panneau panneau : plan.panneaux()) {
             if (colonne.isInside(panneau.pos())) {
                 BlockPos place = panneau.pos();
-                monde.setBlock(place, Blocks.SPRUCE_WALL_SIGN.defaultBlockState().setValue(WallSignBlock.FACING, panneau.face()), Block.UPDATE_CLIENTS);
+                monde.setBlock(place, PaletteMine.panneau(panneau.face()), Block.UPDATE_CLIENTS);
                 // Le texte par les données du chunk, relues quand il est fini : SignBlockEntity.setText préviendrait le monde
                 // d'une mise à jour, ce qu'on ne peut pas faire depuis un fil de génération (blocage constaté)
                 RegistryOps<Tag> ops = monde.registryAccess().createSerializationContext(NbtOps.INSTANCE);
@@ -564,14 +545,14 @@ public final class MineLykos extends Structure {
         // Coffres d'outils (G7.2.2) : sans camp, leur contenu tiré à la première ouverture
         for (PlanDeMine.Coffre coffre : plan.coffres()) {
             if (colonne.isInside(coffre.pos())) {
-                monde.setBlock(coffre.pos(), Blocks.CHEST.defaultBlockState().setValue(ChestBlock.FACING, coffre.face()), Block.UPDATE_CLIENTS);
+                monde.setBlock(coffre.pos(), PaletteMine.coffre(coffre.face()), Block.UPDATE_CLIENTS);
                 RandomizableContainer.setBlockEntityLootTable(monde, hasard, coffre.pos(), coffre.rare() ? COFFRE_RARE : COFFRE_OUTILS);
             }
         }
         BoundingBox bouchon = intersection(plan.bouchon(), colonne);
         if (bouchon != null) {
             BlockPos.betweenClosed(bouchon.minX(), bouchon.minY(), bouchon.minZ(), bouchon.maxX(), bouchon.maxY(), bouchon.maxZ())
-                    .forEach(bloc -> monde.setBlock(bloc, BOUCHON, Block.UPDATE_CLIENTS));
+                    .forEach(bloc -> monde.setBlock(bloc, PaletteMine.BOUCHON, Block.UPDATE_CLIENTS));
         }
     }
 
@@ -625,13 +606,9 @@ public final class MineLykos extends Structure {
         if (!colonne.isInside(rail.pos())) {
             return;
         }
-        RailShape forme = rail.surX() ? RailShape.EAST_WEST : RailShape.NORTH_SOUTH;
-        BlockState etat = rail.propulsion()
-                ? Blocks.POWERED_RAIL.defaultBlockState().setValue(PoweredRailBlock.SHAPE, forme).setValue(PoweredRailBlock.POWERED, true)
-                : Blocks.RAIL.defaultBlockState().setValue(RailBlock.SHAPE, forme);
-        monde.setBlock(rail.pos(), etat, Block.UPDATE_CLIENTS);
+        monde.setBlock(rail.pos(), PaletteMine.rail(rail.surX(), rail.propulsion()), Block.UPDATE_CLIENTS);
         if (rail.propulsion()) {
-            monde.setBlock(rail.pos().below(2), Blocks.REDSTONE_TORCH.defaultBlockState(), Block.UPDATE_CLIENTS);
+            monde.setBlock(rail.pos().below(2), PaletteMine.TORCHE_PROPULSION, Block.UPDATE_CLIENTS);
         }
     }
 

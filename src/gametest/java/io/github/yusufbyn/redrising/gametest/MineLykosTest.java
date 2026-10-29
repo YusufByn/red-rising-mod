@@ -8,6 +8,7 @@ import io.github.yusufbyn.redrising.monde.FilonsDeMine;
 import io.github.yusufbyn.redrising.monde.MineLykos;
 import io.github.yusufbyn.redrising.monde.MonstresDeLaMine;
 import io.github.yusufbyn.redrising.monde.ObjetsMine;
+import io.github.yusufbyn.redrising.monde.PaletteMine;
 import io.github.yusufbyn.redrising.monde.PlanDeMine;
 import io.github.yusufbyn.redrising.monde.PlanMars;
 import io.github.yusufbyn.redrising.monde.Region;
@@ -291,10 +292,9 @@ public class MineLykosTest implements FabricClientGameTest {
         for (long cle : interieur) {
             BlockPos pos = BlockPos.of(cle);
             BlockState etat = niveau.getBlockState(pos);
-            if (etat.is(Blocks.SPRUCE_LOG)) {
+            if (etat.is(PaletteMine.PILIER_ECHELLE.getBlock()) || etat.is(PaletteMine.BUTOIR.getBlock())) {
                 piliers.add(cle);
-            } else if (!(etat.isAir() || etat.is(Blocks.LADDER) || etat.is(Blocks.SPRUCE_FENCE) || etat.is(Blocks.SPRUCE_PLANKS) || etat.is(Blocks.CHEST)
-                    || etat.is(Blocks.LANTERN) || etat.is(Blocks.RAIL) || etat.is(Blocks.POWERED_RAIL) || etat.is(BlockTags.WALL_SIGNS))) {
+            } else if (!PaletteMine.poseDansLeVide(etat)) {
                 if (malPoses++ < 8) {
                     RedRising.LOGGER.warn("[G7.2.1] Pas vide : {} en {}", etat, pos.toShortString());
                 }
@@ -818,13 +818,13 @@ public class MineLykosTest implements FabricClientGameTest {
             int propulsion = 0;
             for (PlanDeMine.Voie voie : plan.voies()) {
                 for (BlockPos butoir : List.of(voie.butoirPuits(), voie.butoirBout())) {
-                    if (!niveau.getBlockState(butoir).is(Blocks.SPRUCE_LOG)) {
+                    if (!niveau.getBlockState(butoir).is(PaletteMine.BUTOIR.getBlock())) {
                         liste.add("pas de butoir en " + butoir.toShortString());
                     }
                 }
                 for (PlanDeMine.Rail rail : voie.rails()) {
                     BlockState etat = niveau.getBlockState(rail.pos());
-                    if (rail.propulsion() ? !(etat.is(Blocks.POWERED_RAIL) && etat.getValue(net.minecraft.world.level.block.PoweredRailBlock.POWERED)) : !etat.is(Blocks.RAIL)) {
+                    if (!etat.equals(PaletteMine.rail(rail.surX(), rail.propulsion()))) {
                         liste.add("rail manquant en " + rail.pos().toShortString() + " (" + etat + ")");
                     }
                     rails++;
@@ -891,7 +891,7 @@ public class MineLykosTest implements FabricClientGameTest {
             PlanDeMine.Puits principal = plan.puitsPrincipal();
             int echelles = 0;
             for (int y = principal.bas(); y <= principal.haut(); y++) {
-                if (niveau.getBlockState(PlanDeMine.echelle(principal, y)).is(Blocks.LADDER)) {
+                if (niveau.getBlockState(PlanDeMine.echelle(principal, y)).is(PaletteMine.ECHELLE.getBlock())) {
                     echelles++;
                 } else if (liste.size() < 5) {
                     liste.add("échelle coupée en y " + y);
@@ -996,7 +996,7 @@ public class MineLykosTest implements FabricClientGameTest {
             // Bande de couleur, par niveau
             int[] bandes = new int[4];
             for (Map.Entry<BlockPos, Integer> bande : plan.bandes().entrySet()) {
-                if (niveau.getBlockState(bande.getKey()).is(BlockTags.TERRACOTTA)) {
+                if (niveau.getBlockState(bande.getKey()).equals(PaletteMine.BANDES.get(bande.getValue()))) {
                     bandes[bande.getValue()]++;
                 }
             }
@@ -1061,7 +1061,7 @@ public class MineLykosTest implements FabricClientGameTest {
             }
             BoundingBox bouchon = plan.bouchon();
             for (BlockPos pos : BlockPos.betweenClosed(bouchon.minX(), bouchon.minY(), bouchon.minZ(), bouchon.maxX(), bouchon.maxY(), bouchon.maxZ())) {
-                if (!niveau.getBlockState(pos).is(Blocks.POLISHED_ANDESITE)) {
+                if (!niveau.getBlockState(pos).is(PaletteMine.BOUCHON.getBlock())) {
                     liste.add("bouchon incomplet en " + pos.toShortString());
                 }
             }
