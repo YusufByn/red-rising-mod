@@ -291,6 +291,36 @@ class PlanDeMineTest {
     }
 
     @Test
+    void reseauEclaire() {
+        for (long graine : GRAINES) {
+            PlanDeMine plan = PlanDeMine.tirer(graine, CENTRE, 62, 66, 66);
+            List<PlanDeMine.Lanterne> lanternes = plan.lanternes();
+            for (PlanDeMine.Lanterne lanterne : lanternes) {
+                BlockPos pos = lanterne.pos();
+                String nom = "graine " + graine + " : lanterne en " + pos;
+                assertTrue(plan.interieur(pos.getX(), pos.getY(), pos.getZ()), nom + " hors du vide");
+                // Tenue : suspendue sous une poutre ou la roche, posée sur la roche
+                BlockPos appui = lanterne.suspendue() ? pos.above() : pos.below();
+                assertTrue(plan.poutres().contains(appui) || !plan.interieur(appui.getX(), appui.getY(), appui.getZ()), nom + " sans appui");
+                for (PlanDeMine.Puits p : plan.puits()) {
+                    assertFalse(p.principal() && p.interieur().isInside(pos), nom + " au-dessus du puits principal");
+                }
+            }
+            // Chaque bloc du sol du réseau à 14 blocs ou moins d'une lanterne (en suivant les axes) : lumière d'au moins 1
+            List<BlockPos> sol = plan.reseauEclaire();
+            assertTrue(sol.size() > 5000, "graine " + graine + " : " + sol.size() + " blocs de sol éclairé");
+            for (BlockPos pos : sol) {
+                int plusProche = Integer.MAX_VALUE;
+                for (PlanDeMine.Lanterne lanterne : lanternes) {
+                    plusProche = Math.min(plusProche, pos.distManhattan(lanterne.pos()));
+                }
+                assertTrue(plusProche <= 14, "graine " + graine + " : " + pos + " à " + plusProche + " blocs de la lanterne la plus proche");
+            }
+            System.out.println("Réseau éclairé, graine " + graine + " : " + lanternes.size() + " lanternes, " + sol.size() + " blocs de sol");
+        }
+    }
+
+    @Test
     void colonieReservee() {
         PlanDeMine plan = PlanDeMine.tirer(42, CENTRE, 62, 66, 66);
         PlanDeMine.Caverne caverne = plan.caverne();

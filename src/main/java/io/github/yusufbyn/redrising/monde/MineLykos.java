@@ -12,7 +12,10 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.Identifier;
 import net.minecraft.util.RandomSource;
 import net.minecraft.tags.BlockTags;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.chunk.status.ChunkStatus;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.StructureManager;
 import net.minecraft.world.level.WorldGenLevel;
@@ -24,6 +27,7 @@ import net.minecraft.world.level.storage.loot.LootTable;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.world.level.block.LadderBlock;
+import net.minecraft.world.level.block.LanternBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.ChunkGenerator;
 import net.minecraft.world.level.chunk.ChunkGeneratorStructureState;
@@ -132,6 +136,37 @@ public final class MineLykos extends Structure {
     /** Appelé depuis {@link RedRising#onInitialize()} : les registres (champs ci-dessus) sont remplis au chargement de la classe. */
     public static void init() {
         RedRising.LOGGER.debug("Mine : {} {} {}", TYPE, MORCEAU, PLACEMENT);
+        ServerLifecycleEvents.SERVER_STOPPED.register(server -> planEnJeu = null);
+    }
+
+    /** La mine, dans le registre des structures du monde. */
+    public static final ResourceKey<Structure> CLE = ResourceKey.create(Registries.STRUCTURE, id("mine"));
+
+    /** Le plan de la mine du monde en cours, relu une fois dans le morceau de son chunk de départ (serveur seulement). */
+    private static volatile @Nullable PlanDeMine planEnJeu;
+
+    /**
+     * Le plan de la mine de ce monde (G7.2.3), pour les règles qui tournent pendant le jeu (monstres, traque) ; {@code null}
+     * sans plan des régions, hors de l'Overworld, ou si la mine n'a pas de départ. Il est relu dans le morceau du chunk de
+     * départ (mêmes hauteurs que la génération), chargé au besoin jusqu'à l'étape des départs de structures.
+     */
+    public static @Nullable PlanDeMine planEnJeu(ServerLevel niveau) {
+        PlanDeMine plan = planEnJeu;
+        BlockPos centre = centre();
+        if (centre == null || plan != null) {
+            return centre == null ? null : plan;
+        }
+        if (!niveau.dimension().equals(Level.OVERWORLD)) {
+            return null;
+        }
+        Structure mine = niveau.registryAccess().lookupOrThrow(Registries.STRUCTURE).getValue(CLE);
+        StructureStart depart = mine == null ? null
+                : niveau.getChunk(centre.getX() >> 4, centre.getZ() >> 4, ChunkStatus.STRUCTURE_STARTS, true).getStartForStructure(mine);
+        if (depart == null || !depart.isValid() || !(depart.getPieces().getFirst() instanceof Morceau morceau)) {
+            return null;
+        }
+        planEnJeu = morceau.plan();
+        return planEnJeu;
     }
 
     @Override
@@ -448,6 +483,12 @@ public final class MineLykos extends Structure {
                 if (colonne.isInside(echelle)) {
                     monde.setBlock(echelle, ECHELLE, Block.UPDATE_CLIENTS);
                 }
+            }
+        }
+        // Lanternes du réseau éclairé (G7.2.3)
+        for (PlanDeMine.Lanterne lanterne : plan.lanternes()) {
+            if (colonne.isInside(lanterne.pos())) {
+                monde.setBlock(lanterne.pos(), Blocks.LANTERN.defaultBlockState().setValue(LanternBlock.HANGING, lanterne.suspendue()), Block.UPDATE_CLIENTS);
             }
         }
         // Coffres d'outils (G7.2.2) : sans camp, leur contenu tiré à la première ouverture

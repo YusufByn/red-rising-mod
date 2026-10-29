@@ -50,6 +50,9 @@ import io.github.yusufbyn.redrising.jalons.MoteurJalons;
 import io.github.yusufbyn.redrising.jalons.Personnage;
 import io.github.yusufbyn.redrising.jalons.Personnages;
 import io.github.yusufbyn.redrising.monde.CelluleRising;
+import io.github.yusufbyn.redrising.monde.MineLykos;
+import io.github.yusufbyn.redrising.monde.MonstresDeLaMine;
+import io.github.yusufbyn.redrising.monde.PlanDeMine;
 import io.github.yusufbyn.redrising.monde.PlanMars;
 import io.github.yusufbyn.redrising.monde.PosteSociete;
 import io.github.yusufbyn.redrising.monde.Region;
@@ -131,6 +134,8 @@ public final class CommandesDebug {
             Component.translatable("commande.redrising.pnj.refuse"));
     private static final SimpleCommandExceptionType PAS_DE_PLAN = new SimpleCommandExceptionType(
             Component.translatable("commande.redrising.region.aucun_plan"));
+    private static final SimpleCommandExceptionType PAS_DE_MINE = new SimpleCommandExceptionType(
+            Component.translatable("commande.redrising.mine.aucune"));
     private static final DynamicCommandExceptionType ZONE_ABSENTE = new DynamicCommandExceptionType(
             zone -> Component.translatable("commande.redrising.etat.zone.absente", zone));
 
@@ -212,6 +217,9 @@ public final class CommandesDebug {
                         .then(Commands.literal("tp")
                                 .then(argEnum("region", Region.values()).executes(ctx -> allerALaRegion(ctx, ctx.getSource().getPlayerOrException()))
                                         .then(argJoueur(CommandesDebug::allerALaRegion)))))
+                .then(Commands.literal("mine")
+                        .then(Commands.literal("monstres").executes(ctx -> monstresDeLaMine(ctx, ctx.getSource().getPlayerOrException()))
+                                .then(argJoueur(CommandesDebug::monstresDeLaMine))))
                 .then(Commands.literal("structure")
                         .then(Commands.literal("list").executes(CommandesDebug::listerStructures))
                         .then(Commands.literal("poste")
@@ -483,6 +491,18 @@ public final class CommandesDebug {
             ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.region.ligne", nom("region", region), pos.toShortString(), distance), false);
         }
         return plan.regions().size();
+    }
+
+    /** Les monstres de la mine autour du joueur, et le plafond (G7.2.3). */
+    private static int monstresDeLaMine(CommandContext<CommandSourceStack> ctx, ServerPlayer joueur) throws CommandSyntaxException {
+        PlanDeMine plan = MineLykos.planEnJeu(joueur.level());
+        if (plan == null) {
+            throw PAS_DE_MINE.create();
+        }
+        int nombre = MonstresDeLaMine.compter(joueur.level(), plan, joueur);
+        ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.mine.monstres", joueur.getDisplayName(), nombre,
+                MonstresDeLaMine.PLAFOND, MonstresDeLaMine.RAYON), false);
+        return nombre;
     }
 
     /** Téléporte le joueur au-dessus du centre de la région (génère les chunks de là-bas). */

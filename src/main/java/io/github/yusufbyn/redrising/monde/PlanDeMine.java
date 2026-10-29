@@ -42,6 +42,8 @@ import java.util.concurrent.ConcurrentHashMap;
  *     piliers, fronts de taille, salles de forage (niveaux 3 et 4), {@value #SALLES_PAR_NIVEAU_4} par niveau.</li>
  *     <li><b>Filons</b> (G7.2.2) : minerais riches et hélium-3, tirés avec le plan ({@link FilonsDeMine}).</li>
  *     <li><b>Coffres d'outils</b> (G7.2.2) : dans une salle sur deux, contre un mur ; les restes des mineurs, sans camp.</li>
+ *     <li><b>Réseau éclairé</b> (G7.2.3) : lanternes le long de l'axe de chaque niveau, aux paliers des puits secondaires, à
+ *     l'entrée de la caverne et sous le cadre des salles de forage ; aucun monstre n'apparaît sur ce réseau.</li>
  * </ul>
  */
 public final class PlanDeMine {
@@ -98,6 +100,8 @@ public final class PlanDeMine {
      */
     public static final int COFFRES_RARES = 2;
     public static final int DISTANCE_COFFRE_RARE = 80;
+    /** 🟡 Lanternes de l'axe : une tous les 12 blocs le long de sa ligne du milieu. */
+    public static final int PAS_LANTERNES = 12;
     /** 🟡 Bouchon : deux couches, sous 3 blocs du terrain d'origine (au point le plus bas de la colonne du puits). */
     public static final int ROCHE_SUR_BOUCHON = 3;
     /**
@@ -154,6 +158,10 @@ public final class PlanDeMine {
 
     /** Un coffre d'outils : au sol d'une salle, contre un mur, tourné vers la salle ; {@code rare} : la table avec la pioche en fer. */
     public record Coffre(BlockPos pos, Direction face, boolean rare) {
+    }
+
+    /** Une lanterne : suspendue (sous une poutre ou le plafond) ou posée au sol. */
+    public record Lanterne(BlockPos pos, boolean suspendue) {
     }
 
     /** Un puits : 3 × 3 de vide de {@code bas} à {@code haut} compris, autour de (x, z). */
@@ -217,6 +225,9 @@ public final class PlanDeMine {
     private final BoundingBox boiteCaverne;
     private final List<FilonsDeMine.Bloc> filons;
     private final List<Coffre> coffres;
+    private final List<BoundingBox> axes;
+    private final List<Integer> niveauxAxes;
+    private final List<Lanterne> lanternes;
     /** Les blocs de filon de chaque chunk, pour la pose. */
     private final Map<Long, List<FilonsDeMine.Bloc>> filonsParChunk = new HashMap<>();
     private final Set<BlockPos> poteaux;
@@ -227,7 +238,8 @@ public final class PlanDeMine {
 
     private PlanDeMine(BlockPos centre, List<Integer> sols, List<BoundingBox> galeries, List<Integer> niveauxGaleries, List<Puits> puits,
                        Caverne caverne, Colonie colonie, List<EmplacementCellule> cellules, List<BlockPos> culsDeSac, List<Salle> salles,
-                       Set<BlockPos> poteaux, Set<BlockPos> poutres, BoundingBox bouchon, int hautDesBoites, int hautBoitePuits, Random hasard) {
+                       Set<BlockPos> poteaux, Set<BlockPos> poutres, BoundingBox bouchon, int hautDesBoites, int hautBoitePuits, List<BoundingBox> axes,
+                       List<Integer> niveauxAxes, Random hasard) {
         this.centre = centre;
         this.sols = List.copyOf(sols);
         this.galeries = List.copyOf(galeries);
@@ -251,6 +263,107 @@ public final class PlanDeMine {
             filonsParChunk.computeIfAbsent(cleChunk(bloc.pos().getX() >> 4, bloc.pos().getZ() >> 4), cle -> new ArrayList<>()).add(bloc);
         }
         this.coffres = coffres(hasard);
+        this.axes = List.copyOf(axes);
+        this.niveauxAxes = List.copyOf(niveauxAxes);
+        this.lanternes = placerLanternes();
+    }
+
+    // --- Réseau éclairé (G7.2.3) ---
+
+    /**
+     * Les lanternes : le long de la ligne du milieu de chaque galerie de l'axe, tous les {@value #PAS_LANTERNES} blocs
+     * (suspendues sous la poutre d'un étai s'il y en a une, sinon sous le plafond de roche ; pas au-dessus d'un puits ni dans
+     * la caverne) ; au palier du bas de chaque puits secondaire (posée au sol, dans un coin) et en haut (sous le plafond) ; deux
+     * à l'entrée de la caverne ; une sous le cadre de chaque salle de forage.
+     */
+    private List<Lanterne> placerLanternes() {
+        Map<BlockPos, Lanterne> liste = new java.util.LinkedHashMap<>();
+        for (int i = 0; i < axes.size(); i++) {
+            BoundingBox axe = axes.get(i);
+            boolean surX = axe.getXSpan() > axe.getZSpan();
+            int debut = surX ? axe.minX() : axe.minZ();
+            int fin = surX ? axe.maxX() : axe.maxZ();
+            int milieu = surX ? (axe.minZ() + axe.maxZ()) / 2 : (axe.minX() + axe.maxX()) / 2;
+            for (int cible = debut + PAS_LANTERNES / 2; cible <= fin; cible += PAS_LANTERNES) {
+                // À la place prévue, sinon décalée de quelques blocs le long de l'axe (au-dessus d'un puits, sous un vide)
+                for (int decalage : new int[]{0, 1, -1, 2, -2, 3, -3, 4, -4, 5, -5}) {
+                    int t = cible + decalage;
+                    int x = surX ? t : milieu;
+                    int z = surX ? milieu : t;
+                    int haut = axe.maxY();
+                    BlockPos pos = poutres.contains(new BlockPos(x, haut, z)) ? new BlockPos(x, haut - 1, z) : new BlockPos(x, haut, z);
+                    if (t < debut || t > fin || caverne.contient(x, axe.minY(), z)) {
+                        continue;
+                    }
+                    if (dansUnPuits(puits, pos) || dansUnPuits(puits, pos.below()) || (pos.getY() == haut && interieur(x, haut + 1, z))) {
+                        continue;
+                    }
+                    liste.putIfAbsent(pos, new Lanterne(pos, true));
+                    break;
+                }
+            }
+        }
+        for (Puits p : puits) {
+            if (p.principal()) {
+                continue;
+            }
+            // En bas : au sol, dans le coin opposé à l'échelle (paroi nord)
+            BlockPos bas = new BlockPos(p.x() + 1, p.bas(), p.z() + 1);
+            liste.putIfAbsent(bas, new Lanterne(bas, false));
+            // En haut : sous le plafond de la galerie, à côté du trou
+            int y = p.haut();
+            while (interieur(p.x() + 1, y + 1, p.z() + 1)) {
+                y++;
+            }
+            BlockPos haut = new BlockPos(p.x() + 1, y, p.z() + 1);
+            liste.putIfAbsent(haut, new Lanterne(haut, true));
+        }
+        // Entrée de la caverne : au bout de l'axe qui y mène, deux lanternes au sol de part et d'autre
+        int sens = Integer.signum((caverne.x() - centre.getX()) + (caverne.z() - centre.getZ()));
+        boolean surX = caverne.x() != centre.getX();
+        for (int t = 0; t <= DISTANCE_CAVERNE; t++) {
+            int x = surX ? centre.getX() + sens * t : centre.getX();
+            int z = surX ? centre.getZ() : centre.getZ() + sens * t;
+            if (caverne.contient(x, caverne.sol(), z)) {
+                for (int cote = -1; cote <= 1; cote += 2) {
+                    BlockPos pos = surX ? new BlockPos(x + 2 * sens, caverne.sol(), z + 3 * cote) : new BlockPos(x + 3 * cote, caverne.sol(), z + 2 * sens);
+                    if (caverne.contient(pos.getX(), pos.getY(), pos.getZ())) {
+                        liste.putIfAbsent(pos, new Lanterne(pos, false));
+                    }
+                }
+                break;
+            }
+        }
+        for (Salle salle : salles) {
+            if (salle.type() == TypeSalle.FORAGE) {
+                BlockPos pos = new BlockPos(salle.x(), salle.boite().minY() + 3, salle.z());
+                liste.putIfAbsent(pos, new Lanterne(pos, true));
+            }
+        }
+        return List.copyOf(liste.values());
+    }
+
+    /**
+     * Le sol du réseau éclairé, où aucun monstre ne doit apparaître : chaque bloc de vide au ras du sol des galeries de l'axe
+     * (hors de la caverne, éclairée en G7.3, du trou des puits et des piliers qui tiennent leur échelle), et le fond de chaque
+     * puits secondaire.
+     */
+    public List<BlockPos> reseauEclaire() {
+        Set<BlockPos> sol = new LinkedHashSet<>();
+        for (BoundingBox axe : axes) {
+            for (BlockPos pos : BlockPos.betweenClosed(axe.minX(), axe.minY(), axe.minZ(), axe.maxX(), axe.minY(), axe.maxZ())) {
+                if (!caverne.contient(pos.getX(), pos.getY(), pos.getZ()) && !dansUnPuits(puits, pos) && !dansUnPuits(puits, pos.below())
+                        && puits.stream().noneMatch(p -> pilier(p, pos.getY()).equals(pos) && pos.getY() >= p.bas() && pos.getY() <= p.haut())) {
+                    sol.add(pos.immutable());
+                }
+            }
+        }
+        for (Puits p : puits) {
+            if (!p.principal()) {
+                BlockPos.betweenClosed(p.x() - 1, p.bas(), p.z() - 1, p.x() + 1, p.bas(), p.z() + 1).forEach(pos -> sol.add(pos.immutable()));
+            }
+        }
+        return List.copyOf(sol);
     }
 
     /**
@@ -463,12 +576,18 @@ public final class PlanDeMine {
         List<Integer> niveauxGaleries = new ArrayList<>();
         Set<BlockPos> poteaux = new HashSet<>();
         Set<BlockPos> poutres = new HashSet<>();
+        List<BoundingBox> axes = new ArrayList<>();
+        List<Integer> niveauxAxes = new ArrayList<>();
         for (int niveau = 0; niveau < sols.size(); niveau++) {
             for (Arete arete : aretesParNiveau.get(niveau)) {
                 BoundingBox boite = galerie(arete, sols.get(niveau), centre);
                 galeries.add(boite);
                 niveauxGaleries.add(niveau);
                 etayer(boite, arete, centre, poteaux, poutres);
+                if (arete.axe()) {
+                    axes.add(boite);
+                    niveauxAxes.add(niveau);
+                }
             }
         }
 
@@ -487,7 +606,7 @@ public final class PlanDeMine {
         poteaux.removeIf(pos -> caverne.contient(pos.getX(), pos.getY(), pos.getZ()) || dansUnPuits(puits, pos));
         poutres.removeIf(pos -> caverne.contient(pos.getX(), pos.getY(), pos.getZ()) || dansUnPuits(puits, pos));
         return new PlanDeMine(centre, sols, galeries, niveauxGaleries, puits, caverne, colonie, cellules, culsDeSac, salles, poteaux, poutres,
-                bouchon, hautDesBoites, hautBoitePuits, hasard);
+                bouchon, hautDesBoites, hautBoitePuits, axes, niveauxAxes, hasard);
     }
 
     private static boolean dansUnPuits(List<Puits> puits, BlockPos pos) {
@@ -983,6 +1102,19 @@ public final class PlanDeMine {
 
     public List<Coffre> coffres() {
         return coffres;
+    }
+
+    /** Les galeries de l'axe principal (5 de large), et leur niveau dans le même ordre. */
+    public List<BoundingBox> axes() {
+        return axes;
+    }
+
+    public List<Integer> niveauxAxes() {
+        return niveauxAxes;
+    }
+
+    public List<Lanterne> lanternes() {
+        return lanternes;
     }
 
     /** Tous les blocs de filon (minerais riches et hélium-3). */

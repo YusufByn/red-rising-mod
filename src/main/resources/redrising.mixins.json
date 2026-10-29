@@ -12,7 +12,8 @@
     "MinecraftServerMixin",
     "NoiseBasedChunkGeneratorMixin",
     "ChunkGeneratorMixin",
-    "ConfiguredFeatureMixin"
+    "ConfiguredFeatureMixin",
+    "NaturalSpawnerMixin"
   ],
   "injectors": {
     "defaultRequire": 1

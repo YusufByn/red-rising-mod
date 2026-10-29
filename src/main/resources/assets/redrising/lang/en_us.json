@@ -245,5 +245,7 @@
   "commande.redrising.region.aucun_plan": "This world has no region plan (flat world, or created before G7)",
   "commande.redrising.region.apparition": "Plan of Mars, drawn from the spawn point %s:",
   "commande.redrising.region.ligne": "%s: %s, %s blocks from the spawn point",
+  "commande.redrising.mine.aucune": "This world has no mine (no region plan, or mine not generated yet)",
+  "commande.redrising.mine.monstres": "Mine monsters around %s: %s (cap %s, within %s blocks)",
   "commande.redrising.region.tp": "%s teleported to the %s region (%s)"
 }

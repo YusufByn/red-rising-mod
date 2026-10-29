@@ -6,6 +6,7 @@ import io.github.yusufbyn.redrising.factions.Boutiques;
 import io.github.yusufbyn.redrising.factions.ObjetsRebelles;
 import io.github.yusufbyn.redrising.monde.FilonsDeMine;
 import io.github.yusufbyn.redrising.monde.MineLykos;
+import io.github.yusufbyn.redrising.monde.MonstresDeLaMine;
 import io.github.yusufbyn.redrising.monde.ObjetsMine;
 import io.github.yusufbyn.redrising.monde.PlanDeMine;
 import io.github.yusufbyn.redrising.monde.PlanMars;
@@ -28,6 +29,7 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.level.LightLayer;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.world.level.ChunkPos;
@@ -103,6 +105,7 @@ public class MineLykosTest implements FabricClientGameTest {
                     emprise(monde, graine);
                     fortSurLeChemin(monde);
                     forageEtHelium3(monde, context);
+                    reseauEtMonstres(monde, context);
                 } else {
                     charger(monde, PlanMars.EMPRISE_MINE);
                 }
@@ -284,7 +287,8 @@ public class MineLykosTest implements FabricClientGameTest {
             BlockState etat = niveau.getBlockState(pos);
             if (etat.is(Blocks.SPRUCE_LOG)) {
                 piliers.add(cle);
-            } else if (!(etat.isAir() || etat.is(Blocks.LADDER) || etat.is(Blocks.SPRUCE_FENCE) || etat.is(Blocks.SPRUCE_PLANKS) || etat.is(Blocks.CHEST))) {
+            } else if (!(etat.isAir() || etat.is(Blocks.LADDER) || etat.is(Blocks.SPRUCE_FENCE) || etat.is(Blocks.SPRUCE_PLANKS) || etat.is(Blocks.CHEST)
+                    || etat.is(Blocks.LANTERN))) {
                 if (malPoses++ < 8) {
                     RedRising.LOGGER.warn("[G7.2.1] Pas vide : {} en {}", etat, pos.toShortString());
                 }
@@ -579,6 +583,95 @@ public class MineLykosTest implements FabricClientGameTest {
         }
         RedRising.LOGGER.info("[G7.2.2] Salle de forage en {} {} (capture mine-forage) ; minerai d'hélium-3 : lumière 3, pioche en pierre oui, en bois non",
                 forage.x(), forage.z());
+    }
+
+    // --- Réseau éclairé et monstres (G7.2.3) ---
+
+    /** 🟡 Durée de l'épreuve des monstres. */
+    private static final int DUREE_MONSTRES = 2400;
+
+    /**
+     * Lumière d'au moins 1 sur tout le sol du réseau éclairé ; puis 2 minutes dans une galerie sombre, les règles d'apparition
+     * réactivées (les mondes de test de Fabric les coupent) : aucune apparition sur le réseau éclairé (positions relevées par
+     * la règle), {@value MonstresDeLaMine#PLAFOND} monstres au plus dans la mine à {@value MonstresDeLaMine#RAYON} blocs du
+     * joueur, ni creeper ni slime dans la mine.
+     */
+    private static void reseauEtMonstres(TestSingleplayerContext monde, ClientGameTestContext context) {
+        String sombres = monde.getServer().computeOnServer(server -> {
+            ServerLevel niveau = server.overworld();
+            List<String> liste = new ArrayList<>();
+            List<BlockPos> sol = plan(server).reseauEclaire();
+            for (BlockPos pos : sol) {
+                if (niveau.getBrightness(LightLayer.BLOCK, pos) < 1 && liste.size() < 10) {
+                    liste.add(pos.toShortString());
+                }
+            }
+            RedRising.LOGGER.info("[G7.2.3] Réseau éclairé : {} lanternes, {} blocs de sol, {} dans le noir", plan(server).lanternes().size(), sol.size(), liste.size());
+            return String.join(" ; ", liste);
+        });
+        if (!sombres.isEmpty()) {
+            throw new AssertionError("Sol du réseau éclairé dans le noir : " + sombres);
+        }
+
+        // Une galerie sombre du niveau 2, loin du puits
+        int[] lieu = monde.getServer().computeOnServer(server -> {
+            PlanDeMine plan = plan(server);
+            for (int i = 0; i < plan.galeries().size(); i++) {
+                BoundingBox g = plan.galeries().get(i);
+                BlockPos c = g.getCenter();
+                if (plan.niveauxGaleries().get(i) == 1 && !plan.axes().contains(g) && Math.hypot(c.getX() - plan.centre().getX(), c.getZ() - plan.centre().getZ()) > 70) {
+                    return new int[]{c.getX(), g.minY(), c.getZ()};
+                }
+            }
+            throw new AssertionError("Pas de galerie sombre au niveau 2");
+        });
+        monde.getServer().runCommand("kill @e[type=!player]");
+        monde.getServer().runCommand("tp @a[limit=1] " + (lieu[0] + 0.5) + " " + lieu[1] + " " + (lieu[2] + 0.5));
+        monde.getServer().runCommand("effect give @a[limit=1] minecraft:regeneration infinite 2 true");
+        monde.getServer().runOnServer(server -> MonstresDeLaMine.remettre());
+        monde.getServer().runCommand("difficulty normal");
+        monde.getServer().runCommand("gamerule spawn_mobs true");
+        monde.getServer().runCommand("gamerule spawn_monsters true");
+        context.waitTicks(DUREE_MONSTRES);
+        String defauts = monde.getServer().computeOnServer(server -> {
+            ServerLevel niveau = server.overworld();
+            PlanDeMine plan = plan(server);
+            ServerPlayer joueur = OutilsTest.joueur(server);
+            List<String> liste = new ArrayList<>();
+            java.util.Set<BlockPos> reseau = new java.util.HashSet<>(plan.reseauEclaire());
+            List<BlockPos> apparitions = MonstresDeLaMine.apparitions();
+            long surLeReseau = apparitions.stream().filter(reseau::contains).count();
+            if (surLeReseau > 0) {
+                liste.add(surLeReseau + " apparition(s) sur le réseau éclairé");
+            }
+            int dansLaMine = MonstresDeLaMine.compter(niveau, plan, joueur);
+            if (dansLaMine > MonstresDeLaMine.PLAFOND) {
+                liste.add(dansLaMine + " monstres dans la mine autour du joueur");
+            }
+            Map<String, Integer> sortes = new java.util.TreeMap<>();
+            for (net.minecraft.world.entity.Mob mob : niveau.getEntitiesOfClass(net.minecraft.world.entity.Mob.class, new AABB(joueur.blockPosition()).inflate(160),
+                    mob -> mob instanceof net.minecraft.world.entity.monster.Enemy)) {
+                BlockPos p = mob.blockPosition();
+                if (plan.interieur(p.getX(), p.getY(), p.getZ())) {
+                    sortes.merge(mob.getType().toShortString(), 1, Integer::sum);
+                    if (mob.getType() == net.minecraft.world.entity.EntityTypes.CREEPER || mob.getType() == net.minecraft.world.entity.EntityTypes.SLIME) {
+                        liste.add(mob.getType().toShortString() + " dans la mine en " + p.toShortString());
+                    }
+                }
+            }
+            RedRising.LOGGER.info("[G7.2.3] Après {} s dans le noir : {} apparitions acceptées dans la mine, aucune sur le réseau éclairé ({}) ; {} monstres dans la mine à {} blocs (plafond {}) : {}",
+                    DUREE_MONSTRES / 20, apparitions.size(), surLeReseau, dansLaMine, MonstresDeLaMine.RAYON, MonstresDeLaMine.PLAFOND, sortes);
+            return String.join(" ; ", liste);
+        });
+        double tick = monde.getServer().computeOnServer(server -> server.getAverageTickTimeNanos() / 1e6);
+        RedRising.LOGGER.info("[G7.2.3] Temps par tick avec les monstres : {} ms", String.format(Locale.ROOT, "%.2f", tick));
+        monde.getServer().runCommand("gamerule spawn_mobs false");
+        monde.getServer().runCommand("gamerule spawn_monsters false");
+        monde.getServer().runCommand("difficulty peaceful");
+        monde.getServer().runCommand("kill @e[type=!player]");
+        if (!defauts.isEmpty()) {
+            throw new AssertionError("Monstres de la mine : " + defauts);
+        }
     }
 
     // --- Colonne du puits ---
