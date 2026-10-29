@@ -494,7 +494,7 @@ public class MineLykosTest implements FabricClientGameTest {
             }
             RedRising.LOGGER.info("[G7.2.2] Graine {} : filons{}", graine, minerais);
 
-            // Coffres d'outils : posés, sans camp, rien d'interdit dedans, au plus 2 pioches en fer dans toute la mine
+            // Coffres d'outils : posés, sans camp, rien d'interdit dedans, 1 ou 2 pioches en fer dans toute la mine
             int coffres = 0;
             int rares = 0;
             Map<Item, Integer> contenu = new java.util.TreeMap<>(java.util.Comparator.comparing(item -> item.toString()));
@@ -521,7 +521,7 @@ public class MineLykosTest implements FabricClientGameTest {
                 }
             }
             int pioches = contenu.getOrDefault(Items.IRON_PICKAXE, 0);
-            if (coffres < COFFRES_MIN || coffres > COFFRES_MAX || pioches > PlanDeMine.COFFRES_RARES) {
+            if (coffres < COFFRES_MIN || coffres > COFFRES_MAX || pioches < 1 || pioches > PlanDeMine.COFFRES_RARES) {
                 liste.add(coffres + " coffres, " + pioches + " pioches en fer");
             }
             RedRising.LOGGER.info("[G7.2.2] Graine {} : {} coffres d'outils ({} rares), contenu {}", graine, coffres, rares, contenu);

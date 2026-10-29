@@ -267,13 +267,25 @@ class PlanDeMineTest {
                 if (coffre.rare()) {
                     rares++;
                     assertEquals(plan.sols().size() - 1, salle.niveau(), nom + " : coffre rare hors du niveau du bas");
-                    BoundingBox caverne = plan.caverne().boite();
-                    double versColonie = Math.hypot(Math.max(0, Math.max(caverne.minX() - salle.x(), salle.x() - caverne.maxX())),
-                            Math.max(0, Math.max(caverne.minZ() - salle.z(), salle.z() - caverne.maxZ())));
-                    assertTrue(versColonie > PlanDeMine.DISTANCE_COFFRE_RARE, nom + " : coffre rare près de la colonie");
                 }
             }
-            assertTrue(rares <= PlanDeMine.COFFRES_RARES, "graine " + graine + " : " + rares + " coffres rares");
+            assertTrue(rares >= 1 && rares <= PlanDeMine.COFFRES_RARES, "graine " + graine + " : " + rares + " coffres rares");
+            // Les rares : à plus de 80 blocs de la colonie s'il y a de telles salles au niveau du bas, sinon la plus éloignée
+            BoundingBox caverne = plan.caverne().boite();
+            java.util.function.ToDoubleFunction<PlanDeMine.Salle> versColonie = salle -> Math.hypot(
+                    Math.max(0, Math.max(caverne.minX() - salle.x(), salle.x() - caverne.maxX())),
+                    Math.max(0, Math.max(caverne.minZ() - salle.z(), salle.z() - caverne.maxZ())));
+            List<PlanDeMine.Salle> duBas = plan.salles().stream().filter(salle -> salle.niveau() == plan.sols().size() - 1).toList();
+            boolean lointaines = duBas.stream().anyMatch(salle -> versColonie.applyAsDouble(salle) > PlanDeMine.DISTANCE_COFFRE_RARE);
+            double plusLoin = duBas.stream().mapToDouble(versColonie).max().orElseThrow();
+            for (PlanDeMine.Coffre coffre : coffres) {
+                if (coffre.rare()) {
+                    PlanDeMine.Salle salle = plan.salles().stream().filter(s -> s.contient(coffre.pos().getX(), coffre.pos().getY(), coffre.pos().getZ())).findFirst().orElseThrow();
+                    double distance = versColonie.applyAsDouble(salle);
+                    assertTrue(lointaines ? distance > PlanDeMine.DISTANCE_COFFRE_RARE : distance == plusLoin,
+                            "graine " + graine + " : coffre rare à " + Math.round(distance) + " blocs de la colonie");
+                }
+            }
             System.out.println("Coffres, graine " + graine + " : " + coffres.size() + " dont " + rares + " rares");
         }
     }

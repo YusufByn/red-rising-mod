@@ -254,24 +254,39 @@ public final class PlanDeMine {
     }
 
     /**
-     * Les coffres d'outils : une salle sur deux, un coffre au sol contre un mur, loin des ouvertures et hors des étais. D'abord
-     * les coffres rares ({@value #COFFRES_RARES} au plus), dans les salles du niveau du bas à plus de
-     * {@value #DISTANCE_COFFRE_RARE} blocs de la colonie ; puis les autres salles, dans un ordre tiré.
+     * Les coffres d'outils : une salle sur deux, un coffre au sol contre un mur, loin des ouvertures et hors des étais.
+     * D'abord les coffres rares : 1 à {@value #COFFRES_RARES}, dans les salles du niveau du bas à plus de
+     * {@value #DISTANCE_COFFRE_RARE} blocs de la colonie ; s'il n'y en a aucune, un seul, dans la salle du niveau du bas la
+     * plus éloignée. Puis les autres salles, dans un ordre tiré.
      */
     private List<Coffre> coffres(Random hasard) {
         BoundingBox zoneCaverne = caverne.boite();
         List<Salle> ordre = new ArrayList<>(salles);
         Collections.shuffle(ordre, hasard);
-        List<Salle> lointaines = new ArrayList<>(ordre.stream().filter(salle -> salle.niveau() == sols.size() - 1
-                && distance(zoneCaverne, salle.x(), salle.z()) > DISTANCE_COFFRE_RARE).limit(COFFRES_RARES).toList());
-        ordre.removeAll(lointaines);
-        ordre.addAll(0, lointaines);
+        List<Salle> duBas = new ArrayList<>(ordre.stream().filter(salle -> salle.niveau() == sols.size() - 1).toList());
+        duBas.sort((a, b) -> Double.compare(distance(zoneCaverne, b.x(), b.z()), distance(zoneCaverne, a.x(), a.z())));
+        long lointaines = duBas.stream().filter(salle -> distance(zoneCaverne, salle.x(), salle.z()) > DISTANCE_COFFRE_RARE).count();
+        long voulus = Math.clamp(lointaines, 1, COFFRES_RARES);
         List<Coffre> liste = new ArrayList<>();
+        Set<Salle> servies = new HashSet<>();
+        for (Salle salle : duBas) {
+            if (liste.size() == voulus) {
+                break;
+            }
+            Coffre coffre = coffreContreUnMur(salle, true, hasard);
+            if (coffre != null) {
+                liste.add(coffre);
+                servies.add(salle);
+            }
+        }
         for (Salle salle : ordre) {
             if (liste.size() == salles.size() / 2) {
                 break;
             }
-            Coffre coffre = coffreContreUnMur(salle, lointaines.contains(salle), hasard);
+            if (servies.contains(salle)) {
+                continue;
+            }
+            Coffre coffre = coffreContreUnMur(salle, false, hasard);
             if (coffre != null) {
                 liste.add(coffre);
             }
