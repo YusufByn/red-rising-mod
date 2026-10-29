@@ -28,6 +28,12 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.world.level.block.LadderBlock;
 import net.minecraft.world.level.block.LanternBlock;
+import net.minecraft.world.level.block.PoweredRailBlock;
+import net.minecraft.world.level.block.RailBlock;
+import net.minecraft.world.level.block.state.properties.RailShape;
+import net.minecraft.world.entity.EntitySpawnReason;
+import net.minecraft.world.entity.EntityTypes;
+import net.minecraft.world.entity.vehicle.minecart.Minecart;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.ChunkGenerator;
 import net.minecraft.world.level.chunk.ChunkGeneratorStructureState;
@@ -63,7 +69,8 @@ import java.util.concurrent.atomic.LongAccumulator;
  *     dans {@code data/redrising/worldgen/structure/mine.json}) : ni grotte de bruit ni aquifère dans le volume.</li>
  *     <li><b>Pose</b> : à la dernière étape de la génération ({@code top_layer_modification}), après les minerais, les
  *     géodes et les sources. Chaque morceau pose les blocs du plan qui touchent son chunk : coque de roche (seulement à
- *     la place du vide et des fluides), vide (galeries, puits, caverne, salles), étais, échelles, coffres, bouchon ; et avant tout, les
+ *     la place du vide et des fluides), vide (galeries, puits, caverne, salles, niches de garage), étais, échelles, lanternes,
+ *     voies et wagonnets, coffres, bouchon ; et avant tout, les
  *     filons de son chunk.</li>
  *     <li><b>Autour</b> : pas de carvers dans l'emprise, ni d'autre structure (sauf un fort), ni de décoration souterraine
  *     autre que les minerais dans le volume de la mine (mixins sur {@code NoiseBasedChunkGenerator.applyCarvers},
@@ -407,6 +414,8 @@ public final class MineLykos extends Structure {
     private static final BlockState PILIER = Blocks.SPRUCE_LOG.defaultBlockState();
     private static final BlockState ECHELLE = Blocks.LADDER.defaultBlockState().setValue(LadderBlock.FACING, Direction.SOUTH);
     private static final BlockState BOUCHON = Blocks.POLISHED_ANDESITE.defaultBlockState();
+    /** Butoir au bout d'une voie : un bloc plein, le même bois que les piliers. */
+    public static final BlockState BUTOIR = Blocks.SPRUCE_LOG.defaultBlockState();
     /** Tables de butin des coffres d'outils ({@code data/redrising/loot_table/chests/}). */
     public static final ResourceKey<LootTable> COFFRE_OUTILS = ResourceKey.create(Registries.LOOT_TABLE, id("chests/mine_outils"));
     public static final ResourceKey<LootTable> COFFRE_RARE = ResourceKey.create(Registries.LOOT_TABLE, id("chests/mine_outils_rare"));
@@ -491,6 +500,26 @@ public final class MineLykos extends Structure {
                 monde.setBlock(lanterne.pos(), Blocks.LANTERN.defaultBlockState().setValue(LanternBlock.HANGING, lanterne.suspendue()), Block.UPDATE_CLIENTS);
             }
         }
+        // Voies (G7.2.3) : butoirs, rails (une torche de redstone sous chaque rail de propulsion), voies de garage et wagonnets
+        for (PlanDeMine.Voie voie : plan.voies()) {
+            for (BlockPos butoir : List.of(voie.butoirPuits(), voie.butoirBout())) {
+                if (colonne.isInside(butoir)) {
+                    monde.setBlock(butoir, BUTOIR, Block.UPDATE_CLIENTS);
+                }
+            }
+            voie.rails().forEach(rail -> poserRail(monde, colonne, rail));
+        }
+        for (PlanDeMine.Garage garage : plan.garages()) {
+            garage.rails().forEach(rail -> poserRail(monde, colonne, rail));
+            BlockPos place = garage.wagonnet();
+            if (colonne.isInside(place)) {
+                Minecart wagonnet = EntityTypes.MINECART.create(monde.getLevel(), EntitySpawnReason.STRUCTURE);
+                if (wagonnet != null) {
+                    wagonnet.setPos(place.getX() + 0.5, place.getY() + 0.0625, place.getZ() + 0.5);
+                    monde.addFreshEntity(wagonnet);
+                }
+            }
+        }
         // Coffres d'outils (G7.2.2) : sans camp, leur contenu tiré à la première ouverture
         for (PlanDeMine.Coffre coffre : plan.coffres()) {
             if (colonne.isInside(coffre.pos())) {
@@ -536,6 +565,21 @@ public final class MineLykos extends Structure {
             case HELIUM3 -> ObjetsMine.MINERAI_HELIUM3;
         };
         return bloc.defaultBlockState();
+    }
+
+    /** Un rail dans le sens de sa voie ; un rail de propulsion allumé, avec sa torche de redstone deux blocs dessous. */
+    private static void poserRail(WorldGenLevel monde, BoundingBox colonne, PlanDeMine.Rail rail) {
+        if (!colonne.isInside(rail.pos())) {
+            return;
+        }
+        RailShape forme = rail.surX() ? RailShape.EAST_WEST : RailShape.NORTH_SOUTH;
+        BlockState etat = rail.propulsion()
+                ? Blocks.POWERED_RAIL.defaultBlockState().setValue(PoweredRailBlock.SHAPE, forme).setValue(PoweredRailBlock.POWERED, true)
+                : Blocks.RAIL.defaultBlockState().setValue(RailBlock.SHAPE, forme);
+        monde.setBlock(rail.pos(), etat, Block.UPDATE_CLIENTS);
+        if (rail.propulsion()) {
+            monde.setBlock(rail.pos().below(2), Blocks.REDSTONE_TORCH.defaultBlockState(), Block.UPDATE_CLIENTS);
+        }
     }
 
     private static boolean estUnPuits(PlanDeMine plan, BoundingBox boite) {

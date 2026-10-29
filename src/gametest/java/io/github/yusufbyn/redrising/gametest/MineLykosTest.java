@@ -29,6 +29,7 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.entity.vehicle.minecart.Minecart;
 import net.minecraft.world.level.LightLayer;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.tags.BlockTags;
@@ -106,6 +107,7 @@ public class MineLykosTest implements FabricClientGameTest {
                     fortSurLeChemin(monde);
                     forageEtHelium3(monde, context);
                     reseauEtMonstres(monde, context);
+                    voiesEtWagonnets(monde, context);
                 } else {
                     charger(monde, PlanMars.EMPRISE_MINE);
                 }
@@ -270,6 +272,7 @@ public class MineLykosTest implements FabricClientGameTest {
             boites.add(salle.boite());
             boites.addAll(salle.ouvertures());
         }
+        plan.garages().forEach(garage -> boites.add(garage.niche()));
         for (BoundingBox boite : boites) {
             for (BlockPos pos : BlockPos.betweenClosed(boite.minX(), boite.minY(), boite.minZ(), boite.maxX(), boite.maxY(), boite.maxZ())) {
                 if (plan.interieur(pos.getX(), pos.getY(), pos.getZ())) {
@@ -288,7 +291,7 @@ public class MineLykosTest implements FabricClientGameTest {
             if (etat.is(Blocks.SPRUCE_LOG)) {
                 piliers.add(cle);
             } else if (!(etat.isAir() || etat.is(Blocks.LADDER) || etat.is(Blocks.SPRUCE_FENCE) || etat.is(Blocks.SPRUCE_PLANKS) || etat.is(Blocks.CHEST)
-                    || etat.is(Blocks.LANTERN))) {
+                    || etat.is(Blocks.LANTERN) || etat.is(Blocks.RAIL) || etat.is(Blocks.POWERED_RAIL))) {
                 if (malPoses++ < 8) {
                     RedRising.LOGGER.warn("[G7.2.1] Pas vide : {} en {}", etat, pos.toShortString());
                 }
@@ -386,6 +389,7 @@ public class MineLykosTest implements FabricClientGameTest {
                 boites.add(salle.boite());
                 boites.addAll(salle.ouvertures());
             }
+            plan.garages().forEach(garage -> boites.add(garage.niche()));
         }
         for (BoundingBox boite : boites) {
             for (BlockPos pos : BlockPos.betweenClosed(boite.minX(), boite.minY(), boite.minZ(), boite.maxX(), boite.maxY(), boite.maxZ())) {
@@ -625,7 +629,7 @@ public class MineLykosTest implements FabricClientGameTest {
             }
             throw new AssertionError("Pas de galerie sombre au niveau 2");
         });
-        monde.getServer().runCommand("kill @e[type=!player]");
+        monde.getServer().runCommand("kill @e[type=!player,type=!minecart]");
         monde.getServer().runCommand("tp @a[limit=1] " + (lieu[0] + 0.5) + " " + lieu[1] + " " + (lieu[2] + 0.5));
         monde.getServer().runCommand("effect give @a[limit=1] minecraft:regeneration infinite 2 true");
         monde.getServer().runOnServer(server -> MonstresDeLaMine.remettre());
@@ -668,10 +672,165 @@ public class MineLykosTest implements FabricClientGameTest {
         monde.getServer().runCommand("gamerule spawn_mobs false");
         monde.getServer().runCommand("gamerule spawn_monsters false");
         monde.getServer().runCommand("difficulty peaceful");
-        monde.getServer().runCommand("kill @e[type=!player]");
+        monde.getServer().runCommand("kill @e[type=!player,type=!minecart]");
         if (!defauts.isEmpty()) {
             throw new AssertionError("Monstres de la mine : " + defauts);
         }
+    }
+
+    // --- Voies et wagonnets (G7.2.3) ---
+
+    /** 🟡 Vitesse d'arrivée au butoir, au moins (un wagonnet sur rails va à 0,4 bloc par tick au plus). */
+    private static final double VITESSE_AU_BUTOIR_MIN = 0.25;
+
+    /**
+     * Les wagonnets posés à la génération ({@value PlanDeMine#WAGONNETS}), les butoirs et les rails ; un wagonnet lancé à
+     * pleine vitesse vers le puits s'arrête au butoir ; un PNJ de Couleur qui longe l'axe devant une voie de garage n'est
+     * embarqué par aucun wagonnet. Le temps par tick, wagonnets chargés.
+     */
+    private static void voiesEtWagonnets(TestSingleplayerContext monde, ClientGameTestContext context) {
+        // Toute l'emprise chargée, et ses entités (elles arrivent après les chunks)
+        charger(monde, PlanMars.EMPRISE_MINE);
+        monde.getServer().waitFor(server -> {
+            BlockPos centre = plan(server).centre();
+            int r = PlanMars.EMPRISE_MINE;
+            for (int dx = -r; dx <= r; dx++) {
+                for (int dz = -r; dz <= r; dz++) {
+                    if (!server.overworld().areEntitiesLoaded(ChunkPos.pack((centre.getX() >> 4) + dx, (centre.getZ() >> 4) + dz))) {
+                        return false;
+                    }
+                }
+            }
+            return true;
+        }, 2000);
+        String defauts = monde.getServer().computeOnServer(server -> {
+            ServerLevel niveau = server.overworld();
+            PlanDeMine plan = plan(server);
+            List<String> liste = new ArrayList<>();
+            BlockPos centre = plan.centre();
+            int r = PlanMars.EMPRISE_MINE * 16 + 16;
+            List<Minecart> wagonnets = niveau.getEntitiesOfClass(Minecart.class, new AABB(centre).inflate(r, 400, r));
+            if (wagonnets.size() != PlanDeMine.WAGONNETS || plan.garages().size() != PlanDeMine.WAGONNETS) {
+                liste.add(wagonnets.size() + " wagonnets dans le monde, " + plan.garages().size() + " voies de garage");
+            }
+            int rails = 0;
+            int propulsion = 0;
+            for (PlanDeMine.Voie voie : plan.voies()) {
+                for (BlockPos butoir : List.of(voie.butoirPuits(), voie.butoirBout())) {
+                    if (!niveau.getBlockState(butoir).is(Blocks.SPRUCE_LOG)) {
+                        liste.add("pas de butoir en " + butoir.toShortString());
+                    }
+                }
+                for (PlanDeMine.Rail rail : voie.rails()) {
+                    BlockState etat = niveau.getBlockState(rail.pos());
+                    if (rail.propulsion() ? !(etat.is(Blocks.POWERED_RAIL) && etat.getValue(net.minecraft.world.level.block.PoweredRailBlock.POWERED)) : !etat.is(Blocks.RAIL)) {
+                        liste.add("rail manquant en " + rail.pos().toShortString() + " (" + etat + ")");
+                    }
+                    rails++;
+                    propulsion += rail.propulsion() ? 1 : 0;
+                }
+            }
+            RedRising.LOGGER.info("[G7.2.3] Voies : {} voies, {} rails dont {} de propulsion, {} wagonnets sur {} voies de garage", plan.voies().size(), rails, propulsion,
+                    wagonnets.size(), plan.garages().size());
+            return String.join(" ; ", liste.subList(0, Math.min(10, liste.size())));
+        });
+        if (!defauts.isEmpty()) {
+            throw new AssertionError("Voies : " + defauts);
+        }
+
+        // Un wagonnet lancé à pleine vitesse vers le puits, sur une voie du niveau 1
+        PlanDeMine.Voie voie = monde.getServer().computeOnServer(server -> plan(server).voies().stream().filter(v -> v.niveau() == 0)
+                .max(java.util.Comparator.comparingInt(v -> v.rails().size())).orElseThrow());
+        // Lancé juste avant le rail de propulsion le plus proche du puits : il arrive au butoir à pleine vitesse
+        BlockPos lancement = voie.rails().get(Math.min(10, voie.rails().size() - 3)).pos();
+        java.util.UUID lance = monde.getServer().computeOnServer(server -> {
+            ServerLevel niveau = server.overworld();
+            Minecart wagonnet = net.minecraft.world.entity.EntityTypes.MINECART.create(niveau, net.minecraft.world.entity.EntitySpawnReason.COMMAND);
+            wagonnet.setPos(lancement.getX() + 0.5, lancement.getY() + 0.0625, lancement.getZ() + 0.5);
+            Direction versLePuits = voie.sens().getOpposite();
+            wagonnet.setDeltaMovement(versLePuits.getStepX() * 0.4, 0, versLePuits.getStepZ() * 0.4);
+            niveau.addFreshEntity(wagonnet);
+            return wagonnet.getUUID();
+        });
+        monde.getServer().runCommand("tp @a[limit=1] " + (lancement.getX() + 0.5) + " " + lancement.getY() + " " + (lancement.getZ() + 0.5));
+        // La vitesse la plus haute à 2 blocs ou moins du butoir
+        double[] vitesseAuButoir = {0};
+        int[] ticksLancement = {0};
+        monde.getServer().waitFor(server -> {
+            Minecart wagonnet = (Minecart) server.overworld().getEntity(lance);
+            if (wagonnet != null && wagonnet.blockPosition().distManhattan(voie.butoirPuits()) <= 2) {
+                vitesseAuButoir[0] = Math.max(vitesseAuButoir[0], wagonnet.getDeltaMovement().horizontalDistance());
+            }
+            return ++ticksLancement[0] >= 160;
+        }, 200);
+        String arret = monde.getServer().computeOnServer(server -> {
+            Minecart wagonnet = (Minecart) server.overworld().getEntity(lance);
+            if (wagonnet == null) {
+                return "wagonnet lancé disparu";
+            }
+            BlockPos butoir = voie.butoirPuits();
+            // Au-delà du butoir côté voie : (position - butoir) · sens ≥ 0,5
+            double avance = (wagonnet.getX() - (butoir.getX() + 0.5)) * voie.sens().getStepX() + (wagonnet.getZ() - (butoir.getZ() + 0.5)) * voie.sens().getStepZ();
+            RedRising.LOGGER.info("[G7.2.3] Wagonnet lancé à 0,4 bloc par tick vers le puits : {} bloc par tick en arrivant au butoir, arrêté à {} bloc(s) de lui, en y {} (voie en y {})",
+                    String.format(Locale.ROOT, "%.2f", vitesseAuButoir[0]), String.format(Locale.ROOT, "%.2f", avance), String.format(Locale.ROOT, "%.2f", wagonnet.getY()),
+                    butoir.getY());
+            wagonnet.discard();
+            if (vitesseAuButoir[0] < VITESSE_AU_BUTOIR_MIN) {
+                return "le wagonnet n'est pas arrivé au butoir à pleine vitesse (" + vitesseAuButoir[0] + ")";
+            }
+            return avance >= 0.5 && wagonnet.getY() >= butoir.getY() - 0.1 ? "" : "le wagonnet a passé le butoir (" + avance + ", y " + wagonnet.getY() + ")";
+        });
+        if (!arret.isEmpty()) {
+            throw new AssertionError(arret);
+        }
+
+        // Un PNJ de Couleur longe l'axe devant une voie de garage
+        PlanDeMine.Garage garage = monde.getServer().computeOnServer(server -> plan(server).garages().stream()
+                .filter(g -> voie.rails().stream().anyMatch(rail -> rail.pos().distManhattan(g.wagonnet()) <= 5)).findFirst()
+                .orElse(plan(server).garages().getFirst()));
+        PlanDeMine.Voie voieDuGarage = monde.getServer().computeOnServer(server -> plan(server).voies().stream()
+                .filter(v -> v.rails().stream().anyMatch(rail -> rail.pos().distManhattan(garage.wagonnet()) <= 5)).findFirst().orElseThrow());
+        Direction sens = voieDuGarage.sens();
+        BlockPos surLaVoie = voieDuGarage.rails().stream().min(java.util.Comparator.comparingInt(rail -> rail.pos().distManhattan(garage.wagonnet()))).orElseThrow().pos();
+        // Le côté du garage : le passage à 2 blocs de la ligne du milieu, de ce côté
+        int dx = Integer.signum(garage.wagonnet().getX() - surLaVoie.getX());
+        int dz = Integer.signum(garage.wagonnet().getZ() - surLaVoie.getZ());
+        BlockPos depart = surLaVoie.offset(dx * 2, 0, dz * 2).relative(sens.getOpposite(), 8);
+        BlockPos arrivee = surLaVoie.offset(dx * 2, 0, dz * 2).relative(sens, 8);
+        monde.getServer().runCommand("tp @a[limit=1] " + (arrivee.getX() + 0.5) + " " + arrivee.getY() + " " + (arrivee.getZ() + 0.5));
+        java.util.UUID pnj = monde.getServer().computeOnServer(server -> Objects.requireNonNull(
+                io.github.yusufbyn.redrising.pnj.PnjCouleur.creer(server.overworld(), net.minecraft.world.phys.Vec3.atBottomCenterOf(depart), 0,
+                        io.github.yusufbyn.redrising.couleur.Couleur.ROUGE)).getUUID());
+        boolean[] embarque = {false};
+        int[] ticks = {0};
+        monde.getServer().waitFor(server -> {
+            net.minecraft.world.entity.npc.villager.Villager villageois = (net.minecraft.world.entity.npc.villager.Villager) server.overworld().getEntity(pnj);
+            if (villageois == null) {
+                return true;
+            }
+            embarque[0] |= villageois.isPassenger();
+            if (ticks[0]++ % 10 == 0) {
+                villageois.getBrain().setMemory(net.minecraft.world.entity.ai.memory.MemoryModuleType.WALK_TARGET,
+                        new net.minecraft.world.entity.ai.memory.WalkTarget(arrivee, 0.6f, 0));
+            }
+            return embarque[0] || villageois.blockPosition().distManhattan(arrivee) <= 2 || ticks[0] > 600;
+        }, 800);
+        String pnjDefaut = monde.getServer().computeOnServer(server -> {
+            net.minecraft.world.entity.npc.villager.Villager villageois = (net.minecraft.world.entity.npc.villager.Villager) server.overworld().getEntity(pnj);
+            String bilan = villageois == null ? "PNJ disparu" : embarque[0] ? "PNJ embarqué dans un wagonnet"
+                    : villageois.blockPosition().distManhattan(arrivee) > 2 ? "PNJ arrêté en " + villageois.blockPosition().toShortString() : "";
+            RedRising.LOGGER.info("[G7.2.3] PNJ Rouge le long de l'axe, devant la voie de garage en {} : {} ticks, embarqué : {}", garage.wagonnet().toShortString(),
+                    ticks[0], embarque[0]);
+            if (villageois != null) {
+                villageois.discard();
+            }
+            return bilan;
+        });
+        if (!pnjDefaut.isEmpty()) {
+            throw new AssertionError(pnjDefaut);
+        }
+        double tick = monde.getServer().computeOnServer(server -> server.getAverageTickTimeNanos() / 1e6);
+        RedRising.LOGGER.info("[G7.2.3] Temps par tick, wagonnets chargés : {} ms", String.format(Locale.ROOT, "%.2f", tick));
     }
 
     // --- Colonne du puits ---

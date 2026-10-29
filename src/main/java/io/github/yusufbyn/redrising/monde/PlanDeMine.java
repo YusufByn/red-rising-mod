@@ -44,6 +44,9 @@ import java.util.concurrent.ConcurrentHashMap;
  *     <li><b>Coffres d'outils</b> (G7.2.2) : dans une salle sur deux, contre un mur ; les restes des mineurs, sans camp.</li>
  *     <li><b>Réseau éclairé</b> (G7.2.3) : lanternes le long de l'axe de chaque niveau, aux paliers des puits secondaires, à
  *     l'entrée de la caverne et sous le cadre des salles de forage ; aucun monstre n'apparaît sur ce réseau.</li>
+ *     <li><b>Voies</b> (G7.2.3) : des rails au milieu de chaque branche de l'axe, un butoir à chaque bout (avant le quai du
+ *     puits principal), un rail de propulsion tous les {@value #PAS_PROPULSION} blocs ; deux voies de garage par branche, dans
+ *     une niche à côté du passage, avec un wagonnet chacune.</li>
  * </ul>
  */
 public final class PlanDeMine {
@@ -102,6 +105,13 @@ public final class PlanDeMine {
     public static final int DISTANCE_COFFRE_RARE = 80;
     /** 🟡 Lanternes de l'axe : une tous les 12 blocs le long de sa ligne du milieu. */
     public static final int PAS_LANTERNES = 12;
+    /** 🟡 Voies : un rail de propulsion tous les 16 blocs ; le quai du puits principal (3 blocs) avant le butoir. */
+    public static final int PAS_PROPULSION = 16;
+    static final int QUAI = 3;
+    /** Voie de garage : une niche de 4 de long et 2 de haut, à 3 et 4 blocs de la ligne du milieu (hors du passage). */
+    static final int LONGUEUR_GARAGE = 4;
+    /** 🟡 Wagonnets posés à la génération, un par voie de garage : deux par voie, et le compte est complété sur les plus longues. */
+    public static final int WAGONNETS = 32;
     /** 🟡 Bouchon : deux couches, sous 3 blocs du terrain d'origine (au point le plus bas de la colonne du puits). */
     public static final int ROCHE_SUR_BOUCHON = 3;
     /**
@@ -162,6 +172,18 @@ public final class PlanDeMine {
 
     /** Une lanterne : suspendue (sous une poutre ou le plafond) ou posée au sol. */
     public record Lanterne(BlockPos pos, boolean suspendue) {
+    }
+
+    /** Un rail : sa position, son sens (le long de x ou de z), de propulsion ou non. */
+    public record Rail(BlockPos pos, boolean surX, boolean propulsion) {
+    }
+
+    /** Une voie de l'axe : ses rails, ses deux butoirs (le premier côté puits), sa direction (vers l'extérieur) et son niveau. */
+    public record Voie(int niveau, Direction sens, List<Rail> rails, BlockPos butoirPuits, BlockPos butoirBout) {
+    }
+
+    /** Une voie de garage : sa niche, ses rails, et la place de son wagonnet. */
+    public record Garage(BoundingBox niche, List<Rail> rails, BlockPos wagonnet) {
     }
 
     /** Un puits : 3 × 3 de vide de {@code bas} à {@code haut} compris, autour de (x, z). */
@@ -228,6 +250,9 @@ public final class PlanDeMine {
     private final List<BoundingBox> axes;
     private final List<Integer> niveauxAxes;
     private final List<Lanterne> lanternes;
+    private final List<Voie> voies = new ArrayList<>();
+    /** Les voies de garage ; vides tant qu'elles ne sont pas tirées (elles sont tirées en dernier, et creusent le vide). */
+    private List<Garage> garages = List.of();
     /** Les blocs de filon de chaque chunk, pour la pose. */
     private final Map<Long, List<FilonsDeMine.Bloc>> filonsParChunk = new HashMap<>();
     private final Set<BlockPos> poteaux;
@@ -266,6 +291,121 @@ public final class PlanDeMine {
         this.axes = List.copyOf(axes);
         this.niveauxAxes = List.copyOf(niveauxAxes);
         this.lanternes = placerLanternes();
+        this.garages = poserVoies();
+    }
+
+    // --- Voies (G7.2.3) ---
+
+    /**
+     * Les voies de l'axe : sur chaque niveau, dans chaque direction, de {@value #QUAI} blocs après le trou du puits principal
+     * (le quai) jusqu'au premier obstacle de la ligne du milieu (fin de l'axe, trou d'un puits secondaire, pilier d'une échelle,
+     * caverne). Un butoir à chaque bout ; un rail de propulsion tous les {@value #PAS_PROPULSION} blocs (une torche de redstone
+     * noyée deux blocs dessous). Puis deux voies de garage par voie, au tiers et aux deux tiers. Rend les garages.
+     */
+    private List<Garage> poserVoies() {
+        List<Garage> liste = new ArrayList<>();
+        Set<BlockPos> blocsDeFilon = new HashSet<>();
+        filons.forEach(bloc -> blocsDeFilon.add(bloc.pos()));
+        for (int niveau = 0; niveau < sols.size(); niveau++) {
+            int sol = sols.get(niveau);
+            for (Direction sens : Direction.Plane.HORIZONTAL) {
+                BlockPos depart = centre.atY(sol).relative(sens, 2 + QUAI);
+                BlockPos.MutableBlockPos pos = depart.mutable();
+                int longueur = 0;
+                // Jusqu'au premier obstacle : vide de l'axe au sol et au-dessus, sol plein dessous, pas de pilier ni de caverne
+                while (interieur(pos.getX(), sol, pos.getZ()) && interieur(pos.getX(), sol + 1, pos.getZ()) && !interieur(pos.getX(), sol - 1, pos.getZ())
+                        && !caverne.contient(pos.getX(), sol, pos.getZ()) && puits.stream().noneMatch(p -> pilier(p, sol).equals(pos))
+                        && enLigne(pos, sol)) {
+                    longueur++;
+                    pos.move(sens);
+                }
+                // Butoir côté puits, rails, butoir au bout : au moins 12 rails
+                if (longueur < 14) {
+                    continue;
+                }
+                boolean surX = sens.getAxis() == Direction.Axis.X;
+                List<Rail> rails = new ArrayList<>();
+                for (int t = 1; t < longueur - 1; t++) {
+                    BlockPos rail = depart.relative(sens, t);
+                    // Propulsion : la torche deux blocs dessous, posée sur la roche, sans vide autour
+                    boolean propulsion = (t - 1) % PAS_PROPULSION == PAS_PROPULSION / 2 && !interieur(rail.getX(), sol - 2, rail.getZ())
+                            && !interieur(rail.getX(), sol - 3, rail.getZ());
+                    rails.add(new Rail(rail, surX, propulsion));
+                }
+                Voie voie = new Voie(niveau, sens, rails, depart, depart.relative(sens, longueur - 1));
+                voies.add(voie);
+                for (int k = 1; k <= 2; k++) {
+                    Garage garage = garage(voie, rails.size() * k / 3, k == 1 ? 1 : -1, blocsDeFilon, liste);
+                    if (garage != null) {
+                        liste.add(garage);
+                    }
+                }
+            }
+        }
+        // Le compte complété sur les voies les plus longues (une branche peut ne pas avoir de voie : la caverne est proche du puits)
+        List<Voie> parLongueur = new ArrayList<>(voies);
+        parLongueur.sort((a, b) -> Integer.compare(b.rails().size(), a.rails().size()));
+        for (int tour = 0; tour < 4 && liste.size() < WAGONNETS; tour++) {
+            for (Voie voie : parLongueur) {
+                if (liste.size() == WAGONNETS) {
+                    break;
+                }
+                Garage garage = garage(voie, voie.rails().size() * (2 * tour + 1) / 8, tour % 2 == 0 ? 1 : -1, blocsDeFilon, liste);
+                if (garage != null) {
+                    liste.add(garage);
+                }
+            }
+        }
+        return List.copyOf(liste.subList(0, Math.min(WAGONNETS, liste.size())));
+    }
+
+    /** Ce bloc est-il sur la ligne du milieu de l'axe (la croix qui passe par le puits principal) ? */
+    private boolean enLigne(BlockPos pos, int sol) {
+        return axes.stream().anyMatch(axe -> axe.isInside(pos.getX(), sol, pos.getZ()));
+    }
+
+    /**
+     * Une voie de garage à côté de la voie, vers le rail {@code indice} (décalée de quelques rails au besoin), du côté
+     * {@code cote} : une niche à 3 et 4 blocs de la ligne du milieu, qui ne touche rien d'autre que l'axe (ni galerie, ni
+     * salle, ni puits, ni caverne, ni cellule, ni filon, ni autre garage) ; ses rails à 4 blocs, le wagonnet au milieu.
+     */
+    private @Nullable Garage garage(Voie voie, int indice, int cote, Set<BlockPos> blocsDeFilon, List<Garage> autres) {
+        Direction sens = voie.sens();
+        Direction travers = sens.getClockWise();
+        int sol = sols.get(voie.niveau());
+        for (int decalage : new int[]{0, 2, -2, 4, -4, 6, -6, 8, -8}) {
+            int i = indice + decalage;
+            if (i < 2 || i + LONGUEUR_GARAGE >= voie.rails().size() - 2) {
+                continue;
+            }
+            BlockPos debut = voie.rails().get(i).pos();
+            BlockPos fin = debut.relative(sens, LONGUEUR_GARAGE - 1);
+            BlockPos a = debut.relative(travers, 3 * cote);
+            BlockPos b = fin.relative(travers, 4 * cote).above();
+            BoundingBox niche = BoundingBox.fromCorners(a, b);
+            // La niche et un bloc de roche autour (sauf du côté de l'axe)
+            BoundingBox garde = BoundingBox.fromCorners(debut.relative(sens.getOpposite()).relative(travers, 3 * cote).below(),
+                    fin.relative(sens).relative(travers, 5 * cote).above(2));
+            boolean libre = galeries.stream().noneMatch(g -> g.intersects(garde))
+                    && puits.stream().noneMatch(p -> p.interieur().inflatedBy(COQUE_PUITS).intersects(garde))
+                    && salles.stream().noneMatch(salle -> salle.boite().intersects(garde) || salle.ouvertures().stream().anyMatch(o -> o.intersects(garde)))
+                    && !garde.intersects(caverne.boite())
+                    && cellules.stream().noneMatch(cellule -> cellule.avecMurs().inflatedBy(1).intersects(garde))
+                    && autres.stream().noneMatch(autre -> autre.niche().inflatedBy(1).intersects(garde))
+                    && blocsDeFilon.stream().noneMatch(niche::isInside)
+                    // Pas de poteau d'étai devant l'entrée de la niche
+                    && poteaux.stream().noneMatch(poteau -> poteau.getY() == sol && BoundingBox.fromCorners(debut.relative(travers, 2 * cote),
+                    fin.relative(travers, 2 * cote)).isInside(poteau));
+            if (!libre) {
+                continue;
+            }
+            List<Rail> rails = new ArrayList<>();
+            for (int t = 0; t < LONGUEUR_GARAGE; t++) {
+                rails.add(new Rail(debut.relative(sens, t).relative(travers, 4 * cote), sens.getAxis() == Direction.Axis.X, false));
+            }
+            return new Garage(niche, rails, rails.get(1).pos());
+        }
+        return null;
     }
 
     // --- Réseau éclairé (G7.2.3) ---
@@ -345,8 +485,8 @@ public final class PlanDeMine {
 
     /**
      * Le sol du réseau éclairé, où aucun monstre ne doit apparaître : chaque bloc de vide au ras du sol des galeries de l'axe
-     * (hors de la caverne, éclairée en G7.3, du trou des puits et des piliers qui tiennent leur échelle), et le fond de chaque
-     * puits secondaire.
+     * (hors de la caverne, éclairée en G7.3, du trou des puits, des piliers qui tiennent leur échelle et des butoirs), et le
+     * fond de chaque puits secondaire.
      */
     public List<BlockPos> reseauEclaire() {
         Set<BlockPos> sol = new LinkedHashSet<>();
@@ -362,6 +502,11 @@ public final class PlanDeMine {
             if (!p.principal()) {
                 BlockPos.betweenClosed(p.x() - 1, p.bas(), p.z() - 1, p.x() + 1, p.bas(), p.z() + 1).forEach(pos -> sol.add(pos.immutable()));
             }
+        }
+        // Les butoirs sont des blocs pleins
+        for (Voie voie : voies) {
+            sol.remove(voie.butoirPuits());
+            sol.remove(voie.butoirBout());
         }
         return List.copyOf(sol);
     }
@@ -1117,6 +1262,14 @@ public final class PlanDeMine {
         return lanternes;
     }
 
+    public List<Voie> voies() {
+        return voies;
+    }
+
+    public List<Garage> garages() {
+        return garages;
+    }
+
     /** Tous les blocs de filon (minerais riches et hélium-3). */
     public List<FilonsDeMine.Bloc> filons() {
         return filons;
@@ -1170,6 +1323,11 @@ public final class PlanDeMine {
                 return true;
             }
         }
+        for (Garage garage : garages) {
+            if (garage.niche().isInside(x, y, z)) {
+                return true;
+            }
+        }
         return caverne.contient(x, y, z);
     }
 
@@ -1211,6 +1369,11 @@ public final class PlanDeMine {
                 if (ouverture.intersects(zone)) {
                     boites.add(ouverture);
                 }
+            }
+        }
+        for (Garage garage : garages) {
+            if (garage.niche().intersects(zone)) {
+                boites.add(garage.niche());
             }
         }
         if (boiteCaverne.intersects(zone)) {

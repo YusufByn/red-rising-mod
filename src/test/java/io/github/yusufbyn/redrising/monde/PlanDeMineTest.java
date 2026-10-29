@@ -321,6 +321,45 @@ class PlanDeMineTest {
     }
 
     @Test
+    void voiesEtGarages() {
+        for (long graine : GRAINES) {
+            PlanDeMine plan = PlanDeMine.tirer(graine, CENTRE, 62, 66, 66);
+            assertTrue(plan.voies().size() >= 12, "graine " + graine + " : " + plan.voies().size() + " voies");
+            assertEquals(PlanDeMine.WAGONNETS, plan.garages().size(), "graine " + graine + " : voies de garage");
+            Set<BlockPos> filons = new HashSet<>();
+            plan.filons().forEach(bloc -> filons.add(bloc.pos()));
+            for (PlanDeMine.Voie voie : plan.voies()) {
+                String nom = "graine " + graine + " : voie " + voie.sens() + " du niveau " + (voie.niveau() + 1);
+                // Le butoir côté puits juste après le quai, puis les rails d'affilée jusqu'au butoir du bout
+                assertEquals(2 + 3, voie.butoirPuits().distManhattan(CENTRE.atY(voie.butoirPuits().getY())), nom);
+                BlockPos attendu = voie.butoirPuits();
+                for (PlanDeMine.Rail rail : voie.rails()) {
+                    attendu = attendu.relative(voie.sens());
+                    assertEquals(attendu, rail.pos(), nom + " : rails pas d'affilée");
+                    BlockPos dessous = rail.pos().below();
+                    assertTrue(plan.interieur(rail.pos().getX(), rail.pos().getY(), rail.pos().getZ()), nom + " : rail hors du vide en " + rail.pos());
+                    assertFalse(plan.interieur(dessous.getX(), dessous.getY(), dessous.getZ()), nom + " : rail sur le vide en " + rail.pos());
+                }
+                assertEquals(attendu.relative(voie.sens()), voie.butoirBout(), nom + " : butoir du bout");
+            }
+            for (PlanDeMine.Garage garage : plan.garages()) {
+                BoundingBox niche = garage.niche();
+                String nom = "graine " + graine + " : garage " + niche;
+                for (PlanDeMine.EmplacementCellule cellule : plan.cellules()) {
+                    assertFalse(cellule.avecMurs().inflatedBy(1).intersects(niche), nom + " près d'une cellule");
+                }
+                for (BlockPos pos : BlockPos.betweenClosed(niche.minX(), niche.minY(), niche.minZ(), niche.maxX(), niche.maxY(), niche.maxZ())) {
+                    assertFalse(filons.contains(pos), nom + " sur un filon");
+                }
+                // Le wagonnet garé hors du passage : à 4 blocs de la ligne du milieu de l'axe
+                BlockPos wagonnet = garage.wagonnet();
+                int ecart = Math.min(Math.abs(wagonnet.getX() - CENTRE.getX()), Math.abs(wagonnet.getZ() - CENTRE.getZ()));
+                assertEquals(4, ecart, nom + " : wagonnet à " + ecart + " blocs de la ligne du milieu");
+            }
+        }
+    }
+
+    @Test
     void colonieReservee() {
         PlanDeMine plan = PlanDeMine.tirer(42, CENTRE, 62, 66, 66);
         PlanDeMine.Caverne caverne = plan.caverne();
@@ -343,6 +382,8 @@ class PlanDeMineTest {
         assertEquals(a.salles(), b.salles());
         assertEquals(a.filons(), b.filons());
         assertEquals(a.coffres(), b.coffres());
+        assertEquals(a.voies(), b.voies());
+        assertEquals(a.garages(), b.garages());
         assertSame(PlanDeMine.de(5, CENTRE, 62, 66, 66), PlanDeMine.de(5, CENTRE, 62, 66, 66));
     }
 }
