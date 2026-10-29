@@ -252,5 +252,11 @@
   "panneau.redrising.puits_vers": "→ level %s",
   "commande.redrising.mine.aucune": "This world has no mine (no region plan, or mine not generated yet)",
   "commande.redrising.mine.monstres": "Mine monsters around %s: %s (cap %s, within %s blocks)",
-  "commande.redrising.region.tp": "%s teleported to the %s region (%s)"
+  "commande.redrising.region.tp": "%s teleported to the %s region (%s)",
+  "commande.redrising.mine.niveau_absent": "This mine has %s levels (1 at the top)",
+  "commande.redrising.mine.sans_galerie": "No dark gallery on level %s of the mine",
+  "commande.redrising.mine.tp": "Teleported %s to the level %s landing of the mine (%s)",
+  "commande.redrising.mine.traque": "Hunt against %s on level %s of the mine, from a dark gallery at %s",
+  "commande.redrising.mine.cellule": "Cell %s built on level %s of the mine: entrance at %s, facing %s",
+  "commande.redrising.mine.cellule_existe": "Cell %s of the mine is already built"
 }

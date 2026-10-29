@@ -55,6 +55,8 @@ public final class PlanDeMine {
     /** 🟡 Sols des niveaux, du haut vers le bas. */
     static final int[] SOLS = {8, -10, -28, -46};
     public static final int NIVEAUX_MAX = 4;
+    /** Le niveau d'une position (G7.2.4) : une tranche de 18 blocs centrée sur son sol (la moitié de l'écart entre deux sols). */
+    public static final int DEMI_TRANCHE = 9;
     /** 🟡 Entre le haut de la mine (vide et coque) et le terrain le plus bas de l'emprise. */
     static final int MARGE_SURFACE = 18;
     /** 🟡 Grille : un nœud tous les 20 blocs, de −100 à 100 autour du centre. */
@@ -1462,6 +1464,81 @@ public final class PlanDeMine {
 
     public Puits puitsPrincipal() {
         return puits.getFirst();
+    }
+
+    /**
+     * Le niveau (0 en haut) où se trouve cette position, ou −1 hors de la mine (G7.2.4). Par tranches de hauteur : un niveau
+     * va de {@value #DEMI_TRANCHE} blocs sous son sol à {@value #DEMI_TRANCHE} blocs au-dessus (exclu), dans l'emprise. Les
+     * tranches se touchent (18 blocs entre deux sols) : sur l'échelle d'un puits, le niveau change une fois, à mi-hauteur,
+     * et ne dépend ni du bloc où l'on se tient ni d'une galerie voisine. Au-dessus de la tranche du haut (le haut du puits
+     * principal) et sous celle du bas : hors de la mine.
+     */
+    public int niveauA(BlockPos pos) {
+        if (Math.abs((pos.getX() >> 4) - (centre.getX() >> 4)) > PlanMars.EMPRISE_MINE
+                || Math.abs((pos.getZ() >> 4) - (centre.getZ() >> 4)) > PlanMars.EMPRISE_MINE) {
+            return -1;
+        }
+        for (int niveau = 0; niveau < sols.size(); niveau++) {
+            int sol = sols.get(niveau);
+            if (pos.getY() >= sol - DEMI_TRANCHE && pos.getY() < sol + DEMI_TRANCHE) {
+                return niveau;
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * Les points d'entrée des Gris pour un joueur sur ce niveau (G7.2.4) : ceux de son niveau à une distance entre
+     * {@code min} et {@code max}, du plus proche au plus loin, puis ceux des niveaux voisins, de même. La traque y prend un
+     * des premiers hors de vue.
+     */
+    public List<Entree> entreesPour(BlockPos joueur, int niveau, double min, double max) {
+        List<Entree> choix = new ArrayList<>();
+        for (int ecart : new int[]{0, 1}) {
+            List<Entree> ici = new ArrayList<>();
+            for (Entree entree : entrees) {
+                double distance = Math.sqrt(entree.pos().distSqr(joueur));
+                if (Math.abs(entree.niveau() - niveau) == ecart && distance >= min && distance <= max) {
+                    ici.add(entree);
+                }
+            }
+            ici.sort((a, b) -> Double.compare(a.pos().distSqr(joueur), b.pos().distSqr(joueur)));
+            choix.addAll(ici);
+        }
+        return choix;
+    }
+
+    /**
+     * Des places au sol dans les galeries sombres de ce niveau (debug, tests : {@code /rr mine traque}) : le milieu de chaque
+     * galerie hors de l'axe, hors du réseau éclairé, à {@code distanceMin} blocs au moins du puits principal (à plat).
+     */
+    public List<BlockPos> galeriesSombres(int niveau, double distanceMin) {
+        Set<BlockPos> eclaire = new HashSet<>(reseauEclaire());
+        List<BlockPos> places = new ArrayList<>();
+        for (int i = 0; i < galeries.size(); i++) {
+            BoundingBox galerie = galeries.get(i);
+            BlockPos milieu = new BlockPos(galerie.getCenter().getX(), galerie.minY(), galerie.getCenter().getZ());
+            if (niveauxGaleries.get(i) == niveau && !eclaire.contains(milieu) && axes.stream().noneMatch(axe -> axe.isInside(milieu))
+                    && interieur(milieu.getX(), milieu.getY(), milieu.getZ()) && !interieur(milieu.getX(), milieu.getY() - 1, milieu.getZ())
+                    && Math.hypot(milieu.getX() - centre.getX(), milieu.getZ() - centre.getZ()) >= distanceMin) {
+                places.add(milieu);
+            }
+        }
+        return places;
+    }
+
+    /**
+     * Le repli de la traque, quand aucun point ne convient à 24-64 blocs : les points d'entrée de ce niveau et des voisins, à
+     * n'importe quelle distance, ceux de ce niveau d'abord ; du plus proche au plus loin dans chaque groupe. Un Gris plus
+     * loin en hauteur ne servirait à rien (il ne sait pas monter une échelle).
+     */
+    public List<Entree> entreesDeRepli(BlockPos pos, int niveau) {
+        List<Entree> toutes = new ArrayList<>(entrees.stream().filter(entree -> Math.abs(entree.niveau() - niveau) <= 1).toList());
+        toutes.sort((a, b) -> {
+            int ecart = Integer.compare(Math.abs(a.niveau() - niveau), Math.abs(b.niveau() - niveau));
+            return ecart != 0 ? ecart : Double.compare(a.pos().distSqr(pos), b.pos().distSqr(pos));
+        });
+        return toutes;
     }
 
     /** Ce bloc est-il dans le vide de la mine (galeries, puits, caverne, salles) ? Les étais et les échelles y sont aussi. */

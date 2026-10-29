@@ -81,6 +81,8 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.StringRepresentable;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.npc.villager.Villager;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.BarrelBlockEntity;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
@@ -136,6 +138,14 @@ public final class CommandesDebug {
             Component.translatable("commande.redrising.region.aucun_plan"));
     private static final SimpleCommandExceptionType PAS_DE_MINE = new SimpleCommandExceptionType(
             Component.translatable("commande.redrising.mine.aucune"));
+    private static final DynamicCommandExceptionType NIVEAU_ABSENT = new DynamicCommandExceptionType(
+            niveaux -> Component.translatable("commande.redrising.mine.niveau_absent", niveaux));
+    private static final DynamicCommandExceptionType SANS_GALERIE_SOMBRE = new DynamicCommandExceptionType(
+            niveau -> Component.translatable("commande.redrising.mine.sans_galerie", niveau));
+    private static final DynamicCommandExceptionType CELLULE_DEJA_LA = new DynamicCommandExceptionType(
+            numero -> Component.translatable("commande.redrising.mine.cellule_existe", numero));
+    /** {@code /rr mine traque} : une galerie sombre à au moins 60 blocs du puits principal. */
+    private static final int DISTANCE_TRAQUE_AU_FOND = 60;
     private static final DynamicCommandExceptionType ZONE_ABSENTE = new DynamicCommandExceptionType(
             zone -> Component.translatable("commande.redrising.etat.zone.absente", zone));
 
@@ -219,7 +229,19 @@ public final class CommandesDebug {
                                         .then(argJoueur(CommandesDebug::allerALaRegion)))))
                 .then(Commands.literal("mine")
                         .then(Commands.literal("monstres").executes(ctx -> monstresDeLaMine(ctx, ctx.getSource().getPlayerOrException()))
-                                .then(argJoueur(CommandesDebug::monstresDeLaMine))))
+                                .then(argJoueur(CommandesDebug::monstresDeLaMine)))
+                        // Traque dans la mine (G7.2.4) : niveaux comptés à partir de 1, en haut
+                        .then(Commands.literal("tp")
+                                .then(Commands.argument("niveau", IntegerArgumentType.integer(1, PlanDeMine.NIVEAUX_MAX))
+                                        .executes(ctx -> allerDansLaMine(ctx, ctx.getSource().getPlayerOrException()))
+                                        .then(argJoueur(CommandesDebug::allerDansLaMine))))
+                        .then(Commands.literal("traque").executes(ctx -> traqueDansLaMine(ctx, ctx.getSource().getPlayerOrException(), false))
+                                .then(Commands.argument("niveau", IntegerArgumentType.integer(1, PlanDeMine.NIVEAUX_MAX))
+                                        .executes(ctx -> traqueDansLaMine(ctx, ctx.getSource().getPlayerOrException(), true))
+                                        .then(argJoueur((ctx, joueur) -> traqueDansLaMine(ctx, joueur, true)))))
+                        .then(Commands.literal("cellule")
+                                .then(Commands.argument("numero", IntegerArgumentType.integer(1, PlanDeMine.CELLULES))
+                                        .executes(CommandesDebug::construireCelluleDeLaMine))))
                 .then(Commands.literal("structure")
                         .then(Commands.literal("list").executes(CommandesDebug::listerStructures))
                         .then(Commands.literal("poste")
@@ -503,6 +525,87 @@ public final class CommandesDebug {
         ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.mine.monstres", joueur.getDisplayName(), nombre,
                 MonstresDeLaMine.PLAFOND, MonstresDeLaMine.RAYON), false);
         return nombre;
+    }
+
+    private static PlanDeMine planDeLaMine(MinecraftServer server) throws CommandSyntaxException {
+        PlanDeMine plan = MineLykos.planEnJeu(server.overworld());
+        if (plan == null) {
+            throw PAS_DE_MINE.create();
+        }
+        return plan;
+    }
+
+    /** L'argument « niveau » (1 en haut), en index du plan (0 en haut). */
+    private static int niveauDeLaMine(CommandContext<CommandSourceStack> ctx, PlanDeMine plan) throws CommandSyntaxException {
+        int niveau = IntegerArgumentType.getInteger(ctx, "niveau");
+        if (niveau > plan.sols().size()) {
+            throw NIVEAU_ABSENT.create(plan.sols().size());
+        }
+        return niveau - 1;
+    }
+
+    private static void teleporterDansLaMine(ServerPlayer joueur, ServerLevel monde, BlockPos place) {
+        joueur.teleportTo(monde, place.getX() + 0.5, place.getY(), place.getZ() + 0.5, Set.of(), joueur.getYRot(), 0, true);
+    }
+
+    /** Au quai du puits principal sur ce niveau (le point d'entrée des Gris le plus proche du puits). */
+    private static int allerDansLaMine(CommandContext<CommandSourceStack> ctx, ServerPlayer joueur) throws CommandSyntaxException {
+        PlanDeMine plan = planDeLaMine(ctx.getSource().getServer());
+        int niveau = niveauDeLaMine(ctx, plan);
+        BlockPos quai = plan.entreesDeRepli(plan.centre().atY(plan.sols().get(niveau)), niveau).getFirst().pos();
+        teleporterDansLaMine(joueur, ctx.getSource().getServer().overworld(), quai);
+        ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.mine.tp", joueur.getDisplayName(), niveau + 1, quai.toShortString()), true);
+        return Command.SINGLE_SUCCESS;
+    }
+
+    /**
+     * Une traque au fond (G7.2.4) : le joueur dans une galerie sombre du niveau (le plus bas par défaut), à
+     * {@value #DISTANCE_TRAQUE_AU_FOND} blocs au moins du puits, puis la traque commence (comme {@code /rr traque start}).
+     */
+    private static int traqueDansLaMine(CommandContext<CommandSourceStack> ctx, ServerPlayer joueur, boolean niveauDonne) throws CommandSyntaxException {
+        PlanDeMine plan = planDeLaMine(ctx.getSource().getServer());
+        int niveau = niveauDonne ? niveauDeLaMine(ctx, plan) : plan.sols().size() - 1;
+        List<BlockPos> places = plan.galeriesSombres(niveau, DISTANCE_TRAQUE_AU_FOND);
+        if (places.isEmpty()) {
+            places = plan.galeriesSombres(niveau, 0);
+        }
+        if (places.isEmpty()) {
+            throw SANS_GALERIE_SOMBRE.create(niveau + 1);
+        }
+        BlockPos place = places.get(joueur.getRandom().nextInt(places.size()));
+        teleporterDansLaMine(joueur, ctx.getSource().getServer().overworld(), place);
+        TraqueGris.annuler(joueur);
+        JaugesJoueur.set(joueur, Jauge.SUSPICION, Acces.SEUIL_TRAQUE);
+        TraqueGris.commencer(joueur);
+        ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.mine.traque", joueur.getDisplayName(), niveau + 1, place.toShortString()), true);
+        return Command.SINGLE_SUCCESS;
+    }
+
+    /**
+     * Construit la cellule du Rising de G5.4 sur l'emplacement réservé {@code numero} de la mine (debug, en attendant les
+     * cellules de la mine en G7.5), et ouvre le bloc de roche entre la galerie et son entrée cachée.
+     */
+    private static int construireCelluleDeLaMine(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        MinecraftServer server = ctx.getSource().getServer();
+        PlanDeMine plan = planDeLaMine(server);
+        int numero = IntegerArgumentType.getInteger(ctx, "numero");
+        PlanDeMine.EmplacementCellule emplacement = plan.cellules().get(numero - 1);
+        BlockPos centre = emplacement.salle().getCenter();
+        if (CelluleRising.contenant(server, centre) != null) {
+            throw CELLULE_DEJA_LA.create(numero);
+        }
+        Direction versSalle = Direction.getApproximateNearest(centre.getX() - emplacement.galerie().getX(), 0, centre.getZ() - emplacement.galerie().getZ());
+        // L'entrée cachée est le mur de la salle (5 de profondeur, centre à 3 blocs)
+        BlockPos entree = new BlockPos(centre.getX(), emplacement.salle().minY(), centre.getZ()).relative(versSalle.getOpposite(), 3);
+        ServerLevel monde = server.overworld();
+        CelluleRising.construire(monde, entree, versSalle);
+        for (BlockPos pas = entree.relative(versSalle.getOpposite()); !plan.interieur(pas.getX(), pas.getY(), pas.getZ()); pas = pas.relative(versSalle.getOpposite())) {
+            monde.setBlock(pas, Blocks.AIR.defaultBlockState(), Block.UPDATE_CLIENTS);
+            monde.setBlock(pas.above(), Blocks.AIR.defaultBlockState(), Block.UPDATE_CLIENTS);
+        }
+        ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.mine.cellule", numero, emplacement.niveau() + 1,
+                entree.toShortString(), versSalle.getSerializedName()), true);
+        return Command.SINGLE_SUCCESS;
     }
 
     /** Téléporte le joueur au-dessus du centre de la région (génère les chunks de là-bas). */

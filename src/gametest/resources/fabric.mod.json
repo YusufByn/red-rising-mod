@@ -20,6 +20,7 @@
       "io.github.yusufbyn.redrising.gametest.BiomesMarsTest",
       "io.github.yusufbyn.redrising.gametest.MineLykosTest",
       "io.github.yusufbyn.redrising.gametest.MineLykosLongTest",
+      "io.github.yusufbyn.redrising.gametest.TraqueMineTest",
       "io.github.yusufbyn.redrising.gametest.CommandesDebugTest",
       "io.github.yusufbyn.redrising.gametest.HudJaugesTest",
       "io.github.yusufbyn.redrising.gametest.ApparenceCouleurTest",

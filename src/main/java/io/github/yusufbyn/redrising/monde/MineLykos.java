@@ -166,13 +166,14 @@ public final class MineLykos extends Structure {
      * départ (mêmes hauteurs que la génération), chargé au besoin jusqu'à l'étape des départs de structures.
      */
     public static @Nullable PlanDeMine planEnJeu(ServerLevel niveau) {
+        // La dimension d'abord : le plan en cache est celui de l'Overworld
+        if (!niveau.dimension().equals(Level.OVERWORLD)) {
+            return null;
+        }
         PlanDeMine plan = planEnJeu;
         BlockPos centre = centre();
         if (centre == null || plan != null) {
             return centre == null ? null : plan;
-        }
-        if (!niveau.dimension().equals(Level.OVERWORLD)) {
-            return null;
         }
         Structure mine = niveau.registryAccess().lookupOrThrow(Registries.STRUCTURE).getValue(CLE);
         StructureStart depart = mine == null ? null

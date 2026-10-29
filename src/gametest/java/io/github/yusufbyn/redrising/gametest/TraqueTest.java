@@ -7,6 +7,8 @@ import io.github.yusufbyn.redrising.factions.Jauges;
 import io.github.yusufbyn.redrising.factions.JaugesJoueur;
 import io.github.yusufbyn.redrising.factions.Traque;
 import io.github.yusufbyn.redrising.monde.CelluleRising;
+import io.github.yusufbyn.redrising.couleur.Couleur;
+import io.github.yusufbyn.redrising.pnj.PnjCouleur;
 import io.github.yusufbyn.redrising.pnj.TraqueGris;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
@@ -21,15 +23,22 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.BossEvent;
+import net.minecraft.world.Difficulty;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
+import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.EntityTypes;
+import net.minecraft.world.entity.ai.memory.MemoryModuleType;
+import net.minecraft.world.entity.monster.zombie.Zombie;
+import net.minecraft.world.entity.schedule.Activity;
 import net.minecraft.world.entity.npc.villager.Villager;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.storage.ServerLevelData;
 import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
+import org.jspecify.annotations.Nullable;
 
 import java.lang.reflect.Field;
 import java.util.List;
@@ -40,6 +49,8 @@ import java.util.Objects;
  * G5.6 : la traque se déclenche, se gagne et se perd. Semer les Gris (caché dans une boîte), se cacher dans une cellule
  * (sans être vu, puis sous les yeux d'un chasseur), se percher (étourdi, jamais pris, puis retrait des Gris à 90),
  * être arrêté (emmené au poste, interrogé sans pouvoir mourir, inventaire intact), et les rechargements.
+ * G7.2.4 : l'immunité de 3 secondes après un ralentissement (perché), et les monstres face aux Gris (un zombie ignore un
+ * Gris, chasseur ou non, qui ne le fuit pas ; un villageois ordinaire, lui, est pris pour cible et fuit).
  *
  * <p>Pour les longues attentes (une minute hors de vue, dix minutes de traque, l'interrogatoire), on avance l'horloge
  * du monde : la traque compte le temps de jeu écoulé entre deux passages.</p>
@@ -66,6 +77,7 @@ public class TraqueTest implements FabricClientGameTest {
             semer(monde, context);
             tuerUnChasseur(monde);
             percher(monde, context);
+            zombiesEtGris(monde, context);
             cellule(monde, context);
             arrestation(monde, context);
 
@@ -178,6 +190,7 @@ public class TraqueTest implements FabricClientGameTest {
             return lenteur != null && lenteur.getAmplifier() == 4;
         }, 900);
         RedRising.LOGGER.info("[G5.6] Perché : touché et étourdi par une flèche de chasseur");
+        immunite(monde, context);
         context.waitTicks(200);
         if (monde.getServer().computeOnServer(server -> OutilsTest.joueur(server).hasAttached(TraqueGris.INTERROGATOIRE)) || !enTraque(monde)) {
             throw new AssertionError("Perché : le joueur ne devait pas être arrêté");
@@ -191,6 +204,143 @@ public class TraqueTest implements FabricClientGameTest {
         verifierMessage(context, "retrait des Gris", "traque.redrising.retrait");
         RedRising.LOGGER.info("[G5.6] Perché : jamais pris, puis retrait des Gris à {} de Suspicion", Traque.SUSPICION_RETRAIT);
         monde.getServer().runCommand("tp @a 0.5 -60 0.5");
+    }
+
+    /**
+     * G7.2.4 : après un ralentissement, aucun autre pendant le ralentissement et les 3 secondes qui suivent (les chasseurs
+     * continuent de tirer) ; puis les flèches ralentissent de nouveau.
+     */
+    private static void immunite(TestSingleplayerContext monde, ClientGameTestContext context) {
+        long debut = debutDuRalentissement(monde);
+        long finImmunite = debut + Traque.ETOURDISSEMENT + Traque.IMMUNITE_ETOURDISSEMENT;
+        for (int tick = 0; tick < Traque.ETOURDISSEMENT + Traque.IMMUNITE_ETOURDISSEMENT - 5; tick++) {
+            context.waitTick();
+            long autre = debutDuRalentissement(monde);
+            if (autre > debut + 2) {
+                throw new AssertionError("Ralenti de nouveau pendant l'immunité : " + (autre - debut) + " ticks après le premier");
+            }
+        }
+        long[] suivant = {-1};
+        monde.getServer().waitFor(server -> {
+            suivant[0] = debutDuRalentissement(server);
+            return suivant[0] > debut + 2;
+        }, 600);
+        if (suivant[0] < finImmunite - 2) {
+            throw new AssertionError("Ralenti de nouveau " + (suivant[0] - debut) + " ticks après le premier (immunité jusqu'à " + (finImmunite - debut) + ")");
+        }
+        RedRising.LOGGER.info("[G7.2.4] Immunité : ralenti de nouveau {} ticks après le premier ralentissement, pas avant {}",
+                suivant[0] - debut, finImmunite - debut);
+    }
+
+    /** Tick du début du ralentissement en cours (lu dans sa durée restante), ou −1. */
+    private static long debutDuRalentissement(TestSingleplayerContext monde) {
+        return monde.getServer().computeOnServer(TraqueTest::debutDuRalentissement);
+    }
+
+    private static long debutDuRalentissement(MinecraftServer server) {
+        MobEffectInstance lenteur = OutilsTest.joueur(server).getEffect(MobEffects.SLOWNESS);
+        return lenteur == null || lenteur.getAmplifier() != 4 ? -1 : server.overworld().getGameTime() - (Traque.ETOURDISSEMENT - lenteur.getDuration());
+    }
+
+    // --- Monstres et Gris (G7.2.4) ---
+
+    /**
+     * Un zombie à 4 blocs : un villageois ordinaire est sa cible et le fuit (le témoin : la scène marche) ; un Gris (comme
+     * une patrouille) n'est pas pris pour cible et ne fuit pas ; un chasseur continue sa traque.
+     */
+    private static void zombiesEtGris(TestSingleplayerContext monde, ClientGameTestContext context) {
+        Difficulty difficulte = monde.getServer().computeOnServer(server -> server.getWorldData().getDifficulty());
+        monde.getServer().runCommand("difficulty normal");
+        monde.getServer().runCommand("time set midnight");
+
+        // Témoin : villageois ordinaire, loin du joueur (plus de 35 blocs : le zombie ne le voit pas)
+        Villager[] temoin = new Villager[1];
+        Zombie[] zombie = new Zombie[1];
+        monde.getServer().runOnServer(server -> {
+            temoin[0] = EntityTypes.VILLAGER.create(server.overworld(), EntitySpawnReason.COMMAND);
+            temoin[0].snapTo(-60.5, -60, 60.5, 0, 0);
+            server.overworld().addFreshEntity(temoin[0]);
+            zombie[0] = zombie(server, new Vec3(-56.5, -60, 60.5));
+        });
+        monde.getServer().waitFor(server -> zombie[0].getTarget() == temoin[0]
+                && temoin[0].getBrain().hasMemoryValue(MemoryModuleType.NEAREST_HOSTILE), 200);
+        monde.getServer().runOnServer(server -> {
+            temoin[0].discard();
+            zombie[0].discard();
+        });
+        RedRising.LOGGER.info("[G7.2.4] Témoin : un villageois ordinaire est la cible du zombie et le voit comme un danger");
+
+        // Un Gris (hors traque, comme une patrouille)
+        Villager[] gris = new Villager[1];
+        monde.getServer().runOnServer(server -> {
+            gris[0] = PnjCouleur.creer(server.overworld(), new Vec3(-60.5, -60, 80.5), 0, Couleur.GRIS);
+            zombie[0] = zombie(server, new Vec3(-56.5, -60, 80.5));
+        });
+        for (int tick = 0; tick < 200; tick++) {
+            context.waitTick();
+            String probleme = monde.getServer().computeOnServer(server -> panique(gris[0], zombie[0]));
+            if (probleme != null) {
+                throw new AssertionError("Gris face à un zombie : " + probleme);
+            }
+        }
+        monde.getServer().runOnServer(server -> {
+            gris[0].discard();
+            zombie[0].discard();
+        });
+        RedRising.LOGGER.info("[G7.2.4] Gris hors traque : ni cible du zombie, ni en fuite (10 secondes)");
+
+        // Un chasseur, le joueur perché : le chasseur continue sa traque
+        monde.getServer().runCommand("tp @a 0.5 -57 -19.5");
+        monde.getServer().runCommand("rr traque start @a[limit=1]");
+        monde.getServer().waitFor(server -> TraqueGris.nombreDeChasseurs(OutilsTest.joueur(server)) >= Traque.CHASSEURS_DEPART, 40);
+        Villager[] chasseur = new Villager[1];
+        monde.getServer().runOnServer(server -> {
+            chasseur[0] = chasseurs(server).getFirst();
+            zombie[0] = zombie(server, chasseur[0].position().add(4, 0, 0));
+        });
+        int enMarche = 0;
+        for (int tick = 0; tick < 100; tick++) {
+            context.waitTick();
+            String probleme = monde.getServer().computeOnServer(server -> panique(chasseur[0], zombie[0]));
+            if (probleme != null) {
+                throw new AssertionError("Chasseur face à un zombie : " + probleme);
+            }
+            enMarche += monde.getServer().computeOnServer(server -> chasseur[0].getBrain().hasMemoryValue(MemoryModuleType.WALK_TARGET)) ? 1 : 0;
+        }
+        boolean toujoursChasseur = monde.getServer().computeOnServer(server -> chasseur[0].isAlive() && chasseur[0].hasAttached(TraqueGris.CHASSEUR)
+                && TraqueGris.nombreDeChasseurs(OutilsTest.joueur(server)) >= Traque.CHASSEURS_DEPART);
+        if (!toujoursChasseur || enMarche < 50) {
+            throw new AssertionError("Chasseur face à un zombie : toujours chasseur " + toujoursChasseur + ", en marche " + enMarche + " ticks sur 100");
+        }
+        RedRising.LOGGER.info("[G7.2.4] Chasseur avec un zombie à 4 blocs : ni cible, ni en fuite, traque continuée ({} ticks sur 100 en marche)", enMarche);
+        monde.getServer().runOnServer(server -> zombie[0].discard());
+        monde.getServer().runCommand("rr traque stop @a[limit=1]");
+        monde.getServer().runCommand("difficulty " + difficulte.getSerializedName());
+        monde.getServer().runCommand("time set noon");
+        monde.getServer().runCommand("tp @a 0.5 -60 0.5");
+    }
+
+    /** Un zombie qui ne disparaît pas (il est loin du joueur). */
+    private static Zombie zombie(MinecraftServer server, Vec3 position) {
+        Zombie zombie = Objects.requireNonNull(EntityTypes.ZOMBIE.create(server.overworld(), EntitySpawnReason.COMMAND));
+        zombie.snapTo(position.x, position.y, position.z, 0, 0);
+        zombie.setPersistenceRequired();
+        server.overworld().addFreshEntity(zombie);
+        return zombie;
+    }
+
+    /** Ce qui ne va pas entre ce Gris et ce zombie, ou {@code null}. */
+    private static @Nullable String panique(Villager gris, Zombie zombie) {
+        if (zombie.getTarget() == gris) {
+            return "cible du zombie";
+        }
+        if (gris.getBrain().hasMemoryValue(MemoryModuleType.NEAREST_HOSTILE)) {
+            return "le zombie est vu comme un danger";
+        }
+        if (gris.getBrain().isActive(Activity.PANIC)) {
+            return "en fuite";
+        }
+        return gris.getHealth() < gris.getMaxHealth() ? "blessé (" + gris.getHealth() + ")" : null;
     }
 
     // --- Cellule ---

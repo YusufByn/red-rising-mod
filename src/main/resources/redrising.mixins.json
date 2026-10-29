@@ -13,7 +13,9 @@
     "NoiseBasedChunkGeneratorMixin",
     "ChunkGeneratorMixin",
     "ConfiguredFeatureMixin",
-    "NaturalSpawnerMixin"
+    "NaturalSpawnerMixin",
+    "LivingEntityMixin",
+    "VillagerHostilesSensorMixin"
   ],
   "injectors": {
     "defaultRequire": 1

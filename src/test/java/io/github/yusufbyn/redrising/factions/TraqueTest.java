@@ -4,6 +4,8 @@ import io.github.yusufbyn.redrising.couleur.Couleur;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Traque (G5.6) : semer, abandon, retrait, renforts. */
 class TraqueTest {
@@ -48,5 +50,17 @@ class TraqueTest {
         for (int suspicion : new int[]{Traque.SUSPICION_GAGNEE, Traque.SUSPICION_RETRAIT, Traque.SUSPICION_ARRETE}) {
             assertEquals(true, Acces.estControle(new Jauges(50, 0, suspicion)), "Suspicion " + suspicion);
         }
+    }
+
+    @Test
+    void immuniteApresUnRalentissement() {
+        assertTrue(Traque.etourdit(null, 0));
+        // Pendant le ralentissement, puis les 3 secondes d'immunité : rien
+        assertFalse(Traque.etourdit(100L, 100 + Traque.ETOURDISSEMENT - 1));
+        assertFalse(Traque.etourdit(100L, 100 + Traque.ETOURDISSEMENT + Traque.IMMUNITE_ETOURDISSEMENT - 1));
+        assertTrue(Traque.etourdit(100L, 100 + Traque.ETOURDISSEMENT + Traque.IMMUNITE_ETOURDISSEMENT));
+        // Un cycle (ralenti, puis libre à 5,6 blocs/s en sprint) laisse le temps de faire une vingtaine de blocs
+        double blocs = Traque.ETOURDISSEMENT / 20.0 * 1.4 + Traque.IMMUNITE_ETOURDISSEMENT / 20.0 * 5.6;
+        assertTrue(blocs >= 19, "blocs par cycle : " + blocs);
     }
 }

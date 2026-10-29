@@ -393,6 +393,70 @@ class PlanDeMineTest {
     }
 
     @Test
+    void niveauxParTranchesEtEntreesDeLaTraque() {
+        for (long graine : GRAINES) {
+            PlanDeMine plan = PlanDeMine.tirer(graine, CENTRE, 62, 66, 66);
+            List<Integer> sols = plan.sols();
+            for (int niveau = 0; niveau < sols.size(); niveau++) {
+                int sol = sols.get(niveau);
+                assertEquals(niveau, plan.niveauA(CENTRE.atY(sol)), "graine " + graine);
+                assertEquals(niveau, plan.niveauA(CENTRE.atY(sol - PlanDeMine.DEMI_TRANCHE)), "graine " + graine);
+                assertEquals(niveau - 1, plan.niveauA(CENTRE.atY(sol + PlanDeMine.DEMI_TRANCHE)), "graine " + graine);
+            }
+            assertEquals(-1, plan.niveauA(CENTRE.atY(sols.getLast() - PlanDeMine.DEMI_TRANCHE - 1)), "graine " + graine);
+            assertEquals(-1, plan.niveauA(CENTRE.atY(sols.getFirst()).east((PlanMars.EMPRISE_MINE + 1) * 16)), "graine " + graine);
+            // Sur l'échelle du puits principal, de bas en haut : le niveau ne change qu'une fois entre deux sols
+            PlanDeMine.Puits principal = plan.puitsPrincipal();
+            int changements = 0;
+            int avant = plan.niveauA(PlanDeMine.echelle(principal, sols.getLast()));
+            for (int y = sols.getLast(); y <= sols.getFirst(); y++) {
+                int niveau = plan.niveauA(PlanDeMine.echelle(principal, y));
+                assertTrue(niveau == avant || niveau == avant - 1, "graine " + graine + " : saut de niveau à y = " + y);
+                changements += niveau != avant ? 1 : 0;
+                avant = niveau;
+            }
+            assertEquals(sols.size() - 1, changements, "graine " + graine);
+
+            // Points d'entrée de la traque : à 24-64 blocs, le niveau du joueur d'abord, du plus proche au plus loin
+            int bas = sols.size() - 1;
+            BlockPos quai = CENTRE.atY(sols.get(bas)).east(30);
+            List<PlanDeMine.Entree> choix = plan.entreesPour(quai, bas, 24, 64);
+            assertFalse(choix.isEmpty(), "graine " + graine);
+            boolean voisins = false;
+            double precedente = 0;
+            for (PlanDeMine.Entree entree : choix) {
+                double distance = Math.sqrt(entree.pos().distSqr(quai));
+                assertTrue(distance >= 24 && distance <= 64, "graine " + graine + " : " + distance);
+                assertTrue(Math.abs(entree.niveau() - bas) <= 1, "graine " + graine);
+                if (entree.niveau() != bas) {
+                    voisins = true;
+                    precedente = 0;
+                }
+                assertFalse(voisins && entree.niveau() == bas, "graine " + graine + " : niveau du joueur après un voisin");
+                assertTrue(distance >= precedente, "graine " + graine + " : pas dans l'ordre");
+                precedente = distance;
+            }
+            // Repli : les points du niveau du joueur et des voisins, le sien d'abord
+            List<PlanDeMine.Entree> repli = plan.entreesDeRepli(quai, bas);
+            assertEquals(plan.entreesDesGris().stream().filter(e -> e.niveau() >= bas - 1).count(), repli.size(), "graine " + graine);
+            for (int i = 1; i < repli.size(); i++) {
+                int avantEcart = Math.abs(repli.get(i - 1).niveau() - bas);
+                int ecart = Math.abs(repli.get(i).niveau() - bas);
+                assertTrue(ecart > avantEcart || ecart == avantEcart
+                        && repli.get(i).pos().distSqr(quai) >= repli.get(i - 1).pos().distSqr(quai), "graine " + graine + " : repli pas dans l'ordre");
+            }
+            // Des galeries sombres loin du puits, et, sur un niveau au moins, une sans point d'entrée à portée (le repli de la traque)
+            assertFalse(plan.galeriesSombres(bas, 60).isEmpty(), "graine " + graine);
+            boolean isolee = false;
+            for (int niveau = 0; niveau < sols.size(); niveau++) {
+                int n = niveau;
+                isolee |= plan.galeriesSombres(n, 0).stream().anyMatch(place -> plan.entreesPour(place, n, 24, 64).isEmpty());
+            }
+            assertTrue(isolee, "graine " + graine + " : aucune galerie sombre isolée");
+        }
+    }
+
+    @Test
     void colonieReservee() {
         PlanDeMine plan = PlanDeMine.tirer(42, CENTRE, 62, 66, 66);
         PlanDeMine.Caverne caverne = plan.caverne();

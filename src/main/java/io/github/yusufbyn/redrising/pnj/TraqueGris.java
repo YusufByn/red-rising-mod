@@ -13,6 +13,8 @@ import io.github.yusufbyn.redrising.factions.JaugesJoueur;
 import io.github.yusufbyn.redrising.factions.Ronde;
 import io.github.yusufbyn.redrising.factions.Traque;
 import io.github.yusufbyn.redrising.monde.CelluleRising;
+import io.github.yusufbyn.redrising.monde.MineLykos;
+import io.github.yusufbyn.redrising.monde.PlanDeMine;
 import io.github.yusufbyn.redrising.monde.PosteSociete;
 import io.github.yusufbyn.redrising.monde.Vue;
 import net.fabricmc.fabric.api.attachment.v1.AttachmentRegistry;
@@ -22,6 +24,7 @@ import net.fabricmc.fabric.api.event.lifecycle.v1.ServerEntityEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.ClientboundSetSubtitleTextPacket;
@@ -74,6 +77,10 @@ import java.util.UUID;
  *     qui l'étourdissent. Ils ne paniquent pas quand on les frappe.</li>
  *     <li><b>Arrestation</b> : un chasseur au contact assez longtemps ({@link Traque#ARRESTATION}, un {@link Controle}).
  *     L'arrêté est emmené au poste de la Société le plus proche et interrogé : immobile, et il ne peut pas mourir.</li>
+ *     <li><b>Dans la mine</b> (G7.2.4) : les chasseurs apparaissent aux points d'entrée des Gris du plan, sur le niveau
+ *     du joueur ou un voisin ; un villageois ne sait pas monter une échelle, donc les Gris d'un autre niveau rejoignent
+ *     celui du joueur (ils « descendent par les puits » : on les déplace, hors de sa vue). La fouille reste dans les galeries.</li>
+ *     <li>Les monstres ignorent les Gris, qui ne les fuient pas ({@link GrisEtMonstres}).</li>
  *     <li>La traque et l'interrogatoire sont enregistrés sur le joueur : ils reprennent à sa reconnexion (de nouveaux
  *     chasseurs arrivent), et le temps passé hors ligne ne compte pas.</li>
  * </ul>
@@ -128,7 +135,15 @@ public final class TraqueGris {
     private static final Map<UUID, BlockPos> DERNIERE_POSITION_VUE = new HashMap<>();
     private static final Map<UUID, Controle> ARRETS = new HashMap<>();
     private static final Map<UUID, Long> DERNIER_TIR = new HashMap<>();
-    private static final Map<UUID, Ronde> FOUILLES = new HashMap<>();
+    private static final Map<UUID, Fouille> FOUILLES = new HashMap<>();
+    /** Joueur → tick du dernier ralentissement par une flèche (immunité, G7.2.4). */
+    private static final Map<UUID, Long> DERNIER_ETOURDISSEMENT = new HashMap<>();
+    /** Joueur → tick depuis lequel aucun de ses chasseurs n'est sur son niveau de la mine (ou hors de la mine avec lui). */
+    private static final Map<UUID, Long> SEUL_SUR_SON_NIVEAU = new HashMap<>();
+
+    /** Une fouille autour d'une position (la dernière où le joueur a été vu). */
+    private record Fouille(BlockPos centre, Ronde ronde) {
+    }
 
     private TraqueGris() {
     }
@@ -161,7 +176,12 @@ public final class TraqueGris {
                 return false;
             }
             if (source.getDirectEntity() instanceof AbstractArrow fleche && fleche.hasAttached(TIR)) {
-                joueur.addEffect(new MobEffectInstance(MobEffects.SLOWNESS, Traque.ETOURDISSEMENT, 4));
+                // Pas pendant le ralentissement en cours ni l'immunité qui le suit
+                long maintenant = joueur.level().getGameTime();
+                if (Traque.etourdit(DERNIER_ETOURDISSEMENT.get(joueur.getUUID()), maintenant)) {
+                    joueur.addEffect(new MobEffectInstance(MobEffects.SLOWNESS, Traque.ETOURDISSEMENT, 4));
+                    DERNIER_ETOURDISSEMENT.put(joueur.getUUID(), maintenant);
+                }
             }
             return true;
         });
@@ -243,6 +263,7 @@ public final class TraqueGris {
                 siens.add(nouveau);
             }
         }
+        recaler(joueur, siens, maintenant);
         boolean vu = siens.stream().anyMatch(chasseur -> voit(chasseur, joueur));
         if (vu) {
             DERNIERE_POSITION_VUE.put(joueur.getUUID(), joueur.blockPosition());
@@ -279,14 +300,14 @@ public final class TraqueGris {
             }
         } else {
             BlockPos derniere = DERNIERE_POSITION_VUE.getOrDefault(joueur.getUUID(), joueur.blockPosition());
-            Ronde fouille = FOUILLES.get(chasseur.getUUID());
-            if (fouille == null || !fouille.points().contains(coin(chasseur.level(), derniere, -RAYON_FOUILLE, -RAYON_FOUILLE))) {
-                fouille = fouilleAutour(chasseur.level(), derniere);
-            } else if (fouille.atteint(chasseur.blockPosition())) {
-                fouille = fouille.suivante();
+            Fouille fouille = FOUILLES.get(chasseur.getUUID());
+            if (fouille == null || !fouille.centre().equals(derniere)) {
+                fouille = new Fouille(derniere, fouilleAutour(chasseur.level(), derniere));
+            } else if (fouille.ronde().atteint(chasseur.blockPosition())) {
+                fouille = new Fouille(derniere, fouille.ronde().suivante());
             }
             FOUILLES.put(chasseur.getUUID(), fouille);
-            cerveau.setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(fouille.pointEnCours(), VITESSE_FOUILLE, 1));
+            cerveau.setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(fouille.ronde().pointEnCours(), VITESSE_FOUILLE, 1));
         }
         // Pas d'arrestation à travers un mur (joueur caché dans une cellule, contre la paroi) ; au contact, la fumée ne cache rien
         Controle arret = ARRETS.computeIfAbsent(chasseur.getUUID(), id -> new Controle(Traque.ARRESTATION, maintenant));
@@ -298,10 +319,40 @@ public final class TraqueGris {
         return chasseur.level() == joueur.level() && chasseur.distanceTo(joueur) <= Traque.VUE && Vue.voit(chasseur, joueur);
     }
 
-    /** Fouille : les quatre coins d'un carré autour de la dernière position connue, au niveau du sol (aussi pour les patrouilles). */
+    /**
+     * Fouille : les quatre coins d'un carré autour de la dernière position connue, au niveau du sol (aussi pour les
+     * patrouilles). Dans la mine, le sol n'est pas la surface : jusqu'à {@value #RAYON_FOUILLE} blocs dans chaque direction
+     * le long des galeries, au sol du niveau.
+     */
     static Ronde fouilleAutour(Level monde, BlockPos centre) {
+        PlanDeMine plan = monde instanceof ServerLevel serveur ? MineLykos.planEnJeu(serveur) : null;
+        int niveau = plan == null ? -1 : plan.niveauA(centre);
+        if (niveau >= 0) {
+            return fouilleDansLaMine(plan, centre.atY(plan.sols().get(niveau)));
+        }
         return Ronde.de(List.of(coin(monde, centre, -RAYON_FOUILLE, -RAYON_FOUILLE), coin(monde, centre, RAYON_FOUILLE, -RAYON_FOUILLE),
                 coin(monde, centre, RAYON_FOUILLE, RAYON_FOUILLE), coin(monde, centre, -RAYON_FOUILLE, RAYON_FOUILLE)));
+    }
+
+    private static Ronde fouilleDansLaMine(PlanDeMine plan, BlockPos centre) {
+        List<BlockPos> points = new ArrayList<>();
+        for (Direction sens : Direction.Plane.HORIZONTAL) {
+            BlockPos bout = centre;
+            for (int k = 1; k <= RAYON_FOUILLE; k++) {
+                BlockPos pas = centre.relative(sens, k);
+                if (!plan.interieur(pas.getX(), pas.getY(), pas.getZ()) || plan.interieur(pas.getX(), pas.getY() - 1, pas.getZ())) {
+                    break;
+                }
+                bout = pas;
+            }
+            if (!bout.equals(centre)) {
+                points.add(bout);
+            }
+        }
+        while (points.size() < 2) {
+            points.add(centre);
+        }
+        return Ronde.de(points);
     }
 
     private static BlockPos coin(Level monde, BlockPos centre, int dx, int dz) {
@@ -350,15 +401,30 @@ public final class TraqueGris {
         return chasseursDe(joueur).size();
     }
 
-    /** Un Gris à 24-32 blocs, au sol, hors de vue du joueur si possible (dix essais). */
+    /**
+     * Un nouveau chasseur. Dans la mine : à un point d'entrée des Gris ({@link #placerDansLaMine}) ; sinon à 24-32 blocs,
+     * au sol, hors de vue du joueur si possible (dix essais).
+     */
     private static @Nullable Villager faireApparaitre(ServerPlayer joueur) {
+        PlanDeMine plan = MineLykos.planEnJeu(joueur.level());
+        int niveau = plan == null ? -1 : plan.niveauA(joueur.blockPosition());
+        Villager gris = niveau >= 0 ? apparaitreDansLaMine(joueur, plan, niveau) : apparaitreEnSurface(joueur);
+        if (gris == null) {
+            return null;
+        }
+        // Un chasseur court, encaisse mieux qu'un villageois
+        gris.getAttribute(Attributes.MOVEMENT_SPEED).addOrReplacePermanentModifier(new AttributeModifier(BONUS, 0.5, AttributeModifier.Operation.ADD_MULTIPLIED_BASE));
+        gris.getAttribute(Attributes.MAX_HEALTH).addOrReplacePermanentModifier(new AttributeModifier(BONUS, 10, AttributeModifier.Operation.ADD_VALUE));
+        gris.getAttribute(Attributes.ARMOR).addOrReplacePermanentModifier(new AttributeModifier(BONUS, 6, AttributeModifier.Operation.ADD_VALUE));
+        gris.setHealth(gris.getMaxHealth());
+        enroler(gris, joueur);
+        return gris;
+    }
+
+    private static @Nullable Villager apparaitreEnSurface(ServerPlayer joueur) {
         ServerLevel monde = joueur.level();
         for (int essai = 0; essai < 10; essai++) {
-            double angle = joueur.getRandom().nextDouble() * 2 * Math.PI;
-            double rayon = Traque.APPARITION_MIN + joueur.getRandom().nextDouble() * (Traque.APPARITION_MAX - Traque.APPARITION_MIN);
-            int x = (int) Math.floor(joueur.getX() + Math.cos(angle) * rayon);
-            int z = (int) Math.floor(joueur.getZ() + Math.sin(angle) * rayon);
-            BlockPos sol = new BlockPos(x, monde.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z), z);
+            BlockPos sol = placeEnSurface(joueur);
             Villager gris = PnjCouleur.creer(monde, Vec3.atBottomCenterOf(sol), 0, Couleur.GRIS);
             if (gris == null) {
                 continue;
@@ -367,15 +433,126 @@ public final class TraqueGris {
                 gris.discard();
                 continue;
             }
-            // Un chasseur court, encaisse mieux qu'un villageois
-            gris.getAttribute(Attributes.MOVEMENT_SPEED).addOrReplacePermanentModifier(new AttributeModifier(BONUS, 0.5, AttributeModifier.Operation.ADD_MULTIPLIED_BASE));
-            gris.getAttribute(Attributes.MAX_HEALTH).addOrReplacePermanentModifier(new AttributeModifier(BONUS, 10, AttributeModifier.Operation.ADD_VALUE));
-            gris.getAttribute(Attributes.ARMOR).addOrReplacePermanentModifier(new AttributeModifier(BONUS, 6, AttributeModifier.Operation.ADD_VALUE));
-            gris.setHealth(gris.getMaxHealth());
-            enroler(gris, joueur);
             return gris;
         }
         return null;
+    }
+
+    /** Une place au hasard à 24-32 blocs du joueur, au sol de la surface. */
+    private static BlockPos placeEnSurface(ServerPlayer joueur) {
+        double angle = joueur.getRandom().nextDouble() * 2 * Math.PI;
+        double rayon = Traque.APPARITION_MIN + joueur.getRandom().nextDouble() * (Traque.APPARITION_MAX - Traque.APPARITION_MIN);
+        int x = (int) Math.floor(joueur.getX() + Math.cos(angle) * rayon);
+        int z = (int) Math.floor(joueur.getZ() + Math.sin(angle) * rayon);
+        return new BlockPos(x, joueur.level().getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z), z);
+    }
+
+    private static @Nullable Villager apparaitreDansLaMine(ServerPlayer joueur, PlanDeMine plan, int niveau) {
+        BlockPos depart = plan.entreesDeRepli(joueur.blockPosition(), niveau).stream().map(PlanDeMine.Entree::pos)
+                .filter(joueur.level()::isPositionEntityTicking).findFirst().orElse(null);
+        Villager gris = depart == null ? null : PnjCouleur.creer(joueur.level(), Vec3.atBottomCenterOf(depart), 0, Couleur.GRIS);
+        if (gris != null && !placerDansLaMine(gris, joueur, plan, niveau)) {
+            gris.discard();
+            return null;
+        }
+        return gris;
+    }
+
+    /**
+     * Place un Gris à un point d'entrée de la mine, hors de vue du joueur, sur une place dont les entités sont actives :
+     * un des {@value Traque#CHOIX_ENTREES} plus proches qui conviennent, au hasard, à 24-64 blocs, sur le niveau du joueur,
+     * sinon un voisin ({@link PlanDeMine#entreesPour}). Si aucun ne convient : le plus proche hors de vue, à n'importe quelle
+     * distance, sur le niveau du joueur d'abord ({@link PlanDeMine#entreesDeRepli}). Renvoie {@code false} (le Gris n'a pas bougé) si aucun point n'est hors de vue.
+     */
+    private static boolean placerDansLaMine(Villager gris, ServerPlayer joueur, PlanDeMine plan, int niveau) {
+        Vec3 avant = gris.position();
+        List<BlockPos> retenues = new ArrayList<>();
+        boolean pasEncoreCharge = false;
+        for (PlanDeMine.Entree entree : plan.entreesPour(joueur.blockPosition(), niveau, Traque.APPARITION_MINE_MIN, Traque.APPARITION_MINE_MAX)) {
+            if (retenues.size() >= Traque.CHOIX_ENTREES) {
+                break;
+            }
+            pasEncoreCharge |= !joueur.level().isPositionEntityTicking(entree.pos());
+            if (horsDeVue(gris, joueur, entree.pos())) {
+                retenues.add(entree.pos());
+            }
+        }
+        // Un point pas encore chargé (le joueur vient d'arriver) n'est pas un point qui ne convient pas : on attend
+        if (retenues.isEmpty() && !pasEncoreCharge) {
+            for (PlanDeMine.Entree entree : plan.entreesDeRepli(joueur.blockPosition(), niveau)) {
+                if (horsDeVue(gris, joueur, entree.pos())) {
+                    retenues.add(entree.pos());
+                    break;
+                }
+            }
+        }
+        if (retenues.isEmpty()) {
+            gris.setPos(avant);
+            return false;
+        }
+        BlockPos place = retenues.get(joueur.getRandom().nextInt(retenues.size()));
+        gris.teleportTo(place.getX() + 0.5, place.getY(), place.getZ() + 0.5);
+        return true;
+    }
+
+    /** Le joueur est sorti de la mine : un Gris resté dessous remonte à 24-32 blocs de lui, hors de vue si possible (dix essais). */
+    private static boolean placerEnSurface(Villager gris, ServerPlayer joueur) {
+        Vec3 avant = gris.position();
+        for (int essai = 0; essai < 10; essai++) {
+            BlockPos sol = placeEnSurface(joueur);
+            if (joueur.level().isPositionEntityTicking(sol)) {
+                gris.setPos(Vec3.atBottomCenterOf(sol));
+                if (essai == 9 || !Vue.voit(gris, joueur)) {
+                    gris.teleportTo(sol.getX() + 0.5, sol.getY(), sol.getZ() + 0.5);
+                    return true;
+                }
+            }
+        }
+        gris.setPos(avant);
+        return false;
+    }
+
+    /** Le Gris, posé là, serait-il hors de vue du joueur ? (Ce que voit un PNJ passe toujours par {@link Vue#voit}.) */
+    private static boolean horsDeVue(Villager gris, ServerPlayer joueur, BlockPos place) {
+        if (!joueur.level().isPositionEntityTicking(place)) {
+            return false;
+        }
+        gris.setPos(Vec3.atBottomCenterOf(place));
+        return !Vue.voit(gris, joueur);
+    }
+
+    /**
+     * Les Gris suivent le joueur d'un niveau de la mine à l'autre (G7.2.4) : un villageois ne sait pas trouver un chemin par
+     * une échelle. Si aucun de ses chasseurs n'est sur son niveau (ou hors de la mine avec lui) pendant
+     * {@value Traque#RECALAGE} ticks, ceux qui n'y sont pas l'y rejoignent, hors de sa vue. Le même chasseur est déplacé :
+     * son arrestation et sa fouille en cours restent, ce n'est ni une mort ni un Gris disparu.
+     */
+    private static void recaler(ServerPlayer joueur, List<Villager> siens, long maintenant) {
+        PlanDeMine plan = MineLykos.planEnJeu(joueur.level());
+        if (plan == null || siens.isEmpty()) {
+            SEUL_SUR_SON_NIVEAU.remove(joueur.getUUID());
+            return;
+        }
+        int niveau = plan.niveauA(joueur.blockPosition());
+        if (siens.stream().anyMatch(chasseur -> plan.niveauA(chasseur.blockPosition()) == niveau)) {
+            SEUL_SUR_SON_NIVEAU.remove(joueur.getUUID());
+            return;
+        }
+        long depuis = SEUL_SUR_SON_NIVEAU.computeIfAbsent(joueur.getUUID(), id -> maintenant);
+        if (maintenant - depuis < Traque.RECALAGE) {
+            return;
+        }
+        SEUL_SUR_SON_NIVEAU.remove(joueur.getUUID());
+        int recales = 0;
+        for (Villager chasseur : siens) {
+            if (niveau >= 0 ? placerDansLaMine(chasseur, joueur, plan, niveau) : placerEnSurface(chasseur, joueur)) {
+                chasseur.getBrain().eraseMemory(MemoryModuleType.PATH);
+                chasseur.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
+                recales++;
+            }
+        }
+        RedRising.LOGGER.info("Traque de {} : {} chasseurs le rejoignent ({})", joueur.getPlainTextName(), recales,
+                niveau >= 0 ? "niveau " + (niveau + 1) + " de la mine" : "hors de la mine");
     }
 
     private static void enroler(Villager gris, ServerPlayer joueur) {
@@ -418,6 +595,8 @@ public final class TraqueGris {
         }
         chasseursDe(joueur).forEach(TraqueGris::liberer);
         DERNIERE_POSITION_VUE.remove(joueur.getUUID());
+        DERNIER_ETOURDISSEMENT.remove(joueur.getUUID());
+        SEUL_SUR_SON_NIVEAU.remove(joueur.getUUID());
     }
 
     /**
