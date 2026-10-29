@@ -108,6 +108,7 @@ public class MineLykosTest implements FabricClientGameTest {
                     forageEtHelium3(monde, context);
                     reseauEtMonstres(monde, context);
                     voiesEtWagonnets(monde, context);
+                    reperesEtDescente(monde, context);
                 } else {
                     charger(monde, PlanMars.EMPRISE_MINE);
                 }
@@ -291,7 +292,7 @@ public class MineLykosTest implements FabricClientGameTest {
             if (etat.is(Blocks.SPRUCE_LOG)) {
                 piliers.add(cle);
             } else if (!(etat.isAir() || etat.is(Blocks.LADDER) || etat.is(Blocks.SPRUCE_FENCE) || etat.is(Blocks.SPRUCE_PLANKS) || etat.is(Blocks.CHEST)
-                    || etat.is(Blocks.LANTERN) || etat.is(Blocks.RAIL) || etat.is(Blocks.POWERED_RAIL))) {
+                    || etat.is(Blocks.LANTERN) || etat.is(Blocks.RAIL) || etat.is(Blocks.POWERED_RAIL) || etat.is(BlockTags.WALL_SIGNS))) {
                 if (malPoses++ < 8) {
                     RedRising.LOGGER.warn("[G7.2.1] Pas vide : {} en {}", etat, pos.toShortString());
                 }
@@ -831,6 +832,124 @@ public class MineLykosTest implements FabricClientGameTest {
         }
         double tick = monde.getServer().computeOnServer(server -> server.getAverageTickTimeNanos() / 1e6);
         RedRising.LOGGER.info("[G7.2.3] Temps par tick, wagonnets chargés : {} ms", String.format(Locale.ROOT, "%.2f", tick));
+    }
+
+    // --- Repères, points d'entrée des Gris, descente (G7.2.3) ---
+
+    /**
+     * Le chemin principal, du haut au fond : l'échelle du puits principal d'une traite, du bouchon au dernier niveau ; sur
+     * chaque niveau, un quai où tenir debout ; au niveau de la colonie, la branche jusqu'à la caverne. Les panneaux (chaque
+     * niveau, la colonie, les puits secondaires), la bande de couleur, et les points d'entrée des Gris (au sol du réseau
+     * éclairé, où l'on tient debout, au moins un par niveau). Une capture du quai du niveau 1.
+     */
+    private static void reperesEtDescente(TestSingleplayerContext monde, ClientGameTestContext context) {
+        String defauts = monde.getServer().computeOnServer(server -> {
+            ServerLevel niveau = server.overworld();
+            PlanDeMine plan = plan(server);
+            List<String> liste = new ArrayList<>();
+            // Descente : l'échelle d'une traite
+            PlanDeMine.Puits principal = plan.puitsPrincipal();
+            int echelles = 0;
+            for (int y = principal.bas(); y <= principal.haut(); y++) {
+                if (niveau.getBlockState(PlanDeMine.echelle(principal, y)).is(Blocks.LADDER)) {
+                    echelles++;
+                } else if (liste.size() < 5) {
+                    liste.add("échelle coupée en y " + y);
+                }
+            }
+            // Un quai par niveau : sol plein, deux blocs libres
+            for (int sol : plan.sols()) {
+                BlockPos quai = plan.centre().atY(sol).relative(Direction.EAST, 3);
+                if (niveau.getBlockState(quai.below()).isAir() || !niveau.getBlockState(quai).isAir() || !niveau.getBlockState(quai.above()).isAir()) {
+                    liste.add("quai du niveau en y " + sol + " pas praticable");
+                }
+            }
+            // La branche de la colonie : à chaque pas jusqu'à la caverne, un passage libre (deux blocs de haut) sur la largeur
+            // de l'axe (le pilier qui tient l'échelle du puits est sur la ligne du milieu : on le contourne)
+            PlanDeMine.Caverne caverne = plan.caverne();
+            Direction versColonie = Direction.getApproximateNearest(caverne.x() - plan.centre().getX(), 0, caverne.z() - plan.centre().getZ());
+            BlockPos.MutableBlockPos pas = plan.centre().atY(caverne.sol()).relative(versColonie, 2).mutable();
+            int blocs = 0;
+            while (!caverne.contient(pas.getX(), pas.getY(), pas.getZ()) && blocs < 100) {
+                boolean libre = false;
+                for (int ecart = -2; ecart <= 2; ecart++) {
+                    BlockPos cote = pas.relative(versColonie.getClockWise(), ecart);
+                    libre |= !niveau.getBlockState(cote).isSolid() && !niveau.getBlockState(cote.above()).isSolid();
+                }
+                if (!libre) {
+                    liste.add("branche de la colonie bouchée en " + pas.toShortString());
+                    break;
+                }
+                pas.move(versColonie);
+                blocs++;
+            }
+            // Panneaux : un par niveau, la colonie, les puits secondaires
+            int niveaux = 0;
+            int colonie = 0;
+            int puitsSecondaires = 0;
+            for (PlanDeMine.Panneau panneau : plan.panneaux()) {
+                if (!(niveau.getBlockEntity(panneau.pos()) instanceof net.minecraft.world.level.block.entity.SignBlockEntity bloc)) {
+                    liste.add("pas de panneau en " + panneau.pos().toShortString());
+                    continue;
+                }
+                if (!bloc.getFrontText().equals(MineLykos.texte(panneau)) && !bloc.getFrontText().getMessage(1, false).equals(MineLykos.texte(panneau).getMessage(1, false))) {
+                    liste.add("texte du panneau en " + panneau.pos().toShortString() + " : " + bloc.getFrontText().getMessage(1, false));
+                }
+                switch (panneau.texte()) {
+                    case NIVEAU -> niveaux++;
+                    case COLONIE_DROITE, COLONIE_GAUCHE -> colonie++;
+                    case PUITS_VERS -> puitsSecondaires++;
+                }
+            }
+            if (niveaux != plan.sols().size() || colonie != 1 || puitsSecondaires != 2 * (plan.puits().size() - 1)) {
+                liste.add("panneaux : " + niveaux + " de niveau, " + colonie + " de la colonie, " + puitsSecondaires + " de puits secondaires");
+            }
+            // Bande de couleur, par niveau
+            int[] bandes = new int[4];
+            for (Map.Entry<BlockPos, Integer> bande : plan.bandes().entrySet()) {
+                if (niveau.getBlockState(bande.getKey()).is(BlockTags.TERRACOTTA)) {
+                    bandes[bande.getValue()]++;
+                }
+            }
+            for (int ligne = PlanDeMine.NIVEAUX_MAX - plan.sols().size(); ligne < 4; ligne++) {
+                if (bandes[ligne] < 200) {
+                    liste.add(bandes[ligne] + " blocs de bande à la ligne " + ligne);
+                }
+            }
+            // Points d'entrée des Gris
+            java.util.Set<BlockPos> reseau = new java.util.HashSet<>(plan.reseauEclaire());
+            int[] parNiveau = new int[plan.sols().size()];
+            for (PlanDeMine.Entree entree : plan.entreesDesGris()) {
+                BlockPos pos = entree.pos();
+                boolean debout = niveau.getBlockState(pos.below()).isSolid() && !niveau.getBlockState(pos).isSolid() && !niveau.getBlockState(pos.above()).isSolid();
+                if (!reseau.contains(pos) || !debout) {
+                    liste.add("point d'entrée en " + pos.toShortString() + (debout ? " hors du réseau éclairé" : " où l'on ne tient pas debout"));
+                }
+                parNiveau[entree.niveau()]++;
+            }
+            for (int n : parNiveau) {
+                if (n == 0) {
+                    liste.add("un niveau sans point d'entrée des Gris : " + java.util.Arrays.toString(parNiveau));
+                    break;
+                }
+            }
+            RedRising.LOGGER.info("[G7.2.3] Descente : échelle de {} barreaux d'une traite (y {} à {}), {} quais, {} blocs jusqu'à la caverne ; panneaux : {} de niveau, {} de la colonie, {} de puits secondaires ; bande {} ; points d'entrée des Gris par niveau {}",
+                    echelles, principal.bas(), principal.haut(), plan.sols().size(), blocs, niveaux, colonie, puitsSecondaires, java.util.Arrays.toString(bandes),
+                    java.util.Arrays.toString(parNiveau));
+            return String.join(" ; ", liste.subList(0, Math.min(10, liste.size())));
+        });
+        if (!defauts.isEmpty()) {
+            throw new AssertionError("Repères et descente : " + defauts);
+        }
+        // Capture : le quai du niveau 1, face au panneau
+        PlanDeMine.Panneau panneau = monde.getServer().computeOnServer(server -> plan(server).panneaux().stream()
+                .filter(p -> p.texte() == PlanDeMine.Texte.NIVEAU && p.numero() == 1).findFirst().orElseThrow());
+        BlockPos devant = panneau.pos().relative(panneau.face(), 3).below();
+        float lacet = panneau.face().getOpposite().toYRot();
+        monde.getServer().runCommand("tp @a[limit=1] " + (devant.getX() + 0.5) + " " + devant.getY() + " " + (devant.getZ() + 0.5) + " " + lacet + " 0");
+        context.waitTicks(40);
+        monde.getConnection().waitForChunksRender();
+        OutilsTest.garderCapture(context.takeScreenshot("mine-quai"));
     }
 
     // --- Colonne du puits ---

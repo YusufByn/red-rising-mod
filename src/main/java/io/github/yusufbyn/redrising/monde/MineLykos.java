@@ -28,6 +28,14 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.world.level.block.LadderBlock;
 import net.minecraft.world.level.block.LanternBlock;
+import net.minecraft.world.level.block.WallSignBlock;
+import net.minecraft.nbt.NbtOps;
+import net.minecraft.nbt.Tag;
+import net.minecraft.resources.RegistryOps;
+import net.minecraft.world.level.block.entity.SignText;
+import net.minecraft.world.item.DyeColor;
+import net.minecraft.network.chat.Component;
+import java.util.Map;
 import net.minecraft.world.level.block.PoweredRailBlock;
 import net.minecraft.world.level.block.RailBlock;
 import net.minecraft.world.level.block.state.properties.RailShape;
@@ -414,6 +422,10 @@ public final class MineLykos extends Structure {
     private static final BlockState PILIER = Blocks.SPRUCE_LOG.defaultBlockState();
     private static final BlockState ECHELLE = Blocks.LADDER.defaultBlockState().setValue(LadderBlock.FACING, Direction.SOUTH);
     private static final BlockState BOUCHON = Blocks.POLISHED_ANDESITE.defaultBlockState();
+    /** 🟡 Bande de couleur de l'axe, une teinte par niveau (du haut vers le bas, comptés pour 4 niveaux). */
+    static final BlockState[] BANDES = {Blocks.DYED_TERRACOTTA.pick(DyeColor.WHITE).defaultBlockState(),
+            Blocks.DYED_TERRACOTTA.pick(DyeColor.YELLOW).defaultBlockState(), Blocks.DYED_TERRACOTTA.pick(DyeColor.ORANGE).defaultBlockState(),
+            Blocks.DYED_TERRACOTTA.pick(DyeColor.RED).defaultBlockState()};
     /** Butoir au bout d'une voie : un bloc plein, le même bois que les piliers. */
     public static final BlockState BUTOIR = Blocks.SPRUCE_LOG.defaultBlockState();
     /** Tables de butin des coffres d'outils ({@code data/redrising/loot_table/chests/}). */
@@ -520,6 +532,34 @@ public final class MineLykos extends Structure {
                 }
             }
         }
+        // Repères (G7.2.3) : la bande de couleur (à la place de la roche seulement), les panneaux (cirés : on ne les réécrit pas)
+        for (Map.Entry<BlockPos, Integer> bande : plan.bandes().entrySet()) {
+            BlockPos mur = bande.getKey();
+            if (colonne.isInside(mur)) {
+                BlockState roche = monde.getBlockState(mur);
+                if (roche.is(BlockTags.STONE_ORE_REPLACEABLES) || roche.is(BlockTags.DEEPSLATE_ORE_REPLACEABLES)) {
+                    monde.setBlock(mur, BANDES[bande.getValue()], Block.UPDATE_CLIENTS);
+                }
+            }
+        }
+        for (PlanDeMine.Panneau panneau : plan.panneaux()) {
+            if (colonne.isInside(panneau.pos())) {
+                BlockPos place = panneau.pos();
+                monde.setBlock(place, Blocks.SPRUCE_WALL_SIGN.defaultBlockState().setValue(WallSignBlock.FACING, panneau.face()), Block.UPDATE_CLIENTS);
+                // Le texte par les données du chunk, relues quand il est fini : SignBlockEntity.setText préviendrait le monde
+                // d'une mise à jour, ce qu'on ne peut pas faire depuis un fil de génération (blocage constaté)
+                RegistryOps<Tag> ops = monde.registryAccess().createSerializationContext(NbtOps.INSTANCE);
+                CompoundTag donnees = new CompoundTag();
+                donnees.putString("id", "minecraft:sign");
+                donnees.putInt("x", place.getX());
+                donnees.putInt("y", place.getY());
+                donnees.putInt("z", place.getZ());
+                donnees.put("front_text", SignText.DIRECT_CODEC.encodeStart(ops, texte(panneau)).getOrThrow());
+                donnees.put("back_text", SignText.DIRECT_CODEC.encodeStart(ops, new SignText()).getOrThrow());
+                donnees.putBoolean("is_waxed", true);
+                monde.getChunk(place).setBlockEntityNbt(donnees);
+            }
+        }
         // Coffres d'outils (G7.2.2) : sans camp, leur contenu tiré à la première ouverture
         for (PlanDeMine.Coffre coffre : plan.coffres()) {
             if (colonne.isInside(coffre.pos())) {
@@ -565,6 +605,18 @@ public final class MineLykos extends Structure {
             case HELIUM3 -> ObjetsMine.MINERAI_HELIUM3;
         };
         return bloc.defaultBlockState();
+    }
+
+    /** Le texte d'un panneau : des clés de traduction, que le client affiche dans sa langue. */
+    public static SignText texte(PlanDeMine.Panneau panneau) {
+        SignText texte = new SignText();
+        return switch (panneau.texte()) {
+            case NIVEAU -> texte.setMessage(1, Component.translatable("panneau.redrising.niveau", panneau.numero()));
+            case COLONIE_DROITE -> texte.setMessage(1, Component.translatable("panneau.redrising.colonie_droite"));
+            case COLONIE_GAUCHE -> texte.setMessage(1, Component.translatable("panneau.redrising.colonie_gauche"));
+            case PUITS_VERS -> texte.setMessage(1, Component.translatable("panneau.redrising.puits"))
+                    .setMessage(2, Component.translatable("panneau.redrising.puits_vers", panneau.numero()));
+        };
     }
 
     /** Un rail dans le sens de sa voie ; un rail de propulsion allumé, avec sa torche de redstone deux blocs dessous. */

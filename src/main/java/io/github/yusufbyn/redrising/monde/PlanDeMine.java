@@ -47,6 +47,8 @@ import java.util.concurrent.ConcurrentHashMap;
  *     <li><b>Voies</b> (G7.2.3) : des rails au milieu de chaque branche de l'axe, un butoir à chaque bout (avant le quai du
  *     puits principal), un rail de propulsion tous les {@value #PAS_PROPULSION} blocs ; deux voies de garage par branche, dans
  *     une niche à côté du passage, avec un wagonnet chacune.</li>
+ *     <li><b>Repères</b> (G7.2.3) : panneaux aux paliers des puits (niveau, colonie, puits secondaires), une bande de couleur
+ *     le long des murs de l'axe, une teinte par niveau ; et les <b>points d'entrée des Gris</b> pour la traque (G7.2.4).</li>
  * </ul>
  */
 public final class PlanDeMine {
@@ -186,6 +188,19 @@ public final class PlanDeMine {
     public record Garage(BoundingBox niche, List<Rail> rails, BlockPos wagonnet) {
     }
 
+    /** Ce que dit un panneau : le niveau, la colonie (et de quel côté), ou le niveau où mène un puits secondaire. */
+    public enum Texte {
+        NIVEAU, COLONIE_DROITE, COLONIE_GAUCHE, PUITS_VERS
+    }
+
+    /** Un panneau contre un mur : sa place, vers où il regarde, son texte et le numéro de niveau qu'il affiche (1 en haut). */
+    public record Panneau(BlockPos pos, Direction face, Texte texte, int numero) {
+    }
+
+    /** Un point d'entrée des Gris (G7.2.4) : au sol du réseau éclairé, et son niveau (0 en haut). */
+    public record Entree(BlockPos pos, int niveau) {
+    }
+
     /** Un puits : 3 × 3 de vide de {@code bas} à {@code haut} compris, autour de (x, z). */
     public record Puits(int x, int z, int bas, int haut, boolean principal) {
         public BoundingBox interieur() {
@@ -253,6 +268,10 @@ public final class PlanDeMine {
     private final List<Voie> voies = new ArrayList<>();
     /** Les voies de garage ; vides tant qu'elles ne sont pas tirées (elles sont tirées en dernier, et creusent le vide). */
     private List<Garage> garages = List.of();
+    private final List<Panneau> panneaux = new ArrayList<>();
+    /** La bande de couleur de l'axe : chaque bloc de mur, et la ligne de son niveau (0 à 3, comptée pour 4 niveaux). */
+    private final Map<BlockPos, Integer> bandes = new java.util.LinkedHashMap<>();
+    private final List<Entree> entrees = new ArrayList<>();
     /** Les blocs de filon de chaque chunk, pour la pose. */
     private final Map<Long, List<FilonsDeMine.Bloc>> filonsParChunk = new HashMap<>();
     private final Set<BlockPos> poteaux;
@@ -292,6 +311,132 @@ public final class PlanDeMine {
         this.niveauxAxes = List.copyOf(niveauxAxes);
         this.lanternes = placerLanternes();
         this.garages = poserVoies();
+        poserReperes();
+        choisirEntrees();
+    }
+
+    // --- Repères et points d'entrée des Gris (G7.2.3) ---
+
+    /**
+     * Les panneaux : au quai du puits principal sur chaque niveau (« Niveau N »), au quai de la branche de la colonie sur son
+     * niveau (« Colonie → », la flèche du côté de la colonie pour qui lit), aux deux bouts de chaque puits secondaire
+     * (« Puits → niveau N »). La bande de couleur : le mur de chaque côté de l'axe, à hauteur d'yeux.
+     */
+    private void poserReperes() {
+        int niveauColonie = sols.indexOf(caverne.sol());
+        Direction versColonie = Direction.getApproximateNearest(caverne.x() - centre.getX(), 0, caverne.z() - centre.getZ());
+        for (int niveau = 0; niveau < sols.size(); niveau++) {
+            int sol = sols.get(niveau);
+            Panneau niveauPose = null;
+            for (Direction sens : Direction.Plane.HORIZONTAL) {
+                for (Direction cote : List.of(sens.getClockWise(), sens.getCounterClockWise())) {
+                    BlockPos pos = centre.atY(sol + 1).relative(sens, 3).relative(cote, 2);
+                    BlockPos appui = pos.relative(cote);
+                    if (!interieur(pos.getX(), pos.getY(), pos.getZ()) || interieur(appui.getX(), appui.getY(), appui.getZ())
+                            || (niveauPose != null && niveauPose.pos().equals(pos))) {
+                        continue;
+                    }
+                    if (niveauPose == null && (niveau != niveauColonie || sens != versColonie)) {
+                        niveauPose = new Panneau(pos, cote.getOpposite(), Texte.NIVEAU, niveau + 1);
+                        panneaux.add(niveauPose);
+                    } else if (niveau == niveauColonie && sens == versColonie && panneaux.stream().noneMatch(p -> p.texte() != Texte.NIVEAU && p.texte() != Texte.PUITS_VERS)) {
+                        // Pour qui regarde le mur (vers cote), sa droite est cote.getClockWise()
+                        Texte texte = versColonie == cote.getClockWise() ? Texte.COLONIE_DROITE : Texte.COLONIE_GAUCHE;
+                        panneaux.add(new Panneau(pos, cote.getOpposite(), texte, niveau + 1));
+                    }
+                }
+            }
+        }
+        for (Puits p : puits) {
+            if (p.principal()) {
+                continue;
+            }
+            int bas = sols.indexOf(p.bas());
+            int haut = sols.indexOf(p.haut() - HAUTEUR + 1);
+            panneauDePuits(p, p.bas() + 1, haut + 1);
+            panneauDePuits(p, p.haut() - HAUTEUR + 2, bas + 1);
+        }
+        // La bande : de chaque côté de l'axe, à un bloc au-dessus du sol, là où le mur est de la roche
+        for (int i = 0; i < axes.size(); i++) {
+            BoundingBox axe = axes.get(i);
+            int ligne = NIVEAUX_MAX - sols.size() + niveauxAxes.get(i);
+            boolean surX = axe.getXSpan() > axe.getZSpan();
+            int y = axe.minY() + 1;
+            for (int t = surX ? axe.minX() : axe.minZ(); t <= (surX ? axe.maxX() : axe.maxZ()); t++) {
+                for (int travers : new int[]{(surX ? axe.minZ() : axe.minX()) - 1, (surX ? axe.maxZ() : axe.maxX()) + 1}) {
+                    BlockPos pos = surX ? new BlockPos(t, y, travers) : new BlockPos(travers, y, t);
+                    if (!interieur(pos.getX(), pos.getY(), pos.getZ()) && !caverne.boite().isInside(pos)) {
+                        bandes.putIfAbsent(pos, ligne);
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Un panneau « Puits → niveau N » à cette hauteur : contre une paroi du puits (à côté de l'échelle, pas sur elle) ; à un
+     * carrefour, où des galeries traversent les parois, contre le mur d'une de ces galeries (ou de l'axe), à 3 à 5 blocs du puits.
+     */
+    private void panneauDePuits(Puits p, int y, int numero) {
+        BlockPos milieu = new BlockPos(p.x(), y, p.z());
+        List<BlockPos[]> candidats = new ArrayList<>();
+        for (Direction paroi : Direction.Plane.HORIZONTAL) {
+            for (int k : new int[]{1, -1, 0}) {
+                BlockPos pos = milieu.relative(paroi).relative(paroi.getClockWise(), k);
+                candidats.add(new BlockPos[]{pos, pos.relative(paroi)});
+            }
+        }
+        for (int distance = 3; distance <= 5; distance++) {
+            for (Direction galerie : Direction.Plane.HORIZONTAL) {
+                for (Direction cote : List.of(galerie.getClockWise(), galerie.getCounterClockWise())) {
+                    // Une galerie (3 de large) ou l'axe (5 de large)
+                    for (int ecart : new int[]{DEMI_LARGEUR, DEMI_LARGEUR_AXE}) {
+                        BlockPos pos = milieu.relative(galerie, distance).relative(cote, ecart);
+                        candidats.add(new BlockPos[]{pos, pos.relative(cote)});
+                    }
+                }
+            }
+        }
+        for (BlockPos[] candidat : candidats) {
+            BlockPos pos = candidat[0];
+            BlockPos appui = candidat[1];
+            if (interieur(pos.getX(), pos.getY(), pos.getZ()) && !interieur(appui.getX(), appui.getY(), appui.getZ())
+                    && !pos.equals(echelle(p, y)) && puits.stream().noneMatch(autre -> pilier(autre, y).equals(appui) || pilier(autre, y).equals(pos))
+                    && lanternes.stream().noneMatch(l -> l.pos().equals(pos)) && panneaux.stream().noneMatch(autre -> autre.pos().equals(pos))) {
+                Direction face = Direction.getApproximateNearest(pos.getX() - appui.getX(), 0, pos.getZ() - appui.getZ());
+                panneaux.add(new Panneau(pos, face, Texte.PUITS_VERS, numero));
+                return;
+            }
+        }
+    }
+
+    /**
+     * Les points d'entrée des Gris, tous au sol du réseau éclairé, où un Gris tient debout : le quai du puits principal dans
+     * chaque direction, les nœuds de l'axe (sauf sur un butoir), le fond de chaque puits secondaire. La traque (G7.2.4)
+     * choisira le plus proche à 24 blocs au moins, hors de vue, sur le niveau du joueur ou un voisin.
+     */
+    private void choisirEntrees() {
+        Set<BlockPos> sol = new HashSet<>(reseauEclaire());
+        for (int niveau = 0; niveau < sols.size(); niveau++) {
+            BlockPos milieu = centre.atY(sols.get(niveau));
+            for (Direction sens : Direction.Plane.HORIZONTAL) {
+                ajouterEntree(sol, milieu.relative(sens, 3), niveau);
+                for (int k = 1; k <= DEMI_GRILLE; k++) {
+                    ajouterEntree(sol, milieu.relative(sens, k * ESPACEMENT), niveau);
+                }
+            }
+        }
+        for (Puits p : puits) {
+            if (!p.principal()) {
+                ajouterEntree(sol, new BlockPos(p.x(), p.bas(), p.z()), sols.indexOf(p.bas()));
+            }
+        }
+    }
+
+    private void ajouterEntree(Set<BlockPos> sol, BlockPos pos, int niveau) {
+        if (sol.contains(pos) && interieur(pos.getX(), pos.getY() + 1, pos.getZ()) && !interieur(pos.getX(), pos.getY() - 1, pos.getZ())) {
+            entrees.add(new Entree(pos, niveau));
+        }
     }
 
     // --- Voies (G7.2.3) ---
@@ -1268,6 +1413,19 @@ public final class PlanDeMine {
 
     public List<Garage> garages() {
         return garages;
+    }
+
+    public List<Panneau> panneaux() {
+        return panneaux;
+    }
+
+    public Map<BlockPos, Integer> bandes() {
+        return bandes;
+    }
+
+    /** Les points d'entrée des Gris (G7.2.4). */
+    public List<Entree> entreesDesGris() {
+        return entrees;
     }
 
     /** Tous les blocs de filon (minerais riches et hélium-3). */

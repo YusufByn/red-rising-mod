@@ -246,6 +246,11 @@
   "commande.redrising.region.apparition": "Plan de Mars, tiré depuis le point d'apparition %s :",
   "commande.redrising.region.ligne": "%s : %s, à %s blocs du point d'apparition",
   "commande.redrising.region.tp": "%s téléporté à la région %s (%s)",
+  "panneau.redrising.niveau": "Niveau %s",
+  "panneau.redrising.colonie_droite": "Colonie →",
+  "panneau.redrising.colonie_gauche": "← Colonie",
+  "panneau.redrising.puits": "Puits",
+  "panneau.redrising.puits_vers": "→ niveau %s",
   "commande.redrising.mine.aucune": "Ce monde n'a pas de mine (pas de plan des régions, ou mine pas encore générée)",
   "commande.redrising.mine.monstres": "Monstres de la mine autour de %s : %s (plafond %s, à %s blocs ou moins)"
 }

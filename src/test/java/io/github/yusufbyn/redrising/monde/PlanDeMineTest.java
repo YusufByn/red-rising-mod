@@ -360,6 +360,39 @@ class PlanDeMineTest {
     }
 
     @Test
+    void reperesEtEntreesDesGris() {
+        for (long graine : GRAINES) {
+            PlanDeMine plan = PlanDeMine.tirer(graine, CENTRE, 62, 66, 66);
+            long niveaux = plan.panneaux().stream().filter(p -> p.texte() == PlanDeMine.Texte.NIVEAU).count();
+            long colonie = plan.panneaux().stream().filter(p -> p.texte() == PlanDeMine.Texte.COLONIE_DROITE || p.texte() == PlanDeMine.Texte.COLONIE_GAUCHE).count();
+            long puits = plan.panneaux().stream().filter(p -> p.texte() == PlanDeMine.Texte.PUITS_VERS).count();
+            assertEquals(plan.sols().size(), niveaux, "graine " + graine + " : panneaux de niveau");
+            assertEquals(1, colonie, "graine " + graine + " : panneau de la colonie");
+            assertEquals(2L * (plan.puits().size() - 1), puits, "graine " + graine + " : panneaux de puits secondaires (un à chaque bout)");
+            Set<BlockPos> places = new HashSet<>();
+            for (PlanDeMine.Panneau panneau : plan.panneaux()) {
+                BlockPos pos = panneau.pos();
+                BlockPos appui = pos.relative(panneau.face().getOpposite());
+                assertTrue(places.add(pos), "graine " + graine + " : deux panneaux en " + pos);
+                assertTrue(plan.interieur(pos.getX(), pos.getY(), pos.getZ()) && !plan.interieur(appui.getX(), appui.getY(), appui.getZ()),
+                        "graine " + graine + " : panneau sans mur en " + pos);
+            }
+            for (BlockPos mur : plan.bandes().keySet()) {
+                assertFalse(plan.interieur(mur.getX(), mur.getY(), mur.getZ()), "graine " + graine + " : bande dans le vide en " + mur);
+            }
+            Set<BlockPos> reseau = new HashSet<>(plan.reseauEclaire());
+            int[] parNiveau = new int[plan.sols().size()];
+            for (PlanDeMine.Entree entree : plan.entreesDesGris()) {
+                assertTrue(reseau.contains(entree.pos()), "graine " + graine + " : point d'entrée hors du réseau éclairé en " + entree.pos());
+                parNiveau[entree.niveau()]++;
+            }
+            for (int n : parNiveau) {
+                assertTrue(n >= 4, "graine " + graine + " : points d'entrée par niveau " + java.util.Arrays.toString(parNiveau));
+            }
+        }
+    }
+
+    @Test
     void colonieReservee() {
         PlanDeMine plan = PlanDeMine.tirer(42, CENTRE, 62, 66, 66);
         PlanDeMine.Caverne caverne = plan.caverne();
@@ -384,6 +417,8 @@ class PlanDeMineTest {
         assertEquals(a.coffres(), b.coffres());
         assertEquals(a.voies(), b.voies());
         assertEquals(a.garages(), b.garages());
+        assertEquals(a.panneaux(), b.panneaux());
+        assertEquals(a.entreesDesGris(), b.entreesDesGris());
         assertSame(PlanDeMine.de(5, CENTRE, 62, 66, 66), PlanDeMine.de(5, CENTRE, 62, 66, 66));
     }
 }
