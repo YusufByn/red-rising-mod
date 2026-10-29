@@ -60,23 +60,21 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * G7.2.1 : la mine sur de vrais mondes Mars neufs.
+ * La mine sur de vrais mondes Mars neufs (G7.2) : les épreuves rapides, lancées à chaque suite. Les épreuves longues
+ * (emprise entière, 2 minutes de monstres, comptage des minerais, coût des wagonnets) sont dans {@link MineLykosLongTest},
+ * lancées seulement avec {@code -PtestsLongs}, quand le code de la mine ou de la génération change.
  *
  * <ul>
- *     <li>Une graine, toute l'emprise générée (17 × 17 chunks) : chaque chunk a la référence de la mine ; parcours en
- *     largeur sur les vrais blocs depuis le bas du puits, qui atteint tout le vide du plan et rien d'autre (aucune fuite vers
- *     une grotte, aucun fluide contre le vide) ; aucun bloc de la mine ne voit le ciel ; aucune autre structure (sauf un
- *     fort) ne croise le volume ; aucun générateur de monstres dans l'emprise ; coût de la pose et temps par tick.</li>
- *     <li>Trois graines : la colonne du puits principal, du haut de la mine au bouchon, sans grotte ni fluide autour ; le
- *     bouchon, entre 3 et 5 blocs sous la surface de la colonne, sous de la roche pleine ; rien du puits ne voit le ciel ;
- *     pas de butte en surface.</li>
- *     <li>Forts : la distance du plus proche, et une mine écartée d'un fort posé exprès sur son chemin.</li>
- *     <li>G7.2.2 : salles, filons et coffres d'outils comptés sur les trois graines (emprise entière) ; une salle de forage
- *     en capture ; le minerai d'hélium-3 (lumière, pioche en pierre).</li>
+ *     <li>Trois graines : la mine loin des forts ; la colonne du puits principal, du haut de la mine au bouchon, sans grotte
+ *     ni fluide autour ; le bouchon, entre 3 et 5 blocs sous la surface de la colonne, sous de la roche pleine ; rien du puits
+ *     ne voit le ciel ; pas de butte en surface.</li>
+ *     <li>Première graine : une mine écartée d'un fort posé exprès sur son chemin ; une salle de forage en capture et le
+ *     minerai d'hélium-3 (lumière, pioche en pierre) ; un wagonnet lancé vers le puits s'arrête au butoir, un PNJ qui longe
+ *     l'axe n'est pas embarqué ; la descente par le chemin principal et les panneaux du centre.</li>
  * </ul>
  */
 public class MineLykosTest implements FabricClientGameTest {
-    private static final long[] GRAINES = {20_261_028L, 7L, -4_242_424_242L};
+    static final long[] GRAINES = {20_261_028L, 7L, -4_242_424_242L};
     private static final ResourceKey<Structure> MINE = ResourceKey.create(Registries.STRUCTURE, Identifier.fromNamespaceAndPath(RedRising.MOD_ID, "mine"));
     /** 🟡 Plafonds du coût : pose d'un chunk, et temps moyen par tick pendant la génération de l'emprise. */
     private static final double POSE_MOYENNE_MAX_MS = 20;
@@ -89,34 +87,38 @@ public class MineLykosTest implements FabricClientGameTest {
     public void runTest(ClientGameTestContext context) {
         for (int i = 0; i < GRAINES.length; i++) {
             long graine = GRAINES[i];
-            try (TestSingleplayerContext monde = OutilsTest.nouveauMonde(context, context.worldBuilder().adjustSettings(reglages -> {
-                reglages.setWorldType(reglages.getNormalPresetList().stream()
-                        .filter(type -> type.preset().is(WorldPresets.NORMAL)).findFirst().orElseThrow());
-                reglages.setSeed(Long.toString(graine));
-                // Les mondes de test de Fabric n'ont pas de structures ; ceux des joueurs, si (par défaut)
-                reglages.setGenerateStructures(true);
-            }))) {
-                RegionsMars.Tirage tirage = Objects.requireNonNull(monde.getServer().computeOnServer(server -> RegionsMars.dernierTirage()));
-                RedRising.LOGGER.info("[G7.2.1] Graine {} : mine à {} blocs du point d'apparition, fort le plus proche à {} chunks",
-                        graine, tirage.distanceMine(), tirage.fortLePlusProche());
-                if (tirage.fortLePlusProche() >= 0 && tirage.fortLePlusProche() < PlanMars.ECART_FORT) {
-                    throw new AssertionError("Graine " + graine + " : fort à " + tirage.fortLePlusProche() + " chunks de la mine");
-                }
+            try (TestSingleplayerContext monde = mondeMars(context, graine)) {
+                charger(monde, 2);
                 if (i == 0) {
-                    emprise(monde, graine);
                     fortSurLeChemin(monde);
                     forageEtHelium3(monde, context);
-                    reseauEtMonstres(monde, context);
                     voiesEtWagonnets(monde, context);
-                    reperesEtDescente(monde, context);
-                } else {
-                    charger(monde, PlanMars.EMPRISE_MINE);
+                    descente(monde, context);
                 }
                 colonneDuPuits(monde, graine);
-                comptage(monde, graine);
             }
         }
-        RedRising.LOGGER.info("[G7.2.1] OK : mine au bon endroit, toute reliée, sans ouverture vers le ciel, sans autre structure");
+        RedRising.LOGGER.info("[G7.2.1] OK : mine au bon endroit, puits, voies et repères du centre (épreuves longues : MineLykosLongTest, -PtestsLongs)");
+    }
+
+    /**
+     * Un monde Mars neuf de cette graine, avec ses structures (les mondes de test de Fabric n'en ont pas), et la distance de
+     * la mine au fort le plus proche vérifiée.
+     */
+    static TestSingleplayerContext mondeMars(ClientGameTestContext context, long graine) {
+        TestSingleplayerContext monde = OutilsTest.nouveauMonde(context, context.worldBuilder().adjustSettings(reglages -> {
+            reglages.setWorldType(reglages.getNormalPresetList().stream()
+                    .filter(type -> type.preset().is(WorldPresets.NORMAL)).findFirst().orElseThrow());
+            reglages.setSeed(Long.toString(graine));
+            reglages.setGenerateStructures(true);
+        }));
+        RegionsMars.Tirage tirage = Objects.requireNonNull(monde.getServer().computeOnServer(server -> RegionsMars.dernierTirage()));
+        RedRising.LOGGER.info("[G7.2.1] Graine {} : mine à {} blocs du point d'apparition, fort le plus proche à {} chunks",
+                graine, tirage.distanceMine(), tirage.fortLePlusProche());
+        if (tirage.fortLePlusProche() >= 0 && tirage.fortLePlusProche() < PlanMars.ECART_FORT) {
+            throw new AssertionError("Graine " + graine + " : fort à " + tirage.fortLePlusProche() + " chunks de la mine");
+        }
+        return monde;
     }
 
     // --- Outils ---
@@ -138,12 +140,12 @@ public class MineLykosTest implements FabricClientGameTest {
     }
 
     /** Charge (force) les chunks à cette distance (en chunks, en carré) du chunk de la mine, et mesure le temps par tick. */
-    private static double charger(TestSingleplayerContext monde, int rayon) {
+    static double charger(TestSingleplayerContext monde, int rayon) {
         return charger(monde, rayon, 0, true);
     }
 
     /** Pareil, autour du chunk de la mine décalé de {@code decalage} chunks (en x et en z) ; {@code garder} : les laisser forcés. */
-    private static double charger(TestSingleplayerContext monde, int rayon, int decalage, boolean garder) {
+    static double charger(TestSingleplayerContext monde, int rayon, int decalage, boolean garder) {
         monde.getServer().runOnServer(server -> {
             MineLykos.remettreMesures();
             BlockPos centre = centre(server);
@@ -183,7 +185,7 @@ public class MineLykosTest implements FabricClientGameTest {
 
     // --- Toute l'emprise ---
 
-    private static void emprise(TestSingleplayerContext monde, long graine) {
+    static void emprise(TestSingleplayerContext monde, long graine) {
         int rayon = PlanMars.EMPRISE_MINE;
         double tickMoyen = charger(monde, rayon);
         String mesures = monde.getServer().computeOnServer(server -> MineLykos.mesures());
@@ -422,7 +424,7 @@ public class MineLykosTest implements FabricClientGameTest {
     }
 
     /** Longueur des galeries, salles par niveau et par forme, sur le plan de ce monde (vraies hauteurs du terrain). */
-    private static void comptage(TestSingleplayerContext monde, long graine) {
+    static void comptage(TestSingleplayerContext monde, long graine) {
         String defauts = monde.getServer().computeOnServer(server -> {
             PlanDeMine plan = plan(server);
             List<String> liste = new ArrayList<>();
@@ -601,7 +603,7 @@ public class MineLykosTest implements FabricClientGameTest {
      * la règle), {@value MonstresDeLaMine#PLAFOND} monstres au plus dans la mine à {@value MonstresDeLaMine#RAYON} blocs du
      * joueur, ni creeper ni slime dans la mine.
      */
-    private static void reseauEtMonstres(TestSingleplayerContext monde, ClientGameTestContext context) {
+    static void reseauEtMonstres(TestSingleplayerContext monde, ClientGameTestContext context) {
         String sombres = monde.getServer().computeOnServer(server -> {
             ServerLevel niveau = server.overworld();
             List<String> liste = new ArrayList<>();
@@ -685,60 +687,10 @@ public class MineLykosTest implements FabricClientGameTest {
     private static final double VITESSE_AU_BUTOIR_MIN = 0.25;
 
     /**
-     * Les wagonnets posés à la génération ({@value PlanDeMine#WAGONNETS}), les butoirs et les rails ; un wagonnet lancé à
-     * pleine vitesse vers le puits s'arrête au butoir ; un PNJ de Couleur qui longe l'axe devant une voie de garage n'est
-     * embarqué par aucun wagonnet. Le temps par tick, wagonnets chargés.
+     * Un wagonnet lancé à pleine vitesse vers le puits s'arrête au butoir ; un PNJ de Couleur qui longe l'axe devant une voie
+     * de garage n'est embarqué par aucun wagonnet.
      */
-    private static void voiesEtWagonnets(TestSingleplayerContext monde, ClientGameTestContext context) {
-        // Toute l'emprise chargée, et ses entités (elles arrivent après les chunks)
-        charger(monde, PlanMars.EMPRISE_MINE);
-        monde.getServer().waitFor(server -> {
-            BlockPos centre = plan(server).centre();
-            int r = PlanMars.EMPRISE_MINE;
-            for (int dx = -r; dx <= r; dx++) {
-                for (int dz = -r; dz <= r; dz++) {
-                    if (!server.overworld().areEntitiesLoaded(ChunkPos.pack((centre.getX() >> 4) + dx, (centre.getZ() >> 4) + dz))) {
-                        return false;
-                    }
-                }
-            }
-            return true;
-        }, 2000);
-        String defauts = monde.getServer().computeOnServer(server -> {
-            ServerLevel niveau = server.overworld();
-            PlanDeMine plan = plan(server);
-            List<String> liste = new ArrayList<>();
-            BlockPos centre = plan.centre();
-            int r = PlanMars.EMPRISE_MINE * 16 + 16;
-            List<Minecart> wagonnets = niveau.getEntitiesOfClass(Minecart.class, new AABB(centre).inflate(r, 400, r));
-            if (wagonnets.size() != PlanDeMine.WAGONNETS || plan.garages().size() != PlanDeMine.WAGONNETS) {
-                liste.add(wagonnets.size() + " wagonnets dans le monde, " + plan.garages().size() + " voies de garage");
-            }
-            int rails = 0;
-            int propulsion = 0;
-            for (PlanDeMine.Voie voie : plan.voies()) {
-                for (BlockPos butoir : List.of(voie.butoirPuits(), voie.butoirBout())) {
-                    if (!niveau.getBlockState(butoir).is(Blocks.SPRUCE_LOG)) {
-                        liste.add("pas de butoir en " + butoir.toShortString());
-                    }
-                }
-                for (PlanDeMine.Rail rail : voie.rails()) {
-                    BlockState etat = niveau.getBlockState(rail.pos());
-                    if (rail.propulsion() ? !(etat.is(Blocks.POWERED_RAIL) && etat.getValue(net.minecraft.world.level.block.PoweredRailBlock.POWERED)) : !etat.is(Blocks.RAIL)) {
-                        liste.add("rail manquant en " + rail.pos().toShortString() + " (" + etat + ")");
-                    }
-                    rails++;
-                    propulsion += rail.propulsion() ? 1 : 0;
-                }
-            }
-            RedRising.LOGGER.info("[G7.2.3] Voies : {} voies, {} rails dont {} de propulsion, {} wagonnets sur {} voies de garage", plan.voies().size(), rails, propulsion,
-                    wagonnets.size(), plan.garages().size());
-            return String.join(" ; ", liste.subList(0, Math.min(10, liste.size())));
-        });
-        if (!defauts.isEmpty()) {
-            throw new AssertionError("Voies : " + defauts);
-        }
-
+    static void voiesEtWagonnets(TestSingleplayerContext monde, ClientGameTestContext context) {
         // Un wagonnet lancé à pleine vitesse vers le puits, sur une voie du niveau 1
         PlanDeMine.Voie voie = monde.getServer().computeOnServer(server -> plan(server).voies().stream().filter(v -> v.niveau() == 0)
                 .max(java.util.Comparator.comparingInt(v -> v.rails().size())).orElseThrow());
@@ -830,19 +782,107 @@ public class MineLykosTest implements FabricClientGameTest {
         if (!pnjDefaut.isEmpty()) {
             throw new AssertionError(pnjDefaut);
         }
-        double tick = monde.getServer().computeOnServer(server -> server.getAverageTickTimeNanos() / 1e6);
-        RedRising.LOGGER.info("[G7.2.3] Temps par tick, wagonnets chargés : {} ms", String.format(Locale.ROOT, "%.2f", tick));
+    }
+
+    /**
+     * Toute l'emprise : les {@value PlanDeMine#WAGONNETS} wagonnets posés à la génération, les butoirs et les rails ; puis ce
+     * que coûtent les wagonnets et les chunks forcés (temps par tick moyen sur {@value #TICKS_MESURE} ticks, emprise forcée avec
+     * puis sans les wagonnets, puis emprise libérée).
+     */
+    static void wagonnetsDeLEmprise(TestSingleplayerContext monde, ClientGameTestContext context) {
+        // Toute l'emprise chargée, et ses entités (elles arrivent après les chunks)
+        charger(monde, PlanMars.EMPRISE_MINE);
+        monde.getServer().waitFor(server -> {
+            BlockPos centre = plan(server).centre();
+            int r = PlanMars.EMPRISE_MINE;
+            for (int dx = -r; dx <= r; dx++) {
+                for (int dz = -r; dz <= r; dz++) {
+                    if (!server.overworld().areEntitiesLoaded(ChunkPos.pack((centre.getX() >> 4) + dx, (centre.getZ() >> 4) + dz))) {
+                        return false;
+                    }
+                }
+            }
+            return true;
+        }, 2000);
+        String defauts = monde.getServer().computeOnServer(server -> {
+            ServerLevel niveau = server.overworld();
+            PlanDeMine plan = plan(server);
+            List<String> liste = new ArrayList<>();
+            BlockPos centre = plan.centre();
+            int r = PlanMars.EMPRISE_MINE * 16 + 16;
+            List<Minecart> wagonnets = niveau.getEntitiesOfClass(Minecart.class, new AABB(centre).inflate(r, 400, r));
+            if (wagonnets.size() != PlanDeMine.WAGONNETS || plan.garages().size() != PlanDeMine.WAGONNETS) {
+                liste.add(wagonnets.size() + " wagonnets dans le monde, " + plan.garages().size() + " voies de garage");
+            }
+            int rails = 0;
+            int propulsion = 0;
+            for (PlanDeMine.Voie voie : plan.voies()) {
+                for (BlockPos butoir : List.of(voie.butoirPuits(), voie.butoirBout())) {
+                    if (!niveau.getBlockState(butoir).is(Blocks.SPRUCE_LOG)) {
+                        liste.add("pas de butoir en " + butoir.toShortString());
+                    }
+                }
+                for (PlanDeMine.Rail rail : voie.rails()) {
+                    BlockState etat = niveau.getBlockState(rail.pos());
+                    if (rail.propulsion() ? !(etat.is(Blocks.POWERED_RAIL) && etat.getValue(net.minecraft.world.level.block.PoweredRailBlock.POWERED)) : !etat.is(Blocks.RAIL)) {
+                        liste.add("rail manquant en " + rail.pos().toShortString() + " (" + etat + ")");
+                    }
+                    rails++;
+                    propulsion += rail.propulsion() ? 1 : 0;
+                }
+            }
+            RedRising.LOGGER.info("[G7.2.3] Voies : {} voies, {} rails dont {} de propulsion, {} wagonnets sur {} voies de garage", plan.voies().size(), rails, propulsion,
+                    wagonnets.size(), plan.garages().size());
+            return String.join(" ; ", liste.subList(0, Math.min(10, liste.size())));
+        });
+        if (!defauts.isEmpty()) {
+            throw new AssertionError("Voies : " + defauts);
+        }
+
+        double avec = tickMoyen(monde, TICKS_MESURE);
+        monde.getServer().runCommand("kill @e[type=minecart]");
+        context.waitTicks(40);
+        double sans = tickMoyen(monde, TICKS_MESURE);
+        monde.getServer().runOnServer(server -> {
+            BlockPos centre = plan(server).centre();
+            int r = PlanMars.EMPRISE_MINE;
+            for (int dx = -r; dx <= r; dx++) {
+                for (int dz = -r; dz <= r; dz++) {
+                    server.overworld().setChunkForced((centre.getX() >> 4) + dx, (centre.getZ() >> 4) + dz, false);
+                }
+            }
+        });
+        context.waitTicks(200);
+        double libre = tickMoyen(monde, TICKS_MESURE);
+        RedRising.LOGGER.info("[G7.2.3] Temps par tick ({} ticks) : emprise forcée (289 chunks) avec les {} wagonnets {} ms, sans eux {} ms, soit {} µs par wagonnet ; emprise libérée {} ms",
+                TICKS_MESURE, PlanDeMine.WAGONNETS, String.format(Locale.ROOT, "%.2f", avec), String.format(Locale.ROOT, "%.2f", sans),
+                String.format(Locale.ROOT, "%.1f", (avec - sans) * 1000 / PlanDeMine.WAGONNETS), String.format(Locale.ROOT, "%.2f", libre));
+    }
+
+    /** 🟡 Durée de chaque mesure du temps par tick. */
+    static final int TICKS_MESURE = 600;
+
+    /** Le temps par tick moyen sur ce nombre de ticks, relevé tick par tick (pas la moyenne glissante de Minecraft). */
+    static double tickMoyen(TestSingleplayerContext monde, int ticks) {
+        double[] total = {0};
+        int[] n = {0};
+        monde.getServer().waitFor(server -> {
+            long[] temps = server.getTickTimesNanos();
+            total[0] += temps[(server.getTickCount() - 1 + temps.length) % temps.length] / 1e6;
+            n[0]++;
+            return n[0] >= ticks;
+        }, ticks + 100);
+        return total[0] / n[0];
     }
 
     // --- Repères, points d'entrée des Gris, descente (G7.2.3) ---
 
     /**
      * Le chemin principal, du haut au fond : l'échelle du puits principal d'une traite, du bouchon au dernier niveau ; sur
-     * chaque niveau, un quai où tenir debout ; au niveau de la colonie, la branche jusqu'à la caverne. Les panneaux (chaque
-     * niveau, la colonie, les puits secondaires), la bande de couleur, et les points d'entrée des Gris (au sol du réseau
-     * éclairé, où l'on tient debout, au moins un par niveau). Une capture du quai du niveau 1.
+     * chaque niveau, un quai où tenir debout ; au niveau de la colonie, la branche jusqu'à la caverne ; les panneaux du
+     * centre (niveaux, colonie). Une capture du quai du niveau 1.
      */
-    private static void reperesEtDescente(TestSingleplayerContext monde, ClientGameTestContext context) {
+    static void descente(TestSingleplayerContext monde, ClientGameTestContext context) {
         String defauts = monde.getServer().computeOnServer(server -> {
             ServerLevel niveau = server.overworld();
             PlanDeMine plan = plan(server);
@@ -883,6 +923,55 @@ public class MineLykosTest implements FabricClientGameTest {
                 pas.move(versColonie);
                 blocs++;
             }
+            // Les panneaux du centre : un par niveau au quai du puits, et celui de la colonie
+            int niveaux = 0;
+            int colonie = 0;
+            for (PlanDeMine.Panneau panneau : plan.panneaux()) {
+                if (panneau.texte() == PlanDeMine.Texte.PUITS_VERS) {
+                    continue;
+                }
+                if (!(niveau.getBlockEntity(panneau.pos()) instanceof net.minecraft.world.level.block.entity.SignBlockEntity bloc)
+                        || !bloc.getFrontText().getMessage(1, false).equals(MineLykos.texte(panneau).getMessage(1, false))) {
+                    liste.add("panneau absent ou mal écrit en " + panneau.pos().toShortString());
+                    continue;
+                }
+                if (panneau.texte() == PlanDeMine.Texte.NIVEAU) {
+                    niveaux++;
+                } else {
+                    colonie++;
+                }
+            }
+            if (niveaux != plan.sols().size() || colonie != 1) {
+                liste.add("panneaux du centre : " + niveaux + " de niveau, " + colonie + " de la colonie");
+            }
+            RedRising.LOGGER.info("[G7.2.3] Descente : échelle de {} barreaux d'une traite (y {} à {}), {} quais, {} blocs jusqu'à la caverne ; panneaux : {} de niveau, {} de la colonie",
+                    echelles, principal.bas(), principal.haut(), plan.sols().size(), blocs, niveaux, colonie);
+            return String.join(" ; ", liste.subList(0, Math.min(10, liste.size())));
+        });
+        if (!defauts.isEmpty()) {
+            throw new AssertionError("Repères et descente : " + defauts);
+        }
+        // Capture : le quai du niveau 1, face au panneau
+        PlanDeMine.Panneau panneau = monde.getServer().computeOnServer(server -> plan(server).panneaux().stream()
+                .filter(p -> p.texte() == PlanDeMine.Texte.NIVEAU && p.numero() == 1).findFirst().orElseThrow());
+        BlockPos devant = panneau.pos().relative(panneau.face(), 3).below();
+        float lacet = panneau.face().getOpposite().toYRot();
+        monde.getServer().runCommand("tp @a[limit=1] " + (devant.getX() + 0.5) + " " + devant.getY() + " " + (devant.getZ() + 0.5) + " " + lacet + " 0");
+        context.waitTicks(40);
+        monde.getConnection().waitForChunksRender();
+        OutilsTest.garderCapture(context.takeScreenshot("mine-quai"));
+    }
+
+    /**
+     * Les repères de toute l'emprise : tous les panneaux et leur texte (niveaux, colonie, puits secondaires aux deux bouts), la
+     * bande de couleur, et les points d'entrée des Gris (au sol du réseau éclairé, où l'on tient debout, au moins un par
+     * niveau).
+     */
+    static void reperesDeLEmprise(TestSingleplayerContext monde) {
+        String defauts = monde.getServer().computeOnServer(server -> {
+            ServerLevel niveau = server.overworld();
+            PlanDeMine plan = plan(server);
+            List<String> liste = new ArrayList<>();
             // Panneaux : un par niveau, la colonie, les puits secondaires
             int niveaux = 0;
             int colonie = 0;
@@ -933,23 +1022,13 @@ public class MineLykosTest implements FabricClientGameTest {
                     break;
                 }
             }
-            RedRising.LOGGER.info("[G7.2.3] Descente : échelle de {} barreaux d'une traite (y {} à {}), {} quais, {} blocs jusqu'à la caverne ; panneaux : {} de niveau, {} de la colonie, {} de puits secondaires ; bande {} ; points d'entrée des Gris par niveau {}",
-                    echelles, principal.bas(), principal.haut(), plan.sols().size(), blocs, niveaux, colonie, puitsSecondaires, java.util.Arrays.toString(bandes),
-                    java.util.Arrays.toString(parNiveau));
+            RedRising.LOGGER.info("[G7.2.3] Repères : panneaux : {} de niveau, {} de la colonie, {} de puits secondaires ; bande {} ; points d'entrée des Gris par niveau {}",
+                    niveaux, colonie, puitsSecondaires, java.util.Arrays.toString(bandes), java.util.Arrays.toString(parNiveau));
             return String.join(" ; ", liste.subList(0, Math.min(10, liste.size())));
         });
         if (!defauts.isEmpty()) {
-            throw new AssertionError("Repères et descente : " + defauts);
+            throw new AssertionError("Repères : " + defauts);
         }
-        // Capture : le quai du niveau 1, face au panneau
-        PlanDeMine.Panneau panneau = monde.getServer().computeOnServer(server -> plan(server).panneaux().stream()
-                .filter(p -> p.texte() == PlanDeMine.Texte.NIVEAU && p.numero() == 1).findFirst().orElseThrow());
-        BlockPos devant = panneau.pos().relative(panneau.face(), 3).below();
-        float lacet = panneau.face().getOpposite().toYRot();
-        monde.getServer().runCommand("tp @a[limit=1] " + (devant.getX() + 0.5) + " " + devant.getY() + " " + (devant.getZ() + 0.5) + " " + lacet + " 0");
-        context.waitTicks(40);
-        monde.getConnection().waitForChunksRender();
-        OutilsTest.garderCapture(context.takeScreenshot("mine-quai"));
     }
 
     // --- Colonne du puits ---
@@ -1058,7 +1137,7 @@ public class MineLykosTest implements FabricClientGameTest {
     // --- Forts ---
 
     /** Un fort posé exprès sur le chemin de la mine (vrai terrain de ce monde) : la mine s'en écarte. */
-    private static void fortSurLeChemin(TestSingleplayerContext monde) {
+    static void fortSurLeChemin(TestSingleplayerContext monde) {
         String resultat = monde.getServer().computeOnServer(server -> {
             ServerLevel niveau = server.overworld();
             PlanMars plan = Objects.requireNonNull(RegionsMars.plan(server));

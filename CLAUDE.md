@@ -101,6 +101,11 @@ Mod Fabric fan-made, solo, gratuit et non commercial, dans l'univers Red Rising 
 - Punir un joueur hors ligne (on ne peut rien attacher à un joueur absent) : attachment global joueur → peine, appliqué à `JOIN` (voir `CelluleRising.PEINES_EN_ATTENTE`). En solo, le serveur s'arrête avec le joueur : le test pose la peine directement.
 - Durées longues (traque, interrogatoire) : compter le temps de jeu écoulé entre deux passages (`getGameTime`), joueur connecté seulement ; un test peut alors avancer l'horloge du monde au lieu d'attendre.
 
+## Tests en jeu : règles de lancement
+
+- **Ne jamais recompiler pendant qu'une suite de tests en jeu tourne** (pas de `./gradlew build`, `compileJava`...) : le client charge les classes au fur et à mesure depuis `build/classes`, et prendrait une classe recompilée au milieu de la suite (échec constaté sur `MineLykosTest`). Modifier les sources sans compiler reste possible.
+- **Épreuves longues de la mine** (`MineLykosLongTest`, une vingtaine de minutes : emprise entière, 2 minutes de monstres, comptage des minerais, coût des wagonnets) : seulement avec `./gradlew runClientGameTest -PtestsLongs`, et seulement quand le code de la mine ou de la génération change (`monde/PlanDeMine`, `MineLykos`, `FilonsDeMine`, `MonstresDeLaMine`, `PlanMars`, `RegionsMars`, `SourceBiomesMars`, les mixins de génération, `data/redrising/worldgen`). Sans l'option, le test ne fait rien ; `MineLykosTest` (rapide, environ une minute) tourne toujours.
+
 ## CI
 
 `.github/workflows/build.yml` : build à chaque push, le .jar sort en artefact `red-rising-jar`. Après un push, vérifier que la CI reste verte.

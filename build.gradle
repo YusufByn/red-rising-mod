@@ -41,6 +41,13 @@ fabricApi {
     }
 }
 
+// Épreuves longues de la mine (MineLykosLongTest) : seulement avec -PtestsLongs (code de la mine ou de la génération modifié).
+// Lue à la configuration (une option -P est une entrée du cache de configuration).
+def testsLongs = project.hasProperty("testsLongs")
+tasks.named("runClientGameTest") {
+    systemProperty "redrising.testsLongs", testsLongs
+}
+
 dependencies {
     // 26.x n'est plus obfusqué : pas de ligne mappings, pas de modImplementation
     minecraft "com.mojang:minecraft:${project.minecraft_version}"
