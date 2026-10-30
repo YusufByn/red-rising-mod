@@ -111,6 +111,9 @@ public class RegionsMarsTest implements FabricClientGameTest {
         if (!tirage.defauts().isEmpty()) {
             throw new AssertionError("Graine " + graine + " : " + tirage.defauts());
         }
+        if (tirage.distanceMine() > PlanMars.DISTANCE_MAX_MINE + 1) {
+            throw new AssertionError("Graine " + graine + " : mine à " + tirage.distanceMine() + " blocs du point d'apparition");
+        }
         RedRising.LOGGER.info("[G7.1.1] Graine {} : chunks déjà préparés au tirage jusqu'à {} chunks (références) et {} (départs) ; mine à {} blocs",
                 graine, tirage.rayonReferences(), tirage.rayonDeparts(), tirage.distanceMine());
     }

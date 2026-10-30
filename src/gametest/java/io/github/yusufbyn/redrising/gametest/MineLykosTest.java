@@ -6,6 +6,7 @@ import io.github.yusufbyn.redrising.factions.Boutiques;
 import io.github.yusufbyn.redrising.factions.ObjetsRebelles;
 import io.github.yusufbyn.redrising.monde.CoffresMine;
 import io.github.yusufbyn.redrising.monde.FilonsDeMine;
+import io.github.yusufbyn.redrising.monde.AplanissementPuits;
 import io.github.yusufbyn.redrising.monde.MineLykos;
 import io.github.yusufbyn.redrising.monde.MonstresDeLaMine;
 import io.github.yusufbyn.redrising.monde.ObjetsMine;
@@ -122,6 +123,9 @@ public class MineLykosTest implements FabricClientGameTest {
         RegionsMars.Tirage tirage = Objects.requireNonNull(monde.getServer().computeOnServer(server -> RegionsMars.dernierTirage()));
         RedRising.LOGGER.info("[G7.2.1] Graine {} : mine à {} blocs du point d'apparition, fort le plus proche à {} chunks",
                 graine, tirage.distanceMine(), tirage.fortLePlusProche());
+        if (tirage.distanceMine() > PlanMars.DISTANCE_MAX_MINE + 1) {
+            throw new AssertionError("Graine " + graine + " : mine à " + tirage.distanceMine() + " blocs du point d'apparition");
+        }
         if (tirage.fortLePlusProche() >= 0 && tirage.fortLePlusProche() < PlanMars.ECART_FORT) {
             throw new AssertionError("Graine " + graine + " : fort à " + tirage.fortLePlusProche() + " chunks de la mine");
         }
@@ -1216,7 +1220,7 @@ public class MineLykosTest implements FabricClientGameTest {
      * 🟡 3 et 5 blocs sous la surface de chaque colonne du puits, et rien que du plein entre les deux ; pas de butte en surface
      * (le remplissage du relief ne l'atteint pas).
      */
-    private static void colonneDuPuits(TestSingleplayerContext monde, long graine) {
+    static void colonneDuPuits(TestSingleplayerContext monde, long graine) {
         String defauts = monde.getServer().computeOnServer(server -> {
             ServerLevel niveau = server.overworld();
             PlanDeMine plan = plan(server);
@@ -1274,14 +1278,15 @@ public class MineLykosTest implements FabricClientGameTest {
             int surface = sol(niveau, principal.x(), principal.z());
             // Pas de butte : sur 7 × 7 points autour du puits, le sol (sans arbres ni plantes) est à la hauteur prévue par le
             // relief (médiane des écarts : un rocher n'en déplace que quelques-uns, une butte les ferait tous monter)
+            java.util.function.IntBinaryOperator naturel = (x, z) -> niveau.getChunkSource().getGenerator().getBaseHeight(x, z, Heightmap.Types.OCEAN_FLOOR_WG, niveau,
+                    niveau.getChunkSource().randomState());
+            java.util.function.IntBinaryOperator relief = AplanissementPuits.relief(AplanissementPuits.de(plan.centre(), naturel), naturel);
             List<Integer> ecarts = new ArrayList<>();
             for (int dx = -12; dx <= 12; dx += 4) {
                 for (int dz = -12; dz <= 12; dz += 4) {
                     int x = principal.x() + dx;
                     int z = principal.z() + dz;
-                    int prevu = niveau.getChunkSource().getGenerator().getBaseHeight(x, z, Heightmap.Types.OCEAN_FLOOR_WG, niveau,
-                            niveau.getChunkSource().randomState());
-                    ecarts.add(sol(niveau, x, z) - prevu);
+                    ecarts.add(sol(niveau, x, z) - relief.applyAsInt(x, z));
                 }
             }
             ecarts.sort(Integer::compare);
@@ -1300,7 +1305,7 @@ public class MineLykosTest implements FabricClientGameTest {
     }
 
     /** Le haut du sol (sans feuilles, troncs ni plantes), plus un : comme la hauteur prévue par le relief. */
-    private static int sol(ServerLevel niveau, int x, int z) {
+    static int sol(ServerLevel niveau, int x, int z) {
         BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos(x, niveau.getHeight(Heightmap.Types.OCEAN_FLOOR, x, z) - 1, z);
         while (pos.getY() > niveau.getMinY()) {
             BlockState etat = niveau.getBlockState(pos);
@@ -1374,10 +1379,14 @@ public class MineLykosTest implements FabricClientGameTest {
         }
     }
 
+    /** En haut du volume (cette épaisseur), des blocs de roche grise qu'on ne voit pas sont tolérés, en nombre très limité. */
+    private static final int HAUT_DU_VOLUME_TOLERE = 6;
+    private static final int GRIS_TOLERES_MAX = 16;
+
     /**
-     * La roche rouge (G7.2.5), sur les chunks à cette distance du centre : plus de pierre ni de deepslate autour du vide de la
-     * mine (sous la limite du volume) ; aucun bloc de roche rouge posé par la mine ne voit le ciel ; les strates, et la roche des
-     * outils et du four.
+     * La roche rouge (G7.2.5), sur les chunks à cette distance du centre (toute l'emprise dans {@link MineLykosLongTest}) : plus
+     * de roche naturelle sous la limite du volume, hors du bord irrégulier de l'emprise ; aucun bloc de roche rouge posé par la
+     * mine ne voit le ciel ; les strates, et la roche des outils et du four.
      */
     static void rocheRouge(TestSingleplayerContext monde, long graine, int rayon) {
         String defauts = monde.getServer().computeOnServer(server -> {
@@ -1389,15 +1398,34 @@ public class MineLykosTest implements FabricClientGameTest {
             int rouges = 0;
             int gris = 0;
             int auCiel = 0;
+            int hautDuVolume = 0;
+            // Le bord de l'emprise est irrégulier, sur 3 blocs (MineLykos.rougir) : pas de mur droit pour qui creuse
+            int bord = rayon >= PlanMars.EMPRISE_MINE ? 3 : 0;
+            java.util.Map<String, Integer> grisParBloc = new java.util.TreeMap<>();
+            BlockPos premierGris = null;
             BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
-            for (int x = (cx - rayon) << 4; x <= ((cx + rayon) << 4) + 15; x++) {
-                for (int z = (cz - rayon) << 4; z <= ((cz + rayon) << 4) + 15; z++) {
+            for (int x = ((cx - rayon) << 4) + bord; x <= ((cx + rayon) << 4) + 15 - bord; x++) {
+                for (int z = ((cz - rayon) << 4) + bord; z <= ((cz + rayon) << 4) + 15 - bord; z++) {
                     int surface = sol(niveau, x, z);
                     int limite = Math.min(MineLykos.HAUT_DU_VOLUME, surface - MineLykos.ROUGE_SOUS_LA_SURFACE) - 3;
                     for (int y = niveau.getMinY() + 5; y <= limite; y++) {
                         BlockState etat = niveau.getBlockState(pos.set(x, y, z));
                         rouges += PaletteMine.estRocheRouge(etat) ? 1 : 0;
-                        gris += PaletteMine.rocheNaturelle(etat) ? 1 : 0;
+                        if (PaletteMine.rocheNaturelle(etat)) {
+                            // Le haut du volume suit le terrain au moment de la pose, et une décoration peut ensuite relever une colonne
+                            // (mesuré sur la graine 7 : 3 blocs, 14 blocs sous la surface). Toléré seulement là, et jamais à la vue
+                            boolean aLaVue = false;
+                            for (Direction direction : Direction.values()) {
+                                aLaVue |= niveau.getBlockState(pos.relative(direction)).isAir();
+                            }
+                            if (y > limite - HAUT_DU_VOLUME_TOLERE && !aLaVue) {
+                                hautDuVolume++;
+                                continue;
+                            }
+                            gris++;
+                            grisParBloc.merge(etat.getBlock().getDescriptionId(), 1, Integer::sum);
+                            premierGris = premierGris == null ? pos.immutable() : premierGris;
+                        }
                     }
                     // Le bloc de surface n'est jamais une strate posée par la mine (les bandes colorées de surface ne viennent pas d'elle)
                     BlockState dessus = niveau.getBlockState(pos.set(x, surface - 1, z));
@@ -1406,8 +1434,11 @@ public class MineLykosTest implements FabricClientGameTest {
                     }
                 }
             }
+            if (hautDuVolume > GRIS_TOLERES_MAX) {
+                liste.add(hautDuVolume + " blocs de roche grise en haut du volume");
+            }
             if (gris > 0 || rouges == 0 || auCiel > 0) {
-                liste.add(rouges + " blocs rouges, " + gris + " blocs de roche grise dans le volume, " + auCiel + " colonnes rouges au ciel");
+                liste.add(rouges + " blocs rouges, " + gris + " blocs de roche grise dans le volume " + grisParBloc + " (le premier en " + premierGris + "), " + auCiel + " colonnes rouges au ciel");
             }
             for (Item roche : List.of(Items.TERRACOTTA, Blocks.DYED_TERRACOTTA.pick(net.minecraft.world.item.DyeColor.RED).asItem(),
                     Blocks.DYED_TERRACOTTA.pick(net.minecraft.world.item.DyeColor.ORANGE).asItem(), Blocks.DYED_TERRACOTTA.pick(net.minecraft.world.item.DyeColor.BROWN).asItem())) {
@@ -1416,8 +1447,8 @@ public class MineLykosTest implements FabricClientGameTest {
                     liste.add(roche + " pas dans les tags de pierre");
                 }
             }
-            RedRising.LOGGER.info("[G7.2.5] Graine {} : roche rouge ({} chunks) : {} blocs rouges, {} de roche grise, {} colonnes rouges au ciel", graine,
-                    (2 * rayon + 1) * (2 * rayon + 1), rouges, gris, auCiel);
+            RedRising.LOGGER.info("[G7.2.5] Graine {} : roche rouge ({} chunks) : {} blocs rouges, {} de roche grise, {} tolérés en haut du volume, {} colonnes rouges au ciel", graine,
+                    (2 * rayon + 1) * (2 * rayon + 1), rouges, gris, hautDuVolume, auCiel);
             return String.join(" ; ", liste);
         });
         if (!defauts.isEmpty()) {

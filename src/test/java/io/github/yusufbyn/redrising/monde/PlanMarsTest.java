@@ -8,7 +8,10 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Plan des régions de Mars (G7.1.1), sur des terrains inventés : distances, eau, écarts, cité plate, mine hors recherche. */
@@ -82,12 +85,79 @@ class PlanMarsTest {
 
     @Test
     void laMineSEloigneSiIlLeFaut() {
-        // Références préparées jusqu'à 30 chunks (480 blocs) : aucune place entre 200 et 400, la mine s'éloigne
-        PlanMars.ChunksPrepares prepares = prepares(APPARITION, 30, 30);
+        // Références préparées jusqu'à 14 chunks : aucune place entre 200 et 400, la mine s'éloigne
+        PlanMars.ChunksPrepares prepares = prepares(APPARITION, 14, 14);
         BlockPos mine = PlanMars.tirer(3, APPARITION, MER_ET_COLLINES, prepares, List.of()).regions().get(Region.MINE);
         double distance = Math.hypot(mine.getX() - APPARITION.getX(), mine.getZ() - APPARITION.getZ());
         assertTrue(distance > 400 && distance <= PlanMars.DISTANCE_MAX_MINE + 1, "mine à " + distance);
         assertEquals(List.of(), PlanMars.defautsEmprise(mine, prepares));
+    }
+
+    /** Des pentes partout : aucune colonne de puits n'est plate. */
+    private static final PlanMars.Terrain PENTES = new PlanMars.Terrain() {
+        @Override
+        public boolean eau(int x, int z) {
+            return false;
+        }
+
+        @Override
+        public int hauteur(int x, int z) {
+            return 80 + 3 * Math.floorMod(x, 20);
+        }
+    };
+
+    @Test
+    void sansPlaceAPlatLaMineResteADistanceEtSAplanit() {
+        for (long graine = 0; graine < 50; graine++) {
+            PlanMars plan = PlanMars.tirer(graine, APPARITION, PENTES, AUCUN, List.of());
+            BlockPos mine = plan.regions().get(Region.MINE);
+            double distance = Math.hypot(mine.getX() - APPARITION.getX(), mine.getZ() - APPARITION.getZ());
+            assertTrue(distance <= PlanMars.DISTANCE_MAX_MINE + 1, "graine " + graine + " : mine à " + distance);
+            assertEquals(List.of(), PlanMars.defauts(Region.MINE, mine, Map.of(), APPARITION, PENTES, AUCUN, List.of()), "graine " + graine);
+            AplanissementPuits aplani = AplanissementPuits.de(mine, PENTES::hauteur);
+            assertNotNull(aplani, "graine " + graine);
+            assertFalse(AplanissementPuits.surUnePente(mine, AplanissementPuits.relief(aplani, PENTES::hauteur)), "graine " + graine);
+        }
+    }
+
+    @Test
+    void uneMineNeSEloigneJamaisAuDelaDeLaLimite() {
+        // Chunks préparés trop loin pour tenir : la mine reste à la limite, le défaut se voit
+        PlanMars.ChunksPrepares prepares = prepares(APPARITION, 60, 60);
+        PlanMars plan = PlanMars.tirer(4, APPARITION, PENTES, prepares, List.of());
+        BlockPos mine = plan.regions().get(Region.MINE);
+        assertTrue(Math.hypot(mine.getX() - APPARITION.getX(), mine.getZ() - APPARITION.getZ()) <= PlanMars.DISTANCE_MAX_MINE + 1, "mine en " + mine);
+        assertFalse(PlanMars.defautsEmprise(mine, prepares).isEmpty());
+    }
+
+    @Test
+    void uneMineSurPlaceAPlatNestPasAplanie() {
+        assertNull(AplanissementPuits.de(new BlockPos(300, 66, 0), MER_ET_COLLINES::hauteur));
+    }
+
+    @Test
+    void laZoneAplanieEstPlateAuCentreEtRejointLeRelief() {
+        BlockPos centre = new BlockPos(100, 80, 100);
+        AplanissementPuits aplani = AplanissementPuits.de(centre, PENTES::hauteur);
+        assertNotNull(aplani);
+        java.util.function.IntBinaryOperator relief = AplanissementPuits.relief(aplani, PENTES::hauteur);
+        for (int x = -60; x <= 60; x++) {
+            for (int z = -60; z <= 60; z++) {
+                double distance = Math.hypot(x, z);
+                int hauteur = relief.applyAsInt(centre.getX() + x, centre.getZ() + z);
+                if (distance <= AplanissementPuits.RAYON_PLAT) {
+                    assertEquals(aplani.sol(), hauteur, x + ", " + z);
+                }
+                if (distance >= AplanissementPuits.RAYON_RACCORD) {
+                    assertEquals(PENTES.hauteur(centre.getX() + x, centre.getZ() + z), hauteur, x + ", " + z);
+                }
+            }
+        }
+        // Le raccord, pour 40 blocs d'écart entre la partie plate et le relief : pas de marche de plus de 2 blocs
+        AplanissementPuits ecart = new AplanissementPuits(centre, 120);
+        for (int x = 0; x < AplanissementPuits.RAYON_RACCORD; x++) {
+            assertTrue(Math.abs(ecart.hauteur(centre.getX() + x + 1, centre.getZ(), 80) - ecart.hauteur(centre.getX() + x, centre.getZ(), 80)) <= 2, "à " + x);
+        }
     }
 
     @Test

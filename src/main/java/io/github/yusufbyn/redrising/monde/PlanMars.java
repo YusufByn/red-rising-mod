@@ -55,10 +55,10 @@ public record PlanMars(BlockPos apparition, Map<Region, BlockPos> regions) {
      */
     public static final int EMPRISE_MINE = 13;
     /**
-     * 🟡 Si aucune place ne convient entre 200 et 400 blocs (chunks déjà préparés, eau), la mine s'éloigne par bandes de
-     * 200 blocs, jusqu'à cette distance.
+     * 🟡 Si aucune place ne convient entre 200 et 400 blocs (chunks déjà préparés, eau), la mine s'éloigne jusqu'à cette
+     * distance, jamais plus (décidé le 30/10). Sans place plate à cette distance, on aplanit la zone du puits ({@link AplanissementPuits}).
      */
-    public static final int DISTANCE_MAX_MINE = 1000;
+    public static final int DISTANCE_MAX_MINE = 512;
     /**
      * Un fort (stronghold) n'est jamais refusé par la mine (c'est l'accès à l'End) : la mine s'en écarte. Son chunk de
      * départ reste à plus de son emprise et de la portée d'un fort (8 chunks) de tout fort.
@@ -67,9 +67,11 @@ public record PlanMars(BlockPos apparition, Map<Region, BlockPos> regions) {
     /** 🟡 Autour du puits de la mine, le terrain reste à cette hauteur au moins : le niveau du haut y tient (G7.2.5). */
     public static final int TERRAIN_MIN_PUITS = 31;
     static final int RAYON_TERRAIN_PUITS = 48;
-    /** 🟡 Écart de hauteur permis sur la colonne du puits (3 × 3). */
+    /** 🟡 Écart de hauteur permis sur la colonne du puits (3 × 3) ; au-delà, on aplanit ({@link AplanissementPuits}). */
     public static final int PENTE_MAX_PUITS = 2;
     static final int ESSAIS = 64;
+    /** 🟡 Essais de la mine entre 400 et {@link #DISTANCE_MAX_MINE} : c'est là qu'elle tombe, et elle ne va pas plus loin. */
+    static final int ESSAIS_MINE_LOIN = 192;
     /** La région des pôles cherche la terre ferme jusqu'à 32 pas de 64 blocs de part et d'autre (2 km). */
     static final int PAS_POLES = 32;
 
@@ -146,17 +148,34 @@ public record PlanMars(BlockPos apparition, Map<Region, BlockPos> regions) {
         Random hasard = new Random(graine ^ (0x5DEECE66DL * (region.ordinal() + 1)));
         BlockPos meilleure = null;
         int meilleurScore = Integer.MAX_VALUE;
-        // La mine s'éloigne par bandes de 200 blocs si rien ne convient (jamais plus près)
+        // La mine sans autre défaut que la pente : la place qui demande le moins de travaux, si aucune n'est plate
+        BlockPos aAplanir = null;
+        int moinsDeTravaux = Integer.MAX_VALUE;
+        // La mine s'éloigne si rien ne convient (jamais plus près)
         int fin = region == Region.MINE ? DISTANCE_MAX_MINE : distance[1];
-        for (int bas = distance[0], haut = distance[1]; haut <= fin; bas = haut, haut += 200) {
-            for (int essai = 0; essai < ESSAIS; essai++) {
+        for (int bas = distance[0], haut = distance[1]; bas < fin; bas = haut, haut = fin) {
+            int essais = bas >= distance[1] ? ESSAIS_MINE_LOIN : ESSAIS;
+            for (int essai = 0; essai < essais; essai++) {
                 double angle = hasard.nextDouble() * 2 * Math.PI;
                 double rayon = bas + hasard.nextDouble() * (haut - bas);
                 BlockPos candidat = enSurface(apparition.getX() + (int) Math.round(Math.cos(angle) * rayon),
                         apparition.getZ() + (int) Math.round(Math.sin(angle) * rayon), terrain);
+                // Le plus rapide d'abord : une place sur des chunks préparés ne servira pas, inutile de lire son terrain
+                if (region == Region.MINE && meilleure != null && !defautsEmprise(candidat, prepares).isEmpty()) {
+                    continue;
+                }
                 List<String> defauts = defauts(region, candidat, placees, apparition, terrain, prepares, forts);
                 if (defauts.isEmpty()) {
-                    return candidat;
+                    AplanissementPuits aplanissement = region == Region.MINE ? AplanissementPuits.de(candidat, terrain::hauteur) : null;
+                    if (aplanissement == null) {
+                        return candidat;
+                    }
+                    int travaux = aplanissement.travaux(terrain::hauteur);
+                    if (travaux < moinsDeTravaux) {
+                        moinsDeTravaux = travaux;
+                        aAplanir = candidat;
+                    }
+                    continue;
                 }
                 int score = defauts.size() * 1000 + (region == Region.CITE ? ecartDeHauteur(candidat, terrain) : 0);
                 if (score < meilleurScore) {
@@ -165,7 +184,7 @@ public record PlanMars(BlockPos apparition, Map<Region, BlockPos> regions) {
                 }
             }
         }
-        return meilleure;
+        return aAplanir != null ? aAplanir : meilleure;
     }
 
     /**
@@ -204,19 +223,6 @@ public record PlanMars(BlockPos apparition, Map<Region, BlockPos> regions) {
         }
         if (region == Region.MINE) {
             defauts.addAll(defautsEmprise(pos, prepares));
-            // La colonne du puits presque plate : le bouchon se cale sur son point le plus bas, à 3-5 blocs sous toute la colonne
-            int bas = Integer.MAX_VALUE;
-            int haut = Integer.MIN_VALUE;
-            for (int x = -1; x <= 1; x++) {
-                for (int z = -1; z <= 1; z++) {
-                    int hauteur = terrain.hauteur(pos.getX() + x, pos.getZ() + z);
-                    bas = Math.min(bas, hauteur);
-                    haut = Math.max(haut, hauteur);
-                }
-            }
-            if (haut - bas > PENTE_MAX_PUITS) {
-                defauts.add("puits sur une pente");
-            }
             for (int x = -RAYON_TERRAIN_PUITS; x <= RAYON_TERRAIN_PUITS; x += 16) {
                 for (int z = -RAYON_TERRAIN_PUITS; z <= RAYON_TERRAIN_PUITS; z += 16) {
                     if (terrain.hauteur(pos.getX() + x, pos.getZ() + z) < TERRAIN_MIN_PUITS) {

@@ -172,7 +172,8 @@ public final class TraqueGris {
 
         ServerLivingEntityEvents.ALLOW_DAMAGE.register((entite, source, degats) -> {
             if (!(entite instanceof ServerPlayer joueur)) {
-                return true;
+                // Une flèche perdue ne blesse pas un autre chasseur : il paniquerait et lâcherait la traque
+                return !(entite.hasAttached(CHASSEUR) && source.getDirectEntity() instanceof AbstractArrow fleche && fleche.hasAttached(TIR));
             }
             if (joueur.hasAttached(INTERROGATOIRE)) {
                 return false;

@@ -261,27 +261,31 @@ public final class MineLykos extends Structure {
         ChunkGenerator generateur = contexte.chunkGenerator();
         int tuileX = contexte.chunkPos().x() - (centre.getX() >> 4);
         int tuileZ = contexte.chunkPos().z() - (centre.getZ() >> 4);
-        // Le terrain autour du puits, lu par le bruit du relief (sans chunk généré)
+        // Le terrain autour du puits, lu par le bruit du relief (sans chunk généré), une fois la zone du puits aplanie s'il le faut
+        AplanissementPuits aplanissement = AplanissementPuits.de(centre, (x, z) -> hauteur(contexte, x, z));
+        java.util.function.IntBinaryOperator relief = AplanissementPuits.relief(aplanissement, (x, z) -> hauteur(contexte, x, z));
+        int solAplani = aplanissement == null ? SANS_APLANIR : aplanissement.sol();
         int solAuPuits = Integer.MAX_VALUE;
         for (int x = -16; x <= 16; x += 8) {
             for (int z = -16; z <= 16; z += 8) {
-                solAuPuits = Math.min(solAuPuits, hauteur(contexte, centre.getX() + x, centre.getZ() + z));
+                solAuPuits = Math.min(solAuPuits, relief.applyAsInt(centre.getX() + x, centre.getZ() + z));
             }
         }
         // La surface de la colonne du puits (3 × 3) : son point le plus bas, sous lequel est le bouchon
         int surfacePuits = Integer.MAX_VALUE;
         for (int x = -1; x <= 1; x++) {
             for (int z = -1; z <= 1; z++) {
-                surfacePuits = Math.min(surfacePuits, hauteur(contexte, centre.getX() + x, centre.getZ() + z));
+                surfacePuits = Math.min(surfacePuits, relief.applyAsInt(centre.getX() + x, centre.getZ() + z));
             }
         }
         long graine = contexte.seed();
-        PlanDeMine plan = PlanDeMine.de(graine, centre, (x, z) -> hauteur(contexte, x, z), solAuPuits, surfacePuits);
+        PlanDeMine plan = PlanDeMine.de(graine, centre, relief, solAuPuits, surfacePuits);
         int solPuits = solAuPuits;
         int surface = surfacePuits;
         BlockPos position = new BlockPos(centre.getX(), plan.sols().getFirst(), centre.getZ());
-        RedRising.LOGGER.info("Mine : départ ({}, {}) de la mine en {}, {} niveau(x), terrain autour du puits {}, surface du puits {} (générateur {})",
-                tuileX, tuileZ, position.toShortString(), plan.sols().size(), solPuits, surface, generateur.getClass().getSimpleName());
+        RedRising.LOGGER.info("Mine : départ ({}, {}) de la mine en {}, {} niveau(x), terrain autour du puits {}, surface du puits {}, {} (générateur {})",
+                tuileX, tuileZ, position.toShortString(), plan.sols().size(), solPuits, surface, aplanissement == null ? "zone naturelle" : "zone aplanie à " + solAplani,
+                generateur.getClass().getSimpleName());
         return Optional.of(new GenerationStub(position, morceaux -> {
             int cx = centre.getX() >> 4;
             int cz = centre.getZ() >> 4;
@@ -296,7 +300,7 @@ public final class MineLykos extends Structure {
                     BoundingBox colonne = new BoundingBox(chunk.getMinBlockX(), bas, chunk.getMinBlockZ(), chunk.getMaxBlockX(), bas, chunk.getMaxBlockZ());
                     int haut = Math.max(bas + 1, Math.min(plan.hautDesBoites(), plan.surfaceMin(colonne) - PlanDeMine.BOITE_PUITS_SOUS_SURFACE));
                     BoundingBox boite = new BoundingBox(chunk.getMinBlockX(), bas, chunk.getMinBlockZ(), chunk.getMaxBlockX(), haut, chunk.getMaxBlockZ());
-                    morceaux.addPiece(new Morceau(boite, true, graine, centre, solPuits, surface));
+                    morceaux.addPiece(new Morceau(boite, true, graine, centre, solPuits, surface, solAplani));
                 }
             }
             // Le puits principal et sa marge de 2 blocs, jusqu'à 14 blocs sous le terrain le plus bas autour (pas de butte) ;
@@ -304,7 +308,7 @@ public final class MineLykos extends Structure {
             if (plan.hautBoitePuits() > plan.hautDesBoites() && tuileX == 0 && tuileZ == 0) {
                 int bord = 1 + PlanDeMine.COQUE_PUITS;
                 morceaux.addPiece(new Morceau(new BoundingBox(centre.getX() - bord, plan.hautDesBoites(), centre.getZ() - bord,
-                        centre.getX() + bord, plan.hautBoitePuits(), centre.getZ() + bord), false, graine, centre, solPuits, surface));
+                        centre.getX() + bord, plan.hautBoitePuits(), centre.getZ() + bord), false, graine, centre, solPuits, surface, solAplani));
             }
         }));
     }
@@ -354,14 +358,16 @@ public final class MineLykos extends Structure {
         private final BlockPos centre;
         private final int solAuPuits;
         private final int surfacePuits;
+        private final int solAplani;
 
-        Morceau(BoundingBox boite, boolean pose, long graine, BlockPos centre, int solAuPuits, int surfacePuits) {
+        Morceau(BoundingBox boite, boolean pose, long graine, BlockPos centre, int solAuPuits, int surfacePuits, int solAplani) {
             super(MORCEAU, 0, boite);
             this.pose = pose;
             this.graine = graine;
             this.centre = centre;
             this.solAuPuits = solAuPuits;
             this.surfacePuits = surfacePuits;
+            this.solAplani = solAplani;
         }
 
         Morceau(CompoundTag donnees) {
@@ -371,6 +377,7 @@ public final class MineLykos extends Structure {
             this.centre = new BlockPos(donnees.getIntOr("cx", 0), donnees.getIntOr("cy", 0), donnees.getIntOr("cz", 0));
             this.solAuPuits = donnees.getIntOr("sol_au_puits", 0);
             this.surfacePuits = donnees.getIntOr("surface_puits", solAuPuits);
+            this.solAplani = donnees.getIntOr("sol_aplani", SANS_APLANIR);
         }
 
         @Override
@@ -382,13 +389,18 @@ public final class MineLykos extends Structure {
             donnees.putInt("cz", centre.getZ());
             donnees.putInt("sol_au_puits", solAuPuits);
             donnees.putInt("surface_puits", surfacePuits);
+            donnees.putInt("sol_aplani", solAplani);
         }
 
         /** Le plan (tiré une fois par mine). Le relief se relit dans le bruit du monde : il est le même à chaque fois. */
         public PlanDeMine plan(ServerLevel niveau) {
             ChunkGenerator generateur = niveau.getChunkSource().getGenerator();
-            return PlanDeMine.de(graine, centre, (x, z) -> generateur.getBaseHeight(x, z, Heightmap.Types.OCEAN_FLOOR_WG, niveau, niveau.getChunkSource().randomState()),
-                    solAuPuits, surfacePuits);
+            return PlanDeMine.de(graine, centre, AplanissementPuits.relief(aplanissement(),
+                    (x, z) -> generateur.getBaseHeight(x, z, Heightmap.Types.OCEAN_FLOOR_WG, niveau, niveau.getChunkSource().randomState())), solAuPuits, surfacePuits);
+        }
+
+        private @Nullable AplanissementPuits aplanissement() {
+            return solAplani == SANS_APLANIR ? null : new AplanissementPuits(centre, solAplani);
         }
 
         @Override
@@ -398,6 +410,10 @@ public final class MineLykos extends Structure {
                 return;
             }
             long debut = System.nanoTime();
+            // Avant la pose : le bouchon et la coque du puits se calent sur le terrain aplani
+            if (solAplani != SANS_APLANIR) {
+                aplanir(monde, aplanissement(), chunk);
+            }
             poser(monde, plan(monde.getLevel()), chunk, hasard);
             long duree = System.nanoTime() - debut;
             POSES.incrementAndGet();
@@ -415,6 +431,52 @@ public final class MineLykos extends Structure {
     public static final ResourceKey<LootTable> COFFRE_RARE = ResourceKey.create(Registries.LOOT_TABLE, id("chests/mine_outils_rare"));
     /** Ce que contient un coffre qui se remplit de nouveau ({@link CoffresMine}) : outils de base et nourriture, jamais de fer. */
     public static final ResourceKey<LootTable> COFFRE_RECHARGE = ResourceKey.create(Registries.LOOT_TABLE, id("chests/mine_recharge"));
+
+    /** Aucune zone à aplanir (dans les données d'un morceau). */
+    private static final int SANS_APLANIR = Integer.MIN_VALUE;
+    /** Sous la surface aplanie, ni vide ni fluide sur cette épaisseur : pas de trou de grotte dans la zone du puits. */
+    private static final int EPAISSEUR_APLANIE = 5;
+
+    /**
+     * La zone du puits aplanie ({@link AplanissementPuits}), dans ce chunk : le terrain coupé ou remblayé, avec les blocs de
+     * surface de chaque colonne remis par-dessus (herbe, sable...), comme si le relief avait cette forme. Les arbres et les
+     * plantes viennent ensuite : les cartes de hauteur sont recalculées pour eux, et pour la roche rouge.
+     */
+    private static void aplanir(WorldGenLevel monde, AplanissementPuits aplanissement, BoundingBox chunk) {
+        BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
+        boolean change = false;
+        for (int x = chunk.minX(); x <= chunk.maxX(); x++) {
+            for (int z = chunk.minZ(); z <= chunk.maxZ(); z++) {
+                int surface = monde.getHeight(Heightmap.Types.OCEAN_FLOOR_WG, x, z);
+                int cible = aplanissement.hauteur(x, z, surface);
+                if (cible == surface) {
+                    continue;
+                }
+                change = true;
+                BlockState dessus = monde.getBlockState(pos.set(x, surface - 1, z));
+                BlockState dessous = monde.getBlockState(pos.set(x, surface - 2, z));
+                if (cible < surface) {
+                    for (int y = monde.getHeight(Heightmap.Types.WORLD_SURFACE_WG, x, z) - 1; y >= cible; y--) {
+                        monde.setBlock(pos.set(x, y, z), Blocks.AIR.defaultBlockState(), Block.UPDATE_CLIENTS);
+                    }
+                }
+                for (int y = Math.min(surface, cible) - EPAISSEUR_APLANIE; y < cible; y++) {
+                    BlockState etat = monde.getBlockState(pos.set(x, y, z));
+                    if (y == cible - 1) {
+                        monde.setBlock(pos, dessus, Block.UPDATE_CLIENTS);
+                    } else if (y >= cible - 4) {
+                        monde.setBlock(pos, dessous, Block.UPDATE_CLIENTS);
+                    } else if (y >= surface || etat.isAir() || !etat.getFluidState().isEmpty()) {
+                        monde.setBlock(pos, PaletteMine.roche(y), Block.UPDATE_CLIENTS);
+                    }
+                }
+            }
+        }
+        if (change) {
+            Heightmap.primeHeightmaps(monde.getChunk(chunk.minX() >> 4, chunk.minZ() >> 4), java.util.Set.of(Heightmap.Types.OCEAN_FLOOR_WG, Heightmap.Types.WORLD_SURFACE_WG,
+                    Heightmap.Types.OCEAN_FLOOR, Heightmap.Types.WORLD_SURFACE, Heightmap.Types.MOTION_BLOCKING, Heightmap.Types.MOTION_BLOCKING_NO_LEAVES));
+        }
+    }
 
     /** Pose, dans ce chunk, tout ce que le plan y met. */
     static void poser(WorldGenLevel monde, PlanDeMine plan, BoundingBox chunk, RandomSource hasard) {
