@@ -4,6 +4,7 @@ import io.github.yusufbyn.redrising.RedRising;
 import io.github.yusufbyn.redrising.factions.ActionsFaction;
 import io.github.yusufbyn.redrising.factions.Boutiques;
 import io.github.yusufbyn.redrising.factions.ObjetsRebelles;
+import io.github.yusufbyn.redrising.monde.CoffresMine;
 import io.github.yusufbyn.redrising.monde.FilonsDeMine;
 import io.github.yusufbyn.redrising.monde.MineLykos;
 import io.github.yusufbyn.redrising.monde.MonstresDeLaMine;
@@ -48,6 +49,7 @@ import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.level.levelgen.structure.Structure;
 import net.minecraft.world.level.levelgen.structure.StructureStart;
 import net.minecraft.world.level.levelgen.presets.WorldPresets;
+import net.minecraft.world.level.storage.ServerLevelData;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import it.unimi.dsi.fastutil.longs.LongSet;
 
@@ -98,6 +100,9 @@ public class MineLykosTest implements FabricClientGameTest {
                 }
                 colonneDuPuits(monde, graine);
                 rocheRouge(monde, graine, 2);
+                if (i == 0) {
+                    coffreQuiSeRemplit(monde);
+                }
             }
         }
         RedRising.LOGGER.info("[G7.2.1] OK : mine au bon endroit, puits, voies et repères du centre (épreuves longues : MineLykosLongTest, -PtestsLongs)");
@@ -351,21 +356,21 @@ public class MineLykosTest implements FabricClientGameTest {
     // --- Comptage (G7.2.2) ---
 
     /** 🟡 Seuils du comptage : longueur des galeries, salles en tout et par niveau. */
-    private static final int GALERIES_MIN = 6000;
-    private static final int SALLES_MIN = 30;
-    private static final int SALLES_PAR_NIVEAU_MIN = 6;
+    private static final int GALERIES_MIN = 3000;
+    private static final int SALLES_MIN = 16;
+    private static final int SALLES_PAR_NIVEAU_MIN = 3;
     /** 🟡 Minerais visibles depuis la mine (qui touchent son vide), au moins ; hélium-3 dans tout le volume, au moins. */
-    private static final Map<FilonsDeMine.Minerai, Integer> VISIBLES_MIN = Map.of(FilonsDeMine.Minerai.CHARBON, 400, FilonsDeMine.Minerai.FER, 500,
-            FilonsDeMine.Minerai.CUIVRE, 220, FilonsDeMine.Minerai.OR, 160, FilonsDeMine.Minerai.REDSTONE, 210, FilonsDeMine.Minerai.HELIUM3, 60);
-    private static final int HELIUM3_VOLUME_MIN = 400;
+    private static final Map<FilonsDeMine.Minerai, Integer> VISIBLES_MIN = Map.of(FilonsDeMine.Minerai.CHARBON, 400, FilonsDeMine.Minerai.FER, 400,
+            FilonsDeMine.Minerai.CUIVRE, 150, FilonsDeMine.Minerai.OR, 130, FilonsDeMine.Minerai.DIAMANT, 30, FilonsDeMine.Minerai.REDSTONE, 120, FilonsDeMine.Minerai.HELIUM3, 250);
+    private static final int HELIUM3_VOLUME_MIN = 900;
     /** 🟡 Coffres d'outils : nombre, et ce qui n'y est jamais (en plus de la contrebande). */
-    private static final int COFFRES_MIN = 12;
-    private static final int COFFRES_MAX = 20;
+    private static final int COFFRES_MIN = 36;
+    private static final int COFFRES_MAX = 48;
     private static final Set<Item> INTERDITS_DANS_LES_COFFRES = Set.of(Items.IRON_INGOT, Items.IRON_HELMET, Items.IRON_CHESTPLATE, Items.IRON_LEGGINGS,
             Items.IRON_BOOTS, Items.DIAMOND, Boutiques.CREDIT, ObjetsMine.HELIUM3, ObjetsMine.MINERAI_HELIUM3_OBJET);
     /** 🟡 Plafonds : fer du volume par rapport à vanilla (sans nos filons), diamants visibles par rapport au squelette sans salles. */
     private static final double FER_VOLUME_MAX = 1.25;
-    private static final double DIAMANTS_VISIBLES_MAX = 1.2;
+    private static final double DIAMANTS_MAX = 2.0;
 
     /** Les blocs de chaque minerai (pierre et ardoise des profondeurs). */
     private static Set<Block> blocs(FilonsDeMine.Minerai minerai) {
@@ -374,6 +379,7 @@ public class MineLykosTest implements FabricClientGameTest {
             case FER -> Set.of(Blocks.IRON_ORE, Blocks.DEEPSLATE_IRON_ORE);
             case CUIVRE -> Set.of(Blocks.COPPER_ORE, Blocks.DEEPSLATE_COPPER_ORE);
             case OR -> Set.of(Blocks.GOLD_ORE, Blocks.DEEPSLATE_GOLD_ORE);
+            case DIAMANT -> DIAMANTS;
             case REDSTONE -> Set.of(Blocks.REDSTONE_ORE, Blocks.DEEPSLATE_REDSTONE_ORE);
             case HELIUM3 -> Set.of(ObjetsMine.MINERAI_HELIUM3);
         };
@@ -469,8 +475,8 @@ public class MineLykosTest implements FabricClientGameTest {
             BlockPos.MutableBlockPos q = new BlockPos.MutableBlockPos();
             for (int x = (cx - r) << 4; x <= ((cx + r) << 4) + 15; x++) {
                 for (int z = (cz - r) << 4; z <= ((cz + r) << 4) + 15; z++) {
-                    // Les tranches des niveaux (FilonsDeMine.dansLaTranche) : de 8 blocs sous le dernier sol au haut des boîtes
-                    for (int y = plan.sols().getLast() - 8; y <= plan.hautDesBoites(); y++) {
+                    // Les tranches des niveaux (FilonsDeMine.dansLaTranche) : de 13 blocs sous le dernier sol au haut des boîtes
+                    for (int y = plan.sols().getLast() - 13; y <= plan.hautDesBoites(); y++) {
                         volume.merge(niveau.getBlockState(q.set(x, y, z)).getBlock(), 1, Integer::sum);
                     }
                 }
@@ -495,16 +501,29 @@ public class MineLykosTest implements FabricClientGameTest {
                     }
                 }
             }
+            // Diamants : jusqu'à 2 fois le vanilla, dans le volume et en visibles
             int diamants = visibles(niveau, vide, DIAMANTS);
-            int diamantsSquelette = visibles(niveau, videDuPlan(plan, false), DIAMANTS);
-            double rapportDiamants = (double) diamants / Math.max(1, diamantsSquelette);
-            minerais.append(String.format(Locale.ROOT, " diamants %d visibles (%d sans les salles, ×%.2f)", diamants, diamantsSquelette, rapportDiamants));
-            if (rapportDiamants > DIAMANTS_VISIBLES_MAX) {
-                liste.add(String.format(Locale.ROOT, "diamants visibles ×%.2f", rapportDiamants));
+            int diamantsVolume = DIAMANTS.stream().mapToInt(bloc -> volume.getOrDefault(bloc, 0)).sum();
+            int nosDiamants = nos.getOrDefault(FilonsDeMine.Minerai.DIAMANT, 0);
+            int nosVisibles = 0;
+            for (FilonsDeMine.Bloc bloc : plan.filons()) {
+                if (bloc.minerai() == FilonsDeMine.Minerai.DIAMANT && DIAMANTS.contains(niveau.getBlockState(bloc.pos()).getBlock())) {
+                    boolean touche = false;
+                    for (Direction d : Direction.values()) {
+                        touche |= vide.contains(bloc.pos().relative(d).asLong());
+                    }
+                    nosVisibles += touche ? 1 : 0;
+                }
+            }
+            double diamantsVolumeRapport = (double) diamantsVolume / Math.max(1, diamantsVolume - nosDiamants);
+            double diamantsVisiblesRapport = (double) diamants / Math.max(1, diamants - nosVisibles);
+            minerais.append(String.format(Locale.ROOT, " diamants ×%.2f dans le volume, ×%.2f visibles", diamantsVolumeRapport, diamantsVisiblesRapport));
+            if (diamantsVolumeRapport > DIAMANTS_MAX || diamantsVisiblesRapport > DIAMANTS_MAX) {
+                liste.add(String.format(Locale.ROOT, "diamants ×%.2f dans le volume, ×%.2f visibles", diamantsVolumeRapport, diamantsVisiblesRapport));
             }
             RedRising.LOGGER.info("[G7.2.2] Graine {} : filons{}", graine, minerais);
 
-            // Coffres d'outils : posés, sans camp, rien d'interdit dedans, 1 ou 2 pioches en fer dans toute la mine
+            // Coffres d'outils : posés, sans camp, rien d'interdit dedans, 4 à 6 pioches en fer dans toute la mine
             int coffres = 0;
             int rares = 0;
             Map<Item, Integer> contenu = new java.util.TreeMap<>(java.util.Comparator.comparing(item -> item.toString()));
@@ -531,7 +550,7 @@ public class MineLykosTest implements FabricClientGameTest {
                 }
             }
             int pioches = contenu.getOrDefault(Items.IRON_PICKAXE, 0);
-            if (coffres < COFFRES_MIN || coffres > COFFRES_MAX || pioches < 1 || pioches > PlanDeMine.COFFRES_RARES) {
+            if (coffres < COFFRES_MIN || coffres > COFFRES_MAX || pioches < PlanDeMine.COFFRES_RARES_MIN || pioches > PlanDeMine.COFFRES_RARES) {
                 liste.add(coffres + " coffres, " + pioches + " pioches en fer");
             }
             RedRising.LOGGER.info("[G7.2.2] Graine {} : {} coffres d'outils ({} rares), contenu {}", graine, coffres, rares, contenu);
@@ -1169,6 +1188,66 @@ public class MineLykosTest implements FabricClientGameTest {
     }
 
     // --- Forts ---
+
+    /**
+     * Un coffre d'outils se remplit (G7.2.5) : première ouverture, sa table ; vidé, rien avant 3 jours de jeu ; après, la table de
+     * remplissage, sans aucun fer (vérifié sur plusieurs tirages) ; pas vide, il n'est pas touché.
+     */
+    private static void coffreQuiSeRemplit(TestSingleplayerContext monde) {
+        BlockPos pos = monde.getServer().computeOnServer(server -> plan(server).coffres().getFirst().pos());
+        monde.getServer().runOnServer(server -> server.overworld().setChunkForced(pos.getX() >> 4, pos.getZ() >> 4, true));
+        monde.getServer().waitFor(server -> server.overworld().hasChunk(pos.getX() >> 4, pos.getZ() >> 4), 600);
+        String defauts = monde.getServer().computeOnServer(server -> {
+            ServerLevel niveau = server.overworld();
+            ChestBlockEntity coffre = (ChestBlockEntity) Objects.requireNonNull(niveau.getBlockEntity(pos));
+            ServerLevelData donnees = (ServerLevelData) niveau.getLevelData();
+            List<String> liste = new ArrayList<>();
+            CoffresMine.ouverture(niveau, pos);
+            coffre.unpackLootTable(null);
+            if (coffre.isEmpty()) {
+                liste.add("première ouverture : coffre vide");
+            }
+            coffre.clearContent();
+            CoffresMine.ouverture(niveau, pos);
+            if (coffre.getLootTable() != null) {
+                liste.add("rempli avant le délai");
+            }
+            Map<Item, Integer> contenu = new java.util.TreeMap<>(java.util.Comparator.comparing(item -> item.toString()));
+            for (int tirage = 0; tirage < 20; tirage++) {
+                donnees.setGameTime(niveau.getGameTime() + PlanDeMine.DELAI_REMPLISSAGE);
+                CoffresMine.ouverture(niveau, pos);
+                if (coffre.getLootTable() == null) {
+                    liste.add("pas rempli après le délai");
+                }
+                coffre.unpackLootTable(null);
+                for (int i = 0; i < coffre.getContainerSize(); i++) {
+                    ItemStack pile = coffre.getItem(i);
+                    if (!pile.isEmpty()) {
+                        contenu.merge(pile.getItem(), pile.getCount(), Integer::sum);
+                        if (pile.getItem().toString().contains("iron") || pile.is(Items.BUCKET) || INTERDITS_DANS_LES_COFFRES.contains(pile.getItem())) {
+                            liste.add(pile + " dans un coffre rempli");
+                        }
+                    }
+                }
+                // Pas vide : pas touché
+                if (tirage == 0) {
+                    donnees.setGameTime(niveau.getGameTime() + PlanDeMine.DELAI_REMPLISSAGE);
+                    CoffresMine.ouverture(niveau, pos);
+                    if (coffre.getLootTable() != null) {
+                        liste.add("un coffre pas vide a été rempli");
+                    }
+                }
+                coffre.clearContent();
+            }
+            coffre.setChanged();
+            RedRising.LOGGER.info("[G7.2.5] Coffre qui se remplit (20 tirages) : {}", contenu);
+            server.overworld().setChunkForced(pos.getX() >> 4, pos.getZ() >> 4, false);
+            return String.join(" ; ", liste);
+        });
+        if (!defauts.isEmpty()) {
+            throw new AssertionError("Coffre qui se remplit : " + defauts);
+        }
+    }
 
     /**
      * La roche rouge (G7.2.5), sur les chunks à cette distance du centre : plus de pierre ni de deepslate autour du vide de la

@@ -413,6 +413,8 @@ public final class MineLykos extends Structure {
     /** Tables de butin des coffres d'outils ({@code data/redrising/loot_table/chests/}). */
     public static final ResourceKey<LootTable> COFFRE_OUTILS = ResourceKey.create(Registries.LOOT_TABLE, id("chests/mine_outils"));
     public static final ResourceKey<LootTable> COFFRE_RARE = ResourceKey.create(Registries.LOOT_TABLE, id("chests/mine_outils_rare"));
+    /** Ce que contient un coffre qui se remplit de nouveau ({@link CoffresMine}) : outils de base et nourriture, jamais de fer. */
+    public static final ResourceKey<LootTable> COFFRE_RECHARGE = ResourceKey.create(Registries.LOOT_TABLE, id("chests/mine_recharge"));
 
     /** Pose, dans ce chunk, tout ce que le plan y met. */
     static void poser(WorldGenLevel monde, PlanDeMine plan, BoundingBox chunk, RandomSource hasard) {
@@ -632,6 +634,7 @@ public final class MineLykos extends Structure {
             case FER -> ardoise ? Blocks.DEEPSLATE_IRON_ORE : Blocks.IRON_ORE;
             case CUIVRE -> ardoise ? Blocks.DEEPSLATE_COPPER_ORE : Blocks.COPPER_ORE;
             case OR -> ardoise ? Blocks.DEEPSLATE_GOLD_ORE : Blocks.GOLD_ORE;
+            case DIAMANT -> ardoise ? Blocks.DEEPSLATE_DIAMOND_ORE : Blocks.DIAMOND_ORE;
             case REDSTONE -> ardoise ? Blocks.DEEPSLATE_REDSTONE_ORE : Blocks.REDSTONE_ORE;
             // Une seule variante : la mine ne le pose que sous y = 0
             case HELIUM3 -> ObjetsMine.MINERAI_HELIUM3;

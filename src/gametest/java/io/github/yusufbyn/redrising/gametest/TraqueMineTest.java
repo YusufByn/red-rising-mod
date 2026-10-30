@@ -266,6 +266,12 @@ public class TraqueMineTest implements FabricClientGameTest {
         if (cellule != null) {
             throw new AssertionError("/rr mine cellule 1 : " + cellule);
         }
+        // Le message dit la direction dans la langue du jeu (bug « vers south »)
+        for (Direction direction : Direction.Plane.HORIZONTAL) {
+            if (!net.minecraft.locale.Language.getInstance().has("commande.redrising.direction." + direction.getSerializedName())) {
+                throw new AssertionError("Direction non traduite : " + direction);
+            }
+        }
         RedRising.LOGGER.info("[G7.2.4] /rr mine tp (quai du niveau 2) et /rr mine cellule (emplacement 1) : OK");
     }
 

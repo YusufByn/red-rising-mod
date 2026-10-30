@@ -260,5 +260,10 @@
   "commande.redrising.mine.cellule": "Cell %s built on level %s of the mine: entrance at %s, facing %s",
   "commande.redrising.mine.cellule_existe": "Cell %s of the mine is already built",
   "panneau.redrising.puits_droite": "Shaft →",
-  "panneau.redrising.puits_gauche": "← Shaft"
+  "panneau.redrising.puits_gauche": "← Shaft",
+  "commande.redrising.direction.north": "north",
+  "commande.redrising.direction.south": "south",
+  "commande.redrising.direction.east": "east",
+  "commande.redrising.direction.west": "west",
+  "commande.redrising.mine.coffre": "Mine chest at %s: %s seconds before it can refill (−1: never opened)"
 }

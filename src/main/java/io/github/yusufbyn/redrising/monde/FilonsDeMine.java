@@ -22,7 +22,7 @@ import java.util.Set;
  *     <li><b>Filons visibles</b> : un départ dans le mur d'une galerie ou d'une salle (les salles comptent plus : ce sont
  *     les chantiers), puis la moitié du filon le long du mur (on le voit), l'autre moitié dans la roche (on le suit en
  *     creusant).</li>
- *     <li><b>Hélium-3</b> : dans les salles de forage (sol et parois, tout visible), en poches dans les galeries lointaines,
+ *     <li><b>Hélium-3</b> : la vraie richesse, aux niveaux 2 et 3 : dans les salles de forage (sol et parois, tout visible), en poches dans les parois lointaines,
  *     et environ {@value #HELIUM3_CACHE} blocs dispersés dans la roche, en petits filons qu'aucun vide ne touche.</li>
  *     <li><b>Épuisement</b> : rien à moins de {@value #EPUISEMENT} blocs de la caverne de la colonie, ni du chemin entre le
  *     puits principal et la caverne (l'axe travaillé depuis des générations).</li>
@@ -30,7 +30,7 @@ import java.util.Set;
  */
 public final class FilonsDeMine {
     public enum Minerai {
-        CHARBON, FER, CUIVRE, OR, REDSTONE, HELIUM3
+        CHARBON, FER, CUIVRE, OR, DIAMANT, REDSTONE, HELIUM3
     }
 
     /** Un bloc de filon. */
@@ -38,25 +38,27 @@ public final class FilonsDeMine {
     }
 
     /**
-     * 🟡 Une sorte de filon visible : son minerai, les niveaux (comptés pour 4 niveaux, 0 en haut ; avec moins de niveaux,
-     * ceux du bas), le nombre de filons dans toute la mine, leur taille.
+     * 🟡 Une sorte de filon visible : son minerai, sa part sur chaque niveau (comptés pour 3 niveaux, du haut vers le bas ;
+     * avec moins de niveaux, ceux du bas), le nombre de filons dans toute la mine, leur taille.
      */
-    record Sorte(Minerai minerai, int premier, int dernier, int nombre, int tailleMin, int tailleMax) {
+    record Sorte(Minerai minerai, double[] parts, int nombre, int tailleMin, int tailleMax) {
     }
 
     static final List<Sorte> SORTES = List.of(
-            new Sorte(Minerai.CHARBON, 0, 2, 48, 20, 30),
-            new Sorte(Minerai.FER, 0, 2, 36, 14, 20),
-            new Sorte(Minerai.CUIVRE, 0, 0, 16, 15, 25),
-            new Sorte(Minerai.OR, 1, 2, 14, 8, 12),
-            new Sorte(Minerai.REDSTONE, 2, 2, 14, 10, 14),
-            // Poches d'hélium-3 dans les galeries lointaines
-            new Sorte(Minerai.HELIUM3, 1, 2, 16, 4, 6));
+            new Sorte(Minerai.CHARBON, new double[]{1, 1, 1}, 60, 20, 30),
+            new Sorte(Minerai.FER, new double[]{1, 1, 1}, 72, 14, 20),
+            new Sorte(Minerai.CUIVRE, new double[]{1, 0, 0}, 30, 15, 25),
+            // Le niveau 1 a de l'or et des diamants ; les diamants sont surtout au fond
+            new Sorte(Minerai.OR, new double[]{0.8, 0, 0.2}, 40, 8, 12),
+            new Sorte(Minerai.DIAMANT, new double[]{0.15, 0.25, 0.6}, 60, 3, 6),
+            new Sorte(Minerai.REDSTONE, new double[]{0, 0, 1}, 28, 10, 14),
+            // Poches d'hélium-3 dans les parois lointaines : les niveaux 2 et 3 sont riches
+            new Sorte(Minerai.HELIUM3, new double[]{0, 0.4, 0.6}, 60, 4, 6));
     /** 🟡 Hélium-3 des salles de forage : de 10 à 14 blocs chacune, au sol et sur les parois. */
     static final int HELIUM3_FORAGE_MIN = 10;
     static final int HELIUM3_FORAGE_MAX = 14;
-    /** 🟡 Hélium-3 caché dans la roche (niveaux 3 et 4) : environ 300 blocs, en filons de 3 à 6. */
-    public static final int HELIUM3_CACHE = 300;
+    /** 🟡 Hélium-3 caché dans la roche (niveaux 2 et 3) : environ 650 blocs, en filons de 3 à 6. */
+    public static final int HELIUM3_CACHE = 650;
     /** 🟡 Les poches d'hélium-3 : à 60 blocs au moins du puits principal. */
     static final int LOINTAIN = 60;
     /** 🟡 Épuisement : autour de la colonie et du chemin du puits à la colonie. */
@@ -91,25 +93,30 @@ public final class FilonsDeMine {
     private void visibles() {
         int niveaux = plan.sols().size();
         for (Sorte sorte : SORTES) {
+            // Les filons de chaque niveau, selon sa part : un tirage régulier, pas au hasard
             List<Integer> permis = new ArrayList<>();
+            double total = 0;
             for (int niveau = 0; niveau < niveaux; niveau++) {
-                int ligne = PlanDeMine.NIVEAUX_MAX - niveaux + niveau;
-                if (ligne >= sorte.premier() && ligne <= sorte.dernier()) {
+                total += sorte.parts()[PlanDeMine.NIVEAUX_MAX - niveaux + niveau];
+            }
+            if (total == 0) {
+                continue;
+            }
+            for (int niveau = 0; niveau < niveaux; niveau++) {
+                int ici = (int) Math.round(sorte.nombre() * sorte.parts()[PlanDeMine.NIVEAUX_MAX - niveaux + niveau] / total);
+                for (int k = 0; k < ici; k++) {
                     permis.add(niveau);
                 }
             }
-            if (permis.isEmpty()) {
-                continue;
-            }
-            for (int n = 0; n < sorte.nombre(); n++) {
-                int niveau = permis.get(n % permis.size());
+            for (int niveau : permis) {
                 int taille = sorte.tailleMin() + hasard.nextInt(sorte.tailleMax() - sorte.tailleMin() + 1);
                 boolean lointain = sorte.minerai() == Minerai.HELIUM3;
                 // Quelques essais pour trouver un départ qui convient
                 for (int essai = 0; essai < 20; essai++) {
                     BlockPos depart = departDansUnMur(niveau, lointain);
                     if (depart != null) {
-                        pousser(depart, sorte.minerai(), taille, (taille + 1) / 2, niveau);
+                        // Une poche d'hélium-3 se voit en entier ; un filon, à moitié (on le suit en creusant)
+                        pousser(depart, sorte.minerai(), taille, lointain ? taille : (taille + 1) / 2, niveau);
                         break;
                     }
                 }
@@ -146,7 +153,7 @@ public final class FilonsDeMine {
         int poses = 0;
         BlockPos centre = plan.centre();
         int demi = PlanDeMine.DEMI_MINE;
-        for (int essai = 0; essai < 4000 && poses < HELIUM3_CACHE && !permis.isEmpty(); essai++) {
+        for (int essai = 0; essai < 8000 && poses < HELIUM3_CACHE && !permis.isEmpty(); essai++) {
             int niveau = permis.get(essai % permis.size());
             int sol = plan.sols().get(niveau);
             BlockPos depart = new BlockPos(centre.getX() - demi + hasard.nextInt(2 * demi + 1), sol - 10 + hasard.nextInt(21),

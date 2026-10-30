@@ -243,6 +243,7 @@ class PlanDeMineTest {
                 assertTrue(niveau >= 0, nom + " hors des tranches");
                 switch (bloc.minerai()) {
                     case CUIVRE -> assertTrue(niveau == 0, nom);
+                    case OR -> assertTrue(niveau != 1, nom);
                     case HELIUM3 -> assertTrue(niveau >= 1, nom);
                     case REDSTONE -> assertTrue(niveau == 2, nom);
                     default -> {
@@ -259,10 +260,23 @@ class PlanDeMineTest {
                 }
             }
             System.out.println("Filons, graine " + graine + " (" + Math.round(ms) + " ms) : " + total + " dont visibles " + visibles);
-            assertTrue(total.getOrDefault(FilonsDeMine.Minerai.HELIUM3, 0) >= 400, "graine " + graine + " : hélium-3 " + total);
-            assertTrue(visibles.getOrDefault(FilonsDeMine.Minerai.HELIUM3, 0) >= 60, "graine " + graine + " : hélium-3 visible " + visibles);
+            assertTrue(total.getOrDefault(FilonsDeMine.Minerai.HELIUM3, 0) >= 900, "graine " + graine + " : hélium-3 " + total);
+            assertTrue(visibles.getOrDefault(FilonsDeMine.Minerai.HELIUM3, 0) >= 250, "graine " + graine + " : hélium-3 visible " + visibles);
             assertTrue(total.getOrDefault(FilonsDeMine.Minerai.HELIUM3, 0) - visibles.getOrDefault(FilonsDeMine.Minerai.HELIUM3, 0)
                     >= FilonsDeMine.HELIUM3_CACHE * 8 / 10, "graine " + graine + " : hélium-3 caché " + total + " " + visibles);
+            // Les diamants ajoutés : surtout au fond
+            int[] diamants = new int[plan.sols().size()];
+            for (FilonsDeMine.Bloc bloc : plan.filons()) {
+                if (bloc.minerai() == FilonsDeMine.Minerai.DIAMANT) {
+                    for (int i = 0; i < plan.sols().size(); i++) {
+                        if (FilonsDeMine.dansLaTranche(bloc.pos(), i, plan.sols())) {
+                            diamants[i]++;
+                            break;
+                        }
+                    }
+                }
+            }
+            assertTrue(diamants[plan.sols().size() - 1] > diamants[0] && diamants[0] > 0, "graine " + graine + " : diamants par niveau " + java.util.Arrays.toString(diamants));
         }
     }
 
@@ -271,45 +285,36 @@ class PlanDeMineTest {
         for (long graine : GRAINES) {
             PlanDeMine plan = PlanDeMine.tirer(graine, CENTRE, 62, 66, 66);
             List<PlanDeMine.Coffre> coffres = plan.coffres();
-            assertTrue(coffres.size() >= 6 && coffres.size() <= 20, "graine " + graine + " : " + coffres.size() + " coffres");
+            assertTrue(coffres.size() >= 36 && coffres.size() <= 48, "graine " + graine + " : " + coffres.size() + " coffres");
+            BoundingBox zone = plan.caverne().boite();
             int rares = 0;
-            Set<PlanDeMine.Salle> salles = new HashSet<>();
+            int[] raresParNiveau = new int[plan.sols().size()];
             for (PlanDeMine.Coffre coffre : coffres) {
                 BlockPos pos = coffre.pos();
                 String nom = "graine " + graine + " : coffre en " + pos;
-                PlanDeMine.Salle salle = plan.salles().stream().filter(s -> s.contient(pos.getX(), pos.getY(), pos.getZ())).findFirst().orElse(null);
-                assertTrue(salle != null, nom + " hors d'une salle");
-                assertTrue(salles.add(salle), nom + " : deux coffres dans la même salle");
-                assertEquals(salle.boite().minY(), pos.getY(), nom + " pas au sol");
+                assertTrue(plan.sols().contains(pos.getY()), nom + " pas au sol");
+                assertFalse(plan.interieur(pos.getX(), pos.getY() - 1, pos.getZ()), nom + " sur le vide");
                 BlockPos mur = pos.relative(coffre.face().getOpposite());
                 assertTrue(plan.interieur(pos.getX(), pos.getY(), pos.getZ()) && !plan.interieur(mur.getX(), mur.getY(), mur.getZ()), nom + " pas contre un mur");
                 assertFalse(plan.poteaux().contains(pos), nom + " sur un étai");
-                for (BoundingBox ouverture : salle.ouvertures()) {
-                    assertFalse(ouverture.inflatedBy(1).isInside(pos), nom + " devant une ouverture");
+                assertFalse(plan.colonie().reserve().isInside(pos), nom + " dans la colonie");
+                assertTrue(plan.lanternes().contains(new PlanDeMine.Lanterne(pos.above(), false)), nom + " sans lanterne");
+                for (PlanDeMine.Salle salle : plan.salles()) {
+                    for (BoundingBox ouverture : salle.ouvertures()) {
+                        assertFalse(ouverture.inflatedBy(1).isInside(pos), nom + " devant une ouverture");
+                    }
                 }
                 if (coffre.rare()) {
                     rares++;
-                    assertEquals(plan.sols().size() - 1, salle.niveau(), nom + " : coffre rare hors du niveau du bas");
+                    raresParNiveau[plan.sols().indexOf(pos.getY())]++;
+                    double versColonie = Math.hypot(Math.max(0, Math.max(zone.minX() - pos.getX(), pos.getX() - zone.maxX())),
+                            Math.max(0, Math.max(zone.minZ() - pos.getZ(), pos.getZ() - zone.maxZ())));
+                    assertTrue(versColonie > PlanDeMine.DISTANCE_COFFRE_RARE, nom + " : coffre rare à " + Math.round(versColonie) + " blocs de la colonie");
                 }
             }
-            assertTrue(rares >= 1 && rares <= PlanDeMine.COFFRES_RARES, "graine " + graine + " : " + rares + " coffres rares");
-            // Les rares : à plus de 80 blocs de la colonie s'il y a de telles salles au niveau du bas, sinon la plus éloignée
-            BoundingBox caverne = plan.caverne().boite();
-            java.util.function.ToDoubleFunction<PlanDeMine.Salle> versColonie = salle -> Math.hypot(
-                    Math.max(0, Math.max(caverne.minX() - salle.x(), salle.x() - caverne.maxX())),
-                    Math.max(0, Math.max(caverne.minZ() - salle.z(), salle.z() - caverne.maxZ())));
-            List<PlanDeMine.Salle> duBas = plan.salles().stream().filter(salle -> salle.niveau() == plan.sols().size() - 1).toList();
-            boolean lointaines = duBas.stream().anyMatch(salle -> versColonie.applyAsDouble(salle) > PlanDeMine.DISTANCE_COFFRE_RARE);
-            double plusLoin = duBas.stream().mapToDouble(versColonie).max().orElseThrow();
-            for (PlanDeMine.Coffre coffre : coffres) {
-                if (coffre.rare()) {
-                    PlanDeMine.Salle salle = plan.salles().stream().filter(s -> s.contient(coffre.pos().getX(), coffre.pos().getY(), coffre.pos().getZ())).findFirst().orElseThrow();
-                    double distance = versColonie.applyAsDouble(salle);
-                    assertTrue(lointaines ? distance > PlanDeMine.DISTANCE_COFFRE_RARE : distance == plusLoin,
-                            "graine " + graine + " : coffre rare à " + Math.round(distance) + " blocs de la colonie");
-                }
-            }
-            System.out.println("Coffres, graine " + graine + " : " + coffres.size() + " dont " + rares + " rares");
+            assertTrue(rares >= PlanDeMine.COFFRES_RARES_MIN && rares <= PlanDeMine.COFFRES_RARES, "graine " + graine + " : " + rares + " coffres rares");
+            assertTrue(raresParNiveau[plan.sols().size() - 1] >= 2, "graine " + graine + " : rares par niveau " + java.util.Arrays.toString(raresParNiveau));
+            System.out.println("Coffres, graine " + graine + " : " + coffres.size() + " dont " + rares + " rares " + java.util.Arrays.toString(raresParNiveau));
         }
     }
 
@@ -324,7 +329,8 @@ class PlanDeMineTest {
                 assertTrue(plan.interieur(pos.getX(), pos.getY(), pos.getZ()), nom + " hors du vide");
                 // Tenue : suspendue sous une poutre ou la roche, posée sur la roche
                 BlockPos appui = lanterne.suspendue() ? pos.above() : pos.below();
-                assertTrue(plan.poutres().contains(appui) || plan.chaines().contains(appui) || !plan.interieur(appui.getX(), appui.getY(), appui.getZ()), nom + " sans appui");
+                assertTrue(plan.poutres().contains(appui) || plan.chaines().contains(appui) || !plan.interieur(appui.getX(), appui.getY(), appui.getZ())
+                        || plan.coffres().stream().anyMatch(coffre -> coffre.pos().equals(appui)), nom + " sans appui");
                 for (PlanDeMine.Puits p : plan.puits()) {
                     assertFalse(p.principal() && p.interieur().isInside(pos), nom + " au-dessus du puits principal");
                 }
@@ -430,5 +436,14 @@ class PlanDeMineTest {
         assertEquals(a.panneaux(), b.panneaux());
         assertEquals(a.entreesDesGris(), b.entreesDesGris());
         assertSame(PlanDeMine.de(5, CENTRE, (x, z) -> 62, 66, 66), PlanDeMine.de(5, CENTRE, (x, z) -> 62, 66, 66));
+    }
+
+    @Test
+    void unCoffreSeRemplitVideEtApresLeDelai() {
+        long t = 1_000_000;
+        assertFalse(PlanDeMine.coffreDoitSeRemplir(null, true, t), "jamais ouvert : sa table d'origine");
+        assertFalse(PlanDeMine.coffreDoitSeRemplir(t - PlanDeMine.DELAI_REMPLISSAGE, false, t), "pas vide : on y range ses affaires");
+        assertFalse(PlanDeMine.coffreDoitSeRemplir(t - PlanDeMine.DELAI_REMPLISSAGE + 1, true, t), "trop tôt");
+        assertTrue(PlanDeMine.coffreDoitSeRemplir(t - PlanDeMine.DELAI_REMPLISSAGE, true, t));
     }
 }

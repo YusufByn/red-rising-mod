@@ -50,6 +50,7 @@ import io.github.yusufbyn.redrising.jalons.MoteurJalons;
 import io.github.yusufbyn.redrising.jalons.Personnage;
 import io.github.yusufbyn.redrising.jalons.Personnages;
 import io.github.yusufbyn.redrising.monde.CelluleRising;
+import io.github.yusufbyn.redrising.monde.CoffresMine;
 import io.github.yusufbyn.redrising.monde.MineLykos;
 import io.github.yusufbyn.redrising.monde.MonstresDeLaMine;
 import io.github.yusufbyn.redrising.monde.PlanDeMine;
@@ -241,7 +242,13 @@ public final class CommandesDebug {
                                         .then(argJoueur((ctx, joueur) -> traqueDansLaMine(ctx, joueur, true)))))
                         .then(Commands.literal("cellule")
                                 .then(Commands.argument("numero", IntegerArgumentType.integer(1, PlanDeMine.CELLULES))
-                                        .executes(CommandesDebug::construireCelluleDeLaMine))))
+                                        .executes(CommandesDebug::construireCelluleDeLaMine)))
+                        // Coffres qui se remplissent (G7.2.5) : reset les rend prêts à se remplir à la prochaine ouverture, s'ils sont vides
+                        .then(Commands.literal("coffre")
+                                .then(Commands.literal("get")
+                                        .then(Commands.argument("pos", BlockPosArgument.blockPos()).executes(ctx -> coffreDeLaMine(ctx, false))))
+                                .then(Commands.literal("reset")
+                                        .then(Commands.argument("pos", BlockPosArgument.blockPos()).executes(ctx -> coffreDeLaMine(ctx, true))))))
                 .then(Commands.literal("structure")
                         .then(Commands.literal("list").executes(CommandesDebug::listerStructures))
                         .then(Commands.literal("poste")
@@ -604,7 +611,25 @@ public final class CommandesDebug {
             monde.setBlock(pas.above(), Blocks.AIR.defaultBlockState(), Block.UPDATE_CLIENTS);
         }
         ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.mine.cellule", numero, emplacement.niveau() + 1,
-                entree.toShortString(), versSalle.getSerializedName()), true);
+                entree.toShortString(), Component.translatable("commande.redrising.direction." + versSalle.getSerializedName())), true);
+        return Command.SINGLE_SUCCESS;
+    }
+
+    /** Le dernier remplissage d'un coffre d'outils ; {@code reset} : prêt à se remplir à la prochaine ouverture s'il est vide. */
+    private static int coffreDeLaMine(CommandContext<CommandSourceStack> ctx, boolean reset) throws CommandSyntaxException {
+        ServerLevel monde = ctx.getSource().getServer().overworld();
+        BlockPos pos = BlockPosArgument.getLoadedBlockPos(ctx, monde, "pos");
+        PlanDeMine plan = planDeLaMine(ctx.getSource().getServer());
+        if (!(monde.getBlockEntity(pos) instanceof ChestBlockEntity coffre) || plan.coffres().stream().noneMatch(c -> c.pos().equals(pos))) {
+            throw PAS_UN_COFFRE.create(pos.toShortString());
+        }
+        if (reset) {
+            coffre.setAttached(CoffresMine.DERNIER_REMPLISSAGE, monde.getGameTime() - PlanDeMine.DELAI_REMPLISSAGE);
+            coffre.setChanged();
+        }
+        Long dernier = coffre.getAttached(CoffresMine.DERNIER_REMPLISSAGE);
+        long attente = dernier == null ? -1 : Math.max(0, PlanDeMine.DELAI_REMPLISSAGE - (monde.getGameTime() - dernier)) / 20;
+        ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.mine.coffre", pos.toShortString(), attente), reset);
         return Command.SINGLE_SUCCESS;
     }
 
@@ -655,7 +680,7 @@ public final class CommandesDebug {
         BlockPos pos = BlockPosArgument.getLoadedBlockPos(ctx, ctx.getSource().getServer().overworld(), "pos");
         Direction direction = lireEnum(ctx, "direction", HORIZONTALES);
         CelluleRising.Cellule cellule = CelluleRising.construire(ctx.getSource().getServer().overworld(), pos, direction);
-        ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.structure.cellule", cellule.entree().toShortString(), direction.getSerializedName()), true);
+        ctx.getSource().sendSuccess(() -> Component.translatable("commande.redrising.structure.cellule", cellule.entree().toShortString(), Component.translatable("commande.redrising.direction." + direction.getSerializedName())), true);
         return Command.SINGLE_SUCCESS;
     }
 

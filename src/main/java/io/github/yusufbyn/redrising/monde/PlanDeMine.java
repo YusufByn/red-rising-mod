@@ -41,7 +41,7 @@ import java.util.function.IntBinaryOperator;
  *     <li><b>Salles d'extraction</b> : des baies dans les parois des cavernes, fronts de taille et salles de forage (niveaux
  *     2 et 3).</li>
  *     <li><b>Filons</b> (G7.2.2) : minerais riches et hélium-3, tirés avec le plan ({@link FilonsDeMine}).</li>
- *     <li><b>Coffres d'outils</b> (G7.2.2) : les restes des mineurs, sans camp.</li>
+ *     <li><b>Coffres d'outils</b> (G7.2.2, G7.2.5) : les restes des mineurs, sans camp, visibles (une lanterne dessus).</li>
  *     <li><b>Réseau éclairé</b> (G7.2.3) : les axes (de quoi s'orienter sans torche), les paliers des puits secondaires,
  *     l'entrée de la colonie, le cadre des salles de forage ; aucun monstre n'apparaît sur ce réseau.</li>
  *     <li><b>Voies</b> (G7.2.3) : des rails au milieu de chaque branche de l'axe, un butoir à chaque bout, un rail de propulsion
@@ -127,11 +127,15 @@ public final class PlanDeMine {
     static final int HAUTEUR_FRONT = 5;
     static final double RAYON_FORAGE = 6.5;
     static final int HAUTEUR_FORAGE = 8;
-    /**
-     * 🟡 Coffres d'outils : au plus {@value #COFFRES_RARES} avec la table rare (une pioche en fer très usée), au niveau du bas,
-     * à plus de {@value #DISTANCE_COFFRE_RARE} blocs de la colonie.
-     */
-    public static final int COFFRES_RARES = 2;
+    /** 🟡 Coffres d'outils : environ 42, à 8 blocs au moins les uns des autres. */
+    public static final int COFFRES_VISES = 42;
+    static final int ECART_COFFRES = 8;
+    /** 🟡 Coffres rares (une pioche en fer très usée) : de 4 à 6, à plus de {@value #DISTANCE_COFFRE_RARE} blocs de la colonie. */
+    public static final int COFFRES_RARES_MIN = 4;
+    public static final int COFFRES_RARES = 6;
+    static final int COFFRES_RARES_VISES = 5;
+    /** 🟡 Trois jours de jeu (une heure réelle) entre deux remplissages d'un coffre ({@link CoffresMine}). */
+    public static final long DELAI_REMPLISSAGE = 3 * 24000;
     public static final int DISTANCE_COFFRE_RARE = 80;
     /** 🟡 Éclairage de l'axe : tous les 6 blocs, une paire de lanternes sur les côtés ou une au milieu, à 3 blocs du sol. */
     public static final int PAS_LANTERNES = 6;
@@ -340,9 +344,9 @@ public final class PlanDeMine {
         for (FilonsDeMine.Bloc bloc : filons) {
             filonsParChunk.computeIfAbsent(cleChunk(bloc.pos().getX() >> 4, bloc.pos().getZ() >> 4), cle -> new ArrayList<>()).add(bloc);
         }
-        this.coffres = coffres(hasard);
         this.axes = List.copyOf(axes);
         this.niveauxAxes = List.copyOf(niveauxAxes);
+        this.coffres = coffres(hasard);
         this.lanternes = placerLanternes();
         poserVoies();
         poserReperes();
@@ -671,6 +675,11 @@ public final class PlanDeMine {
                 liste.putIfAbsent(pos, new Lanterne(pos, true));
             }
         }
+        // La lanterne posée sur chaque coffre : on le voit de loin
+        for (Coffre coffre : coffres) {
+            BlockPos pos = coffre.pos().above();
+            liste.putIfAbsent(pos, new Lanterne(pos, false));
+        }
         return List.copyOf(liste.values());
     }
 
@@ -706,68 +715,105 @@ public final class PlanDeMine {
     }
 
     /**
-     * Les coffres d'outils : une salle sur deux, un coffre au sol contre un mur, loin des ouvertures et hors des étais.
-     * D'abord les coffres rares : 1 à {@value #COFFRES_RARES}, dans les salles du niveau du bas à plus de
-     * {@value #DISTANCE_COFFRE_RARE} blocs de la colonie ; s'il n'y en a aucune, un seul, dans la salle du niveau du bas la
-     * plus éloignée. Puis les autres salles, dans un ordre tiré.
+     * Les coffres d'outils, visibles : contre le mur, une lanterne posée dessus. Un à la paroi de chaque caverne (pas la
+     * colonie), une salle sur deux, le reste le long des tunnels, jusqu'à {@value #COFFRES_VISES}. Puis les coffres rares :
+     * {@value #COFFRES_RARES_VISES} (entre {@value #COFFRES_RARES_MIN} et {@value #COFFRES_RARES}), la plupart au niveau du bas,
+     * à plus de {@value #DISTANCE_COFFRE_RARE} blocs de la colonie.
      */
     private List<Coffre> coffres(Random hasard) {
-        BoundingBox zoneCaverne = caverne().boite();
+        List<Coffre> liste = new ArrayList<>();
+        for (Caverne caverne : cavernes.subList(1, cavernes.size())) {
+            for (int essai = 0; essai < 8; essai++) {
+                Direction sens = Direction.from2DDataValue(hasard.nextInt(4));
+                BlockPos pos = new BlockPos(caverne.x(), caverne.sol(), caverne.z());
+                while (caverne.contient(pos.getX() + sens.getStepX(), caverne.sol(), pos.getZ() + sens.getStepZ())) {
+                    pos = pos.relative(sens);
+                }
+                if (ajouterCoffre(liste, pos, sens)) {
+                    break;
+                }
+            }
+        }
         List<Salle> ordre = new ArrayList<>(salles);
         Collections.shuffle(ordre, hasard);
-        List<Salle> duBas = new ArrayList<>(ordre.stream().filter(salle -> salle.niveau() == sols.size() - 1).toList());
-        duBas.sort((a, b) -> Double.compare(distance(zoneCaverne, b.x(), b.z()), distance(zoneCaverne, a.x(), a.z())));
-        long lointaines = duBas.stream().filter(salle -> distance(zoneCaverne, salle.x(), salle.z()) > DISTANCE_COFFRE_RARE).count();
-        long voulus = Math.clamp(lointaines, 1, COFFRES_RARES);
-        List<Coffre> liste = new ArrayList<>();
-        Set<Salle> servies = new HashSet<>();
-        for (Salle salle : duBas) {
-            if (liste.size() == voulus) {
+        for (Salle salle : ordre.subList(0, ordre.size() / 2)) {
+            coffreContreUnMur(salle, liste, hasard);
+        }
+        // Le long des tunnels (hors des axes)
+        List<BoundingBox> tunnels = galeries.stream().filter(g -> axes.stream().noneMatch(axe -> axe == g) && g.getYSpan() == HAUTEUR_TUNNEL).toList();
+        for (int essai = 0; essai < 1000 && liste.size() < COFFRES_VISES && !tunnels.isEmpty(); essai++) {
+            BoundingBox tunnel = tunnels.get(hasard.nextInt(tunnels.size()));
+            boolean surX = tunnel.getXSpan() > tunnel.getZSpan();
+            int t = surX ? tunnel.minX() + hasard.nextInt(tunnel.getXSpan()) : tunnel.minZ() + hasard.nextInt(tunnel.getZSpan());
+            boolean plus = hasard.nextBoolean();
+            BlockPos pos = surX ? new BlockPos(t, tunnel.minY(), plus ? tunnel.maxZ() : tunnel.minZ()) : new BlockPos(plus ? tunnel.maxX() : tunnel.minX(), tunnel.minY(), t);
+            Direction versMur = surX ? (plus ? Direction.SOUTH : Direction.NORTH) : (plus ? Direction.EAST : Direction.WEST);
+            ajouterCoffre(liste, pos, versMur);
+        }
+        // Les rares : loin de la colonie, la plupart au fond
+        BoundingBox zone = caverne().boite();
+        List<Coffre> lointains = new ArrayList<>(liste.stream().filter(c -> distance(zone, c.pos().getX(), c.pos().getZ()) > DISTANCE_COFFRE_RARE).toList());
+        Collections.shuffle(lointains, hasard);
+        lointains.sort((a, b) -> Integer.compare(a.pos().getY(), b.pos().getY()));
+        Set<BlockPos> rares = new HashSet<>();
+        // Un en haut, un au milieu, le reste au fond
+        for (int niveau = 0; niveau < sols.size() - 1 && rares.size() < COFFRES_RARES_VISES - 1; niveau++) {
+            int sol = sols.get(niveau);
+            lointains.stream().filter(c -> c.pos().getY() == sol).findFirst().ifPresent(c -> rares.add(c.pos()));
+        }
+        for (Coffre coffre : lointains) {
+            if (rares.size() == COFFRES_RARES_VISES) {
                 break;
             }
-            Coffre coffre = coffreContreUnMur(salle, true, hasard);
-            if (coffre != null) {
-                liste.add(coffre);
-                servies.add(salle);
-            }
+            rares.add(coffre.pos());
         }
-        for (Salle salle : ordre) {
-            if (liste.size() == salles.size() / 2) {
-                break;
-            }
-            if (servies.contains(salle)) {
-                continue;
-            }
-            Coffre coffre = coffreContreUnMur(salle, false, hasard);
-            if (coffre != null) {
-                liste.add(coffre);
-            }
-        }
-        return liste;
+        return liste.stream().map(c -> new Coffre(c.pos(), c.face(), rares.contains(c.pos()))).toList();
+    }
+
+    /** Un coffre doit-il se remplir ? Vide, et son dernier remplissage assez vieux ({@code null} : jamais ouvert). */
+    public static boolean coffreDoitSeRemplir(@Nullable Long dernier, boolean vide, long maintenant) {
+        return vide && dernier != null && maintenant - dernier >= DELAI_REMPLISSAGE;
     }
 
     private static double distance(BoundingBox boite, int x, int z) {
         return Math.hypot(Math.max(0, Math.max(boite.minX() - x, x - boite.maxX())), Math.max(0, Math.max(boite.minZ() - z, z - boite.maxZ())));
     }
 
-    /** Un coffre au sol de cette salle, contre un mur, tourné vers la salle, ou {@code null} faute de place. */
-    private @Nullable Coffre coffreContreUnMur(Salle salle, boolean rare, Random hasard) {
+    /**
+     * Un coffre ici, tourné à l'opposé du mur, s'il tient : au sol, le mur derrière lui, de la place au-dessus pour sa
+     * lanterne, hors de la colonie et des axes, loin d'un autre coffre et d'une cellule, devant aucun étai ni ouverture.
+     */
+    private boolean ajouterCoffre(List<Coffre> liste, BlockPos pos, Direction versMur) {
+        BlockPos mur = pos.relative(versMur);
+        boolean libre = interieur(pos.getX(), pos.getY(), pos.getZ()) && interieur(pos.getX(), pos.getY() + 1, pos.getZ())
+                && interieur(pos.getX(), pos.getY() + 2, pos.getZ()) && !interieur(pos.getX(), pos.getY() - 1, pos.getZ())
+                && !interieur(mur.getX(), mur.getY(), mur.getZ()) && !poteaux.contains(pos) && !poutres.contains(pos.above())
+                && !colonie.reserve().isInside(pos) && axes.stream().noneMatch(axe -> axe.isInside(pos)) && !dansUnPuits(puits, pos)
+                && liste.stream().noneMatch(autre -> autre.pos().closerThan(pos, ECART_COFFRES))
+                && cellules.stream().noneMatch(cellule -> cellule.avecMurs().inflatedBy(3).isInside(pos))
+                && salles.stream().noneMatch(salle -> salle.ouvertures().stream().anyMatch(ouverture -> ouverture.inflatedBy(1).isInside(pos)));
+        if (libre) {
+            liste.add(new Coffre(pos, versMur.getOpposite(), false));
+        }
+        return libre;
+    }
+
+    /** Un coffre au sol de cette salle, contre un mur, s'il y a la place. */
+    private void coffreContreUnMur(Salle salle, List<Coffre> liste, Random hasard) {
         BoundingBox b = salle.boite();
         int sol = b.minY();
         for (int essai = 0; essai < 60; essai++) {
             BlockPos pos = new BlockPos(b.minX() + hasard.nextInt(b.getXSpan()), sol, b.minZ() + hasard.nextInt(b.getZSpan()));
-            if (!salle.contient(pos.getX(), sol, pos.getZ()) || !salle.contient(pos.getX(), sol + 1, pos.getZ()) || poteaux.contains(pos)
-                    || salle.ouvertures().stream().anyMatch(ouverture -> ouverture.inflatedBy(2).isInside(pos))) {
+            if (!salle.contient(pos.getX(), sol, pos.getZ())) {
                 continue;
             }
             for (Direction direction : Direction.Plane.HORIZONTAL) {
                 BlockPos voisin = pos.relative(direction);
-                if (!interieur(voisin.getX(), voisin.getY(), voisin.getZ())) {
-                    return new Coffre(pos, direction.getOpposite(), rare);
+                if (!interieur(voisin.getX(), voisin.getY(), voisin.getZ()) && ajouterCoffre(liste, pos, direction)) {
+                    return;
                 }
             }
         }
-        return null;
     }
 
     private static long cleChunk(int cx, int cz) {

@@ -260,5 +260,10 @@
   "commande.redrising.mine.cellule": "Cellule %s construite au niveau %s de la mine : entrée en %s, vers %s",
   "commande.redrising.mine.cellule_existe": "La cellule %s de la mine est déjà construite",
   "panneau.redrising.puits_droite": "Puits →",
-  "panneau.redrising.puits_gauche": "← Puits"
+  "panneau.redrising.puits_gauche": "← Puits",
+  "commande.redrising.direction.north": "le nord",
+  "commande.redrising.direction.south": "le sud",
+  "commande.redrising.direction.east": "l'est",
+  "commande.redrising.direction.west": "l'ouest",
+  "commande.redrising.mine.coffre": "Coffre de la mine en %s : encore %s secondes avant de pouvoir se remplir (−1 : jamais ouvert)"
 }
