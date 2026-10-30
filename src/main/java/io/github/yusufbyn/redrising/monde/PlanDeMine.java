@@ -18,6 +18,7 @@ import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.IntBinaryOperator;
 
 /**
  * Le plan de la mine (G7.2.1, GDD section 7) : galeries, puits, caverne de la colonie, emplacements des cellules et bouchon,
@@ -281,11 +282,14 @@ public final class PlanDeMine {
     private final BoundingBox bouchon;
     private final int hautDesBoites;
     private final int hautBoitePuits;
+    /** Le terrain au-dessus de la mine, lu une fois tous les 16 blocs. */
+    private final Relief relief;
 
-    private PlanDeMine(BlockPos centre, List<Integer> sols, List<BoundingBox> galeries, List<Integer> niveauxGaleries, List<Puits> puits,
+    private PlanDeMine(Relief relief, BlockPos centre, List<Integer> sols, List<BoundingBox> galeries, List<Integer> niveauxGaleries, List<Puits> puits,
                        Caverne caverne, Colonie colonie, List<EmplacementCellule> cellules, List<BlockPos> culsDeSac, List<Salle> salles,
                        Set<BlockPos> poteaux, Set<BlockPos> poutres, BoundingBox bouchon, int hautDesBoites, int hautBoitePuits, List<BoundingBox> axes,
                        List<Integer> niveauxAxes, Random hasard) {
+        this.relief = relief;
         this.centre = centre;
         this.sols = List.copyOf(sols);
         this.galeries = List.copyOf(galeries);
@@ -729,7 +733,43 @@ public final class PlanDeMine {
 
     // --- Tirage ---
 
-    private record Cle(long graine, BlockPos centre, int solMinimum, int solAuPuits, int surfacePuits) {
+    private record Cle(long graine, BlockPos centre, int solAuPuits, int surfacePuits) {
+    }
+
+    /** Le terrain sur l'emprise, lu une fois tous les 16 blocs (sans chunk généré). */
+    private static final class Relief {
+        private static final int PAS = 16;
+        private final int x0;
+        private final int z0;
+        private final int[][] hauteurs;
+
+        Relief(BlockPos centre, IntBinaryOperator terrain) {
+            int rayon = (PlanMars.EMPRISE_MINE + 1) * 16;
+            this.x0 = centre.getX() - rayon;
+            this.z0 = centre.getZ() - rayon;
+            int n = 2 * rayon / PAS + 2;
+            this.hauteurs = new int[n][n];
+            for (int i = 0; i < n; i++) {
+                for (int j = 0; j < n; j++) {
+                    hauteurs[i][j] = terrain.applyAsInt(x0 + i * PAS, z0 + j * PAS);
+                }
+            }
+        }
+
+        /** Le terrain le plus bas sous cette boîte (avec ses points de grille autour). */
+        int min(BoundingBox boite) {
+            int i1 = Math.clamp(Math.floorDiv(boite.minX() - x0, PAS), 0, hauteurs.length - 1);
+            int i2 = Math.clamp(Math.floorDiv(boite.maxX() - x0, PAS) + 1, 0, hauteurs.length - 1);
+            int j1 = Math.clamp(Math.floorDiv(boite.minZ() - z0, PAS), 0, hauteurs.length - 1);
+            int j2 = Math.clamp(Math.floorDiv(boite.maxZ() - z0, PAS) + 1, 0, hauteurs.length - 1);
+            int min = Integer.MAX_VALUE;
+            for (int i = i1; i <= i2; i++) {
+                for (int j = j1; j <= j2; j++) {
+                    min = Math.min(min, hauteurs[i][j]);
+                }
+            }
+            return min;
+        }
     }
 
     /** Un plan est tiré une fois par mine, puis relu : la pose de chaque chunk le redemande (fils de génération). */
@@ -739,15 +779,15 @@ public final class PlanDeMine {
      * Le plan de la mine centrée ici.
      *
      * @param graine     la graine du monde
-     * @param solMinimum le terrain le plus bas de l'emprise (le haut de la mine reste dessous, avec sa marge)
+     * @param terrain    la hauteur du terrain en (x, z), lue sans générer de chunk (le vide reste dessous, avec sa marge)
      * @param solAuPuits   le terrain le plus bas autour du puits principal (16 blocs) : la boîte de remplissage du puits
      *                     s'arrête à {@value #BOITE_PUITS_SOUS_SURFACE} blocs plus bas
      * @param surfacePuits la surface de la colonne du puits principal (3 × 3, son point le plus bas, hauteur au-dessus du
      *                     dernier bloc) : le bouchon est dessous, sous {@value #ROCHE_SUR_BOUCHON} blocs de roche d'origine
      */
-    public static PlanDeMine de(long graine, BlockPos centre, int solMinimum, int solAuPuits, int surfacePuits) {
-        return CACHE.computeIfAbsent(new Cle(graine, centre.immutable(), solMinimum, solAuPuits, surfacePuits),
-                cle -> tirer(cle.graine(), cle.centre(), cle.solMinimum(), cle.solAuPuits(), cle.surfacePuits()));
+    public static PlanDeMine de(long graine, BlockPos centre, IntBinaryOperator terrain, int solAuPuits, int surfacePuits) {
+        return CACHE.computeIfAbsent(new Cle(graine, centre.immutable(), solAuPuits, surfacePuits),
+                cle -> tirer(cle.graine(), cle.centre(), terrain, cle.solAuPuits(), cle.surfacePuits()));
     }
 
     /** Un nœud de la grille d'un niveau. */
@@ -764,7 +804,14 @@ public final class PlanDeMine {
     private record Arete(Noeud a, Noeud b, boolean axe) {
     }
 
-    static PlanDeMine tirer(long graine, BlockPos centre, int solMinimum, int solAuPuits, int surfacePuits) {
+    /** Le plan sur un terrain plat (tests). */
+    static PlanDeMine tirer(long graine, BlockPos centre, int terrain, int solAuPuits, int surfacePuits) {
+        return tirer(graine, centre, (x, z) -> terrain, solAuPuits, surfacePuits);
+    }
+
+    static PlanDeMine tirer(long graine, BlockPos centre, IntBinaryOperator terrain, int solAuPuits, int surfacePuits) {
+        Relief relief = new Relief(centre, terrain);
+        int solMinimum = relief.min(new BoundingBox(centre.getX() - 120, 0, centre.getZ() - 120, centre.getX() + 120, 0, centre.getZ() + 120));
         Random hasard = new Random(graine ^ centre.asLong() * 0x9E3779B97F4A7C15L);
         // Niveaux sous la surface, avec leur marge
         List<Integer> sols = new ArrayList<>();
@@ -897,7 +944,7 @@ public final class PlanDeMine {
         // Les étais ne restent pas dans la caverne ni dans les puits
         poteaux.removeIf(pos -> caverne.contient(pos.getX(), pos.getY(), pos.getZ()) || dansUnPuits(puits, pos));
         poutres.removeIf(pos -> caverne.contient(pos.getX(), pos.getY(), pos.getZ()) || dansUnPuits(puits, pos));
-        return new PlanDeMine(centre, sols, galeries, niveauxGaleries, puits, caverne, colonie, cellules, culsDeSac, salles, poteaux, poutres,
+        return new PlanDeMine(relief, centre, sols, galeries, niveauxGaleries, puits, caverne, colonie, cellules, culsDeSac, salles, poteaux, poutres,
                 bouchon, hautDesBoites, hautBoitePuits, axes, niveauxAxes, hasard);
     }
 
@@ -1460,6 +1507,11 @@ public final class PlanDeMine {
     /** Haut de la boîte de remplissage autour du puits principal, sous la surface. */
     public int hautBoitePuits() {
         return hautBoitePuits;
+    }
+
+    /** Le terrain le plus bas au-dessus de cette boîte (ses y ne comptent pas). */
+    public int surfaceMin(BoundingBox boite) {
+        return relief.min(boite);
     }
 
     public Puits puitsPrincipal() {

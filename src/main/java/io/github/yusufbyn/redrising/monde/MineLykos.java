@@ -62,8 +62,9 @@ import java.util.concurrent.atomic.LongAccumulator;
  * position du plan des régions ({@link RegionsMars#courant()}). Le plan des galeries est dans {@link PlanDeMine}.
  *
  * <ul>
- *     <li><b>Placement</b> : seulement le chunk de la mine dans le plan sauvegardé ; un monde sans plan n'a pas de mine.</li>
- *     <li><b>Morceaux</b> : un par chunk de l'emprise (départ ± 8 chunks), sur les hauteurs de la mine, et un autour du puits
+ *     <li><b>Placement</b> : 9 départs en tuiles autour du chunk de la mine dans le plan sauvegardé (un départ ne porte qu'à
+ *     8 chunks, {@link PlanMars#tuile}) ; un monde sans plan n'a pas de mine.</li>
+ *     <li><b>Morceaux</b> : un par chunk de l'emprise, sous le terrain de ce chunk, et un autour du puits
  *     principal jusqu'à 14 blocs sous le terrain le plus bas autour. Leurs boîtes servent au remplissage du relief ({@code encapsulate},
  *     dans {@code data/redrising/worldgen/structure/mine.json}) : ni grotte de bruit ni aquifère dans le volume.</li>
  *     <li><b>Pose</b> : à la dernière étape de la génération ({@code top_layer_modification}), après les minerais, les
@@ -172,7 +173,7 @@ public final class MineLykos extends Structure {
         if (depart == null || !depart.isValid() || !(depart.getPieces().getFirst() instanceof Morceau morceau)) {
             return null;
         }
-        planEnJeu = morceau.plan();
+        planEnJeu = morceau.plan(niveau);
         return planEnJeu;
     }
 
@@ -252,18 +253,13 @@ public final class MineLykos extends Structure {
     @Override
     protected Optional<GenerationStub> findGenerationPoint(GenerationContext contexte) {
         BlockPos centre = centre();
-        if (centre == null || contexte.chunkPos().x() != centre.getX() >> 4 || contexte.chunkPos().z() != centre.getZ() >> 4) {
+        if (centre == null || !PlanMars.departDeMine(contexte.chunkPos().x() - (centre.getX() >> 4), contexte.chunkPos().z() - (centre.getZ() >> 4))) {
             return Optional.empty();
         }
         ChunkGenerator generateur = contexte.chunkGenerator();
-        int r = PlanMars.EMPRISE_MINE * 16;
-        // Le terrain le plus bas de l'emprise, et autour du puits, lus par le bruit du relief (sans chunk généré)
-        int solMinimum = Integer.MAX_VALUE;
-        for (int x = centre.getX() - r; x <= centre.getX() + r; x += 16) {
-            for (int z = centre.getZ() - r; z <= centre.getZ() + r; z += 16) {
-                solMinimum = Math.min(solMinimum, hauteur(contexte, x, z));
-            }
-        }
+        int tuileX = contexte.chunkPos().x() - (centre.getX() >> 4);
+        int tuileZ = contexte.chunkPos().z() - (centre.getZ() >> 4);
+        // Le terrain autour du puits, lu par le bruit du relief (sans chunk généré)
         int solAuPuits = Integer.MAX_VALUE;
         for (int x = -16; x <= 16; x += 8) {
             for (int z = -16; z <= 16; z += 8) {
@@ -278,31 +274,35 @@ public final class MineLykos extends Structure {
             }
         }
         long graine = contexte.seed();
-        PlanDeMine plan = PlanDeMine.de(graine, centre, solMinimum, solAuPuits, surfacePuits);
-        int solMin = solMinimum;
+        PlanDeMine plan = PlanDeMine.de(graine, centre, (x, z) -> hauteur(contexte, x, z), solAuPuits, surfacePuits);
         int solPuits = solAuPuits;
         int surface = surfacePuits;
         BlockPos position = new BlockPos(centre.getX(), plan.sols().getFirst(), centre.getZ());
-        RedRising.LOGGER.info("Mine : départ en {}, {} niveau(x), terrain le plus bas {}, autour du puits {}, surface du puits {} (générateur {})",
-                position.toShortString(), plan.sols().size(), solMin, solPuits, surface, generateur.getClass().getSimpleName());
+        RedRising.LOGGER.info("Mine : départ ({}, {}) de la mine en {}, {} niveau(x), terrain autour du puits {}, surface du puits {} (générateur {})",
+                tuileX, tuileZ, position.toShortString(), plan.sols().size(), solPuits, surface, generateur.getClass().getSimpleName());
         return Optional.of(new GenerationStub(position, morceaux -> {
             int cx = centre.getX() >> 4;
             int cz = centre.getZ() >> 4;
             int bas = plan.sols().getLast() - 4;
             for (int dx = -PlanMars.EMPRISE_MINE; dx <= PlanMars.EMPRISE_MINE; dx++) {
                 for (int dz = -PlanMars.EMPRISE_MINE; dz <= PlanMars.EMPRISE_MINE; dz++) {
+                    if (PlanMars.tuile(dx) != tuileX || PlanMars.tuile(dz) != tuileZ) {
+                        continue;
+                    }
                     ChunkPos chunk = new ChunkPos(cx + dx, cz + dz);
-                    BoundingBox boite = new BoundingBox(chunk.getMinBlockX(), bas, chunk.getMinBlockZ(), chunk.getMaxBlockX(), plan.hautDesBoites(),
-                            chunk.getMaxBlockZ());
-                    morceaux.addPiece(new Morceau(boite, true, graine, centre, solMin, solPuits, surface));
+                    // Le haut de la boîte suit le terrain de ce chunk : le remplissage du relief ne fait pas de butte sous une vallée
+                    BoundingBox colonne = new BoundingBox(chunk.getMinBlockX(), bas, chunk.getMinBlockZ(), chunk.getMaxBlockX(), bas, chunk.getMaxBlockZ());
+                    int haut = Math.max(bas + 1, Math.min(plan.hautDesBoites(), plan.surfaceMin(colonne) - PlanDeMine.BOITE_PUITS_SOUS_SURFACE));
+                    BoundingBox boite = new BoundingBox(chunk.getMinBlockX(), bas, chunk.getMinBlockZ(), chunk.getMaxBlockX(), haut, chunk.getMaxBlockZ());
+                    morceaux.addPiece(new Morceau(boite, true, graine, centre, solPuits, surface));
                 }
             }
             // Le puits principal et sa marge de 2 blocs, jusqu'à 14 blocs sous le terrain le plus bas autour (pas de butte) ;
             // au-dessus, jusqu'au bouchon, sa coque le garde fermé
-            if (plan.hautBoitePuits() > plan.hautDesBoites()) {
+            if (plan.hautBoitePuits() > plan.hautDesBoites() && tuileX == 0 && tuileZ == 0) {
                 int bord = 1 + PlanDeMine.COQUE_PUITS;
                 morceaux.addPiece(new Morceau(new BoundingBox(centre.getX() - bord, plan.hautDesBoites(), centre.getZ() - bord,
-                        centre.getX() + bord, plan.hautBoitePuits(), centre.getZ() + bord), false, graine, centre, solMin, solPuits, surface));
+                        centre.getX() + bord, plan.hautBoitePuits(), centre.getZ() + bord), false, graine, centre, solPuits, surface));
             }
         }));
     }
@@ -350,16 +350,14 @@ public final class MineLykos extends Structure {
         private final boolean pose;
         private final long graine;
         private final BlockPos centre;
-        private final int solMinimum;
         private final int solAuPuits;
         private final int surfacePuits;
 
-        Morceau(BoundingBox boite, boolean pose, long graine, BlockPos centre, int solMinimum, int solAuPuits, int surfacePuits) {
+        Morceau(BoundingBox boite, boolean pose, long graine, BlockPos centre, int solAuPuits, int surfacePuits) {
             super(MORCEAU, 0, boite);
             this.pose = pose;
             this.graine = graine;
             this.centre = centre;
-            this.solMinimum = solMinimum;
             this.solAuPuits = solAuPuits;
             this.surfacePuits = surfacePuits;
         }
@@ -369,9 +367,7 @@ public final class MineLykos extends Structure {
             this.pose = donnees.getBooleanOr("pose", true);
             this.graine = donnees.getLongOr("graine", 0);
             this.centre = new BlockPos(donnees.getIntOr("cx", 0), donnees.getIntOr("cy", 0), donnees.getIntOr("cz", 0));
-            this.solMinimum = donnees.getIntOr("sol_minimum", 0);
             this.solAuPuits = donnees.getIntOr("sol_au_puits", 0);
-            // Morceaux d'avant le correctif du bouchon (sans surface du puits) : le plan d'alors, calé sur le terrain autour
             this.surfacePuits = donnees.getIntOr("surface_puits", solAuPuits);
         }
 
@@ -382,13 +378,15 @@ public final class MineLykos extends Structure {
             donnees.putInt("cx", centre.getX());
             donnees.putInt("cy", centre.getY());
             donnees.putInt("cz", centre.getZ());
-            donnees.putInt("sol_minimum", solMinimum);
             donnees.putInt("sol_au_puits", solAuPuits);
             donnees.putInt("surface_puits", surfacePuits);
         }
 
-        public PlanDeMine plan() {
-            return PlanDeMine.de(graine, centre, solMinimum, solAuPuits, surfacePuits);
+        /** Le plan (tiré une fois par mine). Le relief se relit dans le bruit du monde : il est le même à chaque fois. */
+        public PlanDeMine plan(ServerLevel niveau) {
+            ChunkGenerator generateur = niveau.getChunkSource().getGenerator();
+            return PlanDeMine.de(graine, centre, (x, z) -> generateur.getBaseHeight(x, z, Heightmap.Types.OCEAN_FLOOR_WG, niveau, niveau.getChunkSource().randomState()),
+                    solAuPuits, surfacePuits);
         }
 
         @Override
@@ -398,7 +396,7 @@ public final class MineLykos extends Structure {
                 return;
             }
             long debut = System.nanoTime();
-            poser(monde, plan(), chunk, hasard);
+            poser(monde, plan(monde.getLevel()), chunk, hasard);
             long duree = System.nanoTime() - debut;
             POSES.incrementAndGet();
             TEMPS_TOTAL.addAndGet(duree);
@@ -637,7 +635,7 @@ public final class MineLykos extends Structure {
         @Override
         protected boolean isPlacementChunk(ChunkGeneratorStructureState etat, int x, int z) {
             BlockPos centre = centre();
-            return centre != null && x == centre.getX() >> 4 && z == centre.getZ() >> 4;
+            return centre != null && PlanMars.departDeMine(x - (centre.getX() >> 4), z - (centre.getZ() >> 4));
         }
 
         @Override

@@ -141,4 +141,37 @@ class PlanMarsTest {
                 APPARITION, MER_ET_COLLINES, AUCUN, List.of());
         assertTrue(tropPres.stream().anyMatch(defaut -> defaut.contains("trop près de garnison")), tropPres.toString());
     }
+
+    @Test
+    void neufDepartsEnTuilesCouvrentLEmprise() {
+        int r = PlanMars.EMPRISE_MINE;
+        int departs = 0;
+        for (int dx = -r; dx <= r; dx++) {
+            for (int dz = -r; dz <= r; dz++) {
+                departs += PlanMars.departDeMine(dx, dz) ? 1 : 0;
+                // Chaque chunk est à la portée d'un départ (8 chunks), qui est bien un départ
+                assertTrue(Math.abs(dx - PlanMars.tuile(dx)) <= 8 && Math.abs(dz - PlanMars.tuile(dz)) <= 8, dx + ", " + dz);
+                assertTrue(PlanMars.departDeMine(PlanMars.tuile(dx), PlanMars.tuile(dz)), dx + ", " + dz);
+            }
+        }
+        assertEquals(9, departs);
+    }
+
+    @Test
+    void unDepartDeTuileDejaPrepareEstUnDefaut() {
+        BlockPos mine = new BlockPos(0, 64, 0);
+        // Seul le chunk de départ d'un coin de l'emprise a passé l'étape des départs
+        PlanMars.ChunksPrepares coin = new PlanMars.ChunksPrepares() {
+            @Override
+            public boolean departs(int cx, int cz) {
+                return cx == PlanMars.EMPRISE_MINE && cz == -PlanMars.EMPRISE_MINE;
+            }
+
+            @Override
+            public boolean references(int cx, int cz) {
+                return false;
+            }
+        };
+        assertEquals(List.of("chunk de départ déjà préparé"), PlanMars.defautsEmprise(mine, coin));
+    }
 }

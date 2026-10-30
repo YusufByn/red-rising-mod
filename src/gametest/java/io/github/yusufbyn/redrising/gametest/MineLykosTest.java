@@ -137,7 +137,7 @@ public class MineLykosTest implements FabricClientGameTest {
         BlockPos centre = centre(server);
         StructureStart depart = Objects.requireNonNull(server.overworld().getChunk(centre.getX() >> 4, centre.getZ() >> 4).getStartForStructure(mine(server)),
                 "pas de départ de mine");
-        return ((MineLykos.Morceau) depart.getPieces().getFirst()).plan();
+        return ((MineLykos.Morceau) depart.getPieces().getFirst()).plan(server.overworld());
     }
 
     /** Charge (force) les chunks à cette distance (en chunks, en carré) du chunk de la mine, et mesure le temps par tick. */
@@ -897,10 +897,15 @@ public class MineLykosTest implements FabricClientGameTest {
                     liste.add("échelle coupée en y " + y);
                 }
             }
-            // Un quai par niveau : sol plein, deux blocs libres
+            // Un quai par niveau, au moins dans une direction (la voûte de la colonie coupe une branche du niveau au-dessus) :
+            // sol plein, deux blocs libres
             for (int sol : plan.sols()) {
-                BlockPos quai = plan.centre().atY(sol).relative(Direction.EAST, 3);
-                if (niveau.getBlockState(quai.below()).isAir() || !niveau.getBlockState(quai).isAir() || !niveau.getBlockState(quai.above()).isAir()) {
+                boolean praticable = false;
+                for (Direction sens : Direction.Plane.HORIZONTAL) {
+                    BlockPos quai = plan.centre().atY(sol).relative(sens, 3);
+                    praticable |= !niveau.getBlockState(quai.below()).isAir() && niveau.getBlockState(quai).isAir() && niveau.getBlockState(quai.above()).isAir();
+                }
+                if (!praticable) {
                     liste.add("quai du niveau en y " + sol + " pas praticable");
                 }
             }

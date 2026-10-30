@@ -483,6 +483,6 @@ class PlanDeMineTest {
         assertEquals(a.garages(), b.garages());
         assertEquals(a.panneaux(), b.panneaux());
         assertEquals(a.entreesDesGris(), b.entreesDesGris());
-        assertSame(PlanDeMine.de(5, CENTRE, 62, 66, 66), PlanDeMine.de(5, CENTRE, 62, 66, 66));
+        assertSame(PlanDeMine.de(5, CENTRE, (x, z) -> 62, 66, 66), PlanDeMine.de(5, CENTRE, (x, z) -> 62, 66, 66));
     }
 }

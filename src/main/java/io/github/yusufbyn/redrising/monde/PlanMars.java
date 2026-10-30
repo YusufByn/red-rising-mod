@@ -49,10 +49,11 @@ public record PlanMars(BlockPos apparition, Map<Region, BlockPos> regions) {
     /** Pas d'eau au centre ni à cette distance autour (une région n'est pas dans l'océan ni dans un fleuve). */
     static final int RAYON_TERRE = 48;
     /**
-     * Emprise de la mine autour de son chunk de départ, en chunks (en carré) : la portée d'un départ de structure en 26.2
-     * ({@code ChunkStatus.MAX_STRUCTURE_DISTANCE}, {@code ChunkGenerator.createReferences}).
+     * 🟡 Emprise de la mine autour de son chunk central, en chunks (en carré) : 27 × 27 chunks, 432 × 432 blocs (G7.2.5). Un
+     * départ de structure ne porte qu'à 8 chunks ({@code ChunkStatus.MAX_STRUCTURE_DISTANCE}, 272 blocs de côté) : la mine a
+     * donc 9 départs, en tuiles ({@link #tuile}).
      */
-    public static final int EMPRISE_MINE = 8;
+    public static final int EMPRISE_MINE = 13;
     /**
      * 🟡 Si aucune place ne convient entre 200 et 400 blocs (chunks déjà préparés, eau), la mine s'éloigne par bandes de
      * 200 blocs, jusqu'à cette distance.
@@ -63,6 +64,11 @@ public record PlanMars(BlockPos apparition, Map<Region, BlockPos> regions) {
      * départ reste à plus de son emprise et de la portée d'un fort (8 chunks) de tout fort.
      */
     public static final int ECART_FORT = EMPRISE_MINE + 8 + 1;
+    /** 🟡 Autour du puits de la mine, le terrain reste à cette hauteur au moins : le niveau du haut y tient (G7.2.5). */
+    public static final int TERRAIN_MIN_PUITS = 31;
+    static final int RAYON_TERRAIN_PUITS = 48;
+    /** 🟡 Écart de hauteur permis sur la colonne du puits (3 × 3). */
+    public static final int PENTE_MAX_PUITS = 2;
     static final int ESSAIS = 64;
     /** La région des pôles cherche la terre ferme jusqu'à 32 pas de 64 blocs de part et d'autre (2 km). */
     static final int PAS_POLES = 32;
@@ -198,6 +204,28 @@ public record PlanMars(BlockPos apparition, Map<Region, BlockPos> regions) {
         }
         if (region == Region.MINE) {
             defauts.addAll(defautsEmprise(pos, prepares));
+            // La colonne du puits presque plate : le bouchon se cale sur son point le plus bas, à 3-5 blocs sous toute la colonne
+            int bas = Integer.MAX_VALUE;
+            int haut = Integer.MIN_VALUE;
+            for (int x = -1; x <= 1; x++) {
+                for (int z = -1; z <= 1; z++) {
+                    int hauteur = terrain.hauteur(pos.getX() + x, pos.getZ() + z);
+                    bas = Math.min(bas, hauteur);
+                    haut = Math.max(haut, hauteur);
+                }
+            }
+            if (haut - bas > PENTE_MAX_PUITS) {
+                defauts.add("puits sur une pente");
+            }
+            for (int x = -RAYON_TERRAIN_PUITS; x <= RAYON_TERRAIN_PUITS; x += 16) {
+                for (int z = -RAYON_TERRAIN_PUITS; z <= RAYON_TERRAIN_PUITS; z += 16) {
+                    if (terrain.hauteur(pos.getX() + x, pos.getZ() + z) < TERRAIN_MIN_PUITS) {
+                        defauts.add("terrain trop bas autour du puits");
+                        x = RAYON_TERRAIN_PUITS;
+                        break;
+                    }
+                }
+            }
             int cx = pos.getX() >> 4;
             int cz = pos.getZ() >> 4;
             for (ChunkPos fort : forts) {
@@ -214,15 +242,20 @@ public record PlanMars(BlockPos apparition, Map<Region, BlockPos> regions) {
     }
 
     /**
-     * La mine sur des chunks déjà préparés : son chunk de départ ne doit pas avoir passé l'étape des départs, ni aucun
-     * chunk de son emprise ({@value #EMPRISE_MINE} chunks autour) celle des références, sinon des morceaux manqueraient.
+     * La mine sur des chunks déjà préparés : aucun de ses 9 chunks de départ ne doit avoir passé l'étape des départs (autour
+     * de la zone préparée, une frange de chunks a passé cette étape-là seulement : mesuré, des tuiles entières manquaient),
+     * ni aucun chunk de son emprise ({@value #EMPRISE_MINE} chunks autour) celle des références, sinon des morceaux manqueraient.
      */
     static List<String> defautsEmprise(BlockPos mine, ChunksPrepares prepares) {
         List<String> defauts = new ArrayList<>();
         int cx = mine.getX() >> 4;
         int cz = mine.getZ() >> 4;
-        if (prepares.departs(cx, cz)) {
-            defauts.add("chunk de départ déjà préparé");
+        for (int i = -1; i <= 1; i++) {
+            for (int j = -1; j <= 1; j++) {
+                if (prepares.departs(cx + i * EMPRISE_MINE, cz + j * EMPRISE_MINE)) {
+                    defauts.add("chunk de départ déjà préparé");
+                }
+            }
         }
         int touches = 0;
         for (int dx = -EMPRISE_MINE; dx <= EMPRISE_MINE; dx++) {
@@ -236,6 +269,19 @@ public record PlanMars(BlockPos apparition, Map<Region, BlockPos> regions) {
             defauts.add(touches + " chunk(s) de l'emprise déjà préparé(s)");
         }
         return defauts;
+    }
+
+    /**
+     * La tuile d'un chunk de la mine : l'écart (en x ou en z) entre son départ et le chunk central. Chaque chunk est dans une
+     * seule tuile, à {@value #EMPRISE_MINE} / 2 chunks au plus de son départ, donc à sa portée.
+     */
+    public static int tuile(int ecart) {
+        return 2 * Math.abs(ecart) <= EMPRISE_MINE ? 0 : ecart > 0 ? EMPRISE_MINE : -EMPRISE_MINE;
+    }
+
+    /** Ce chunk (écart au chunk central) est-il un des 9 départs de la mine ? */
+    public static boolean departDeMine(int dx, int dz) {
+        return Math.abs(dx) <= EMPRISE_MINE && Math.abs(dz) <= EMPRISE_MINE && dx % EMPRISE_MINE == 0 && dz % EMPRISE_MINE == 0;
     }
 
     /** Tous les défauts du plan (vide : cohérent). */
