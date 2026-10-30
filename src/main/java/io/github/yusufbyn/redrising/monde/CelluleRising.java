@@ -335,7 +335,7 @@ public final class CelluleRising {
                     boolean solDeLaSalle = Math.abs(a) <= DEMI_LARGEUR && h == -1 && p >= 1 && p <= PROFONDEUR;
                     BlockState bloc = salle ? Blocks.AIR.defaultBlockState()
                             : solDeLaSalle ? Blocks.DEEPSLATE_TILES.defaultBlockState()
-                            : Blocks.STONE.defaultBlockState();
+                            : MineLykos.rocheIci(monde, local(entree, droite, versSalle, a, h, p));
                     monde.setBlock(local(entree, droite, versSalle, a, h, p), bloc, drapeaux);
                 }
             }

@@ -97,6 +97,7 @@ public class MineLykosTest implements FabricClientGameTest {
                     descente(monde, context);
                 }
                 colonneDuPuits(monde, graine);
+                rocheRouge(monde, graine, 2);
             }
         }
         RedRising.LOGGER.info("[G7.2.1] OK : mine au bon endroit, puits, voies et repères du centre (épreuves longues : MineLykosLongTest, -PtestsLongs)");
@@ -1168,6 +1169,57 @@ public class MineLykosTest implements FabricClientGameTest {
     }
 
     // --- Forts ---
+
+    /**
+     * La roche rouge (G7.2.5), sur les chunks à cette distance du centre : plus de pierre ni de deepslate autour du vide de la
+     * mine (sous la limite du volume) ; aucun bloc de roche rouge posé par la mine ne voit le ciel ; les strates, et la roche des
+     * outils et du four.
+     */
+    static void rocheRouge(TestSingleplayerContext monde, long graine, int rayon) {
+        String defauts = monde.getServer().computeOnServer(server -> {
+            ServerLevel niveau = server.overworld();
+            PlanDeMine plan = plan(server);
+            int cx = plan.centre().getX() >> 4;
+            int cz = plan.centre().getZ() >> 4;
+            List<String> liste = new ArrayList<>();
+            int rouges = 0;
+            int gris = 0;
+            int auCiel = 0;
+            BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
+            for (int x = (cx - rayon) << 4; x <= ((cx + rayon) << 4) + 15; x++) {
+                for (int z = (cz - rayon) << 4; z <= ((cz + rayon) << 4) + 15; z++) {
+                    int surface = sol(niveau, x, z);
+                    int limite = Math.min(MineLykos.HAUT_DU_VOLUME, surface - MineLykos.ROUGE_SOUS_LA_SURFACE) - 3;
+                    for (int y = niveau.getMinY() + 5; y <= limite; y++) {
+                        BlockState etat = niveau.getBlockState(pos.set(x, y, z));
+                        rouges += PaletteMine.estRocheRouge(etat) ? 1 : 0;
+                        gris += etat.is(BlockTags.BASE_STONE_OVERWORLD) ? 1 : 0;
+                    }
+                    // Le bloc de surface n'est jamais une strate posée par la mine (les bandes colorées de surface ne viennent pas d'elle)
+                    BlockState dessus = niveau.getBlockState(pos.set(x, surface - 1, z));
+                    if (surface - 1 < MineLykos.HAUT_DU_VOLUME - 3 && PaletteMine.estRocheRouge(dessus) && !niveau.getBiome(pos).is(net.minecraft.tags.BiomeTags.IS_BADLANDS)) {
+                        auCiel++;
+                    }
+                }
+            }
+            if (gris > 0 || rouges == 0 || auCiel > 0) {
+                liste.add(rouges + " blocs rouges, " + gris + " blocs de roche grise dans le volume, " + auCiel + " colonnes rouges au ciel");
+            }
+            for (Item roche : List.of(Items.TERRACOTTA, Blocks.DYED_TERRACOTTA.pick(net.minecraft.world.item.DyeColor.RED).asItem(),
+                    Blocks.DYED_TERRACOTTA.pick(net.minecraft.world.item.DyeColor.ORANGE).asItem(), Blocks.DYED_TERRACOTTA.pick(net.minecraft.world.item.DyeColor.BROWN).asItem())) {
+                ItemStack pile = new ItemStack(roche);
+                if (!pile.is(net.minecraft.tags.ItemTags.STONE_TOOL_MATERIALS) || !pile.is(net.minecraft.tags.ItemTags.STONE_CRAFTING_MATERIALS)) {
+                    liste.add(roche + " pas dans les tags de pierre");
+                }
+            }
+            RedRising.LOGGER.info("[G7.2.5] Graine {} : roche rouge ({} chunks) : {} blocs rouges, {} de roche grise, {} colonnes rouges au ciel", graine,
+                    (2 * rayon + 1) * (2 * rayon + 1), rouges, gris, auCiel);
+            return String.join(" ; ", liste);
+        });
+        if (!defauts.isEmpty()) {
+            throw new AssertionError("Graine " + graine + " : " + defauts);
+        }
+    }
 
     /** Un fort posé exprès sur le chemin de la mine (vrai terrain de ce monde) : la mine s'en écarte. */
     static void fortSurLeChemin(TestSingleplayerContext monde) {

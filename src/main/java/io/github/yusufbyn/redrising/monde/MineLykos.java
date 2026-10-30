@@ -87,6 +87,8 @@ public final class MineLykos extends Structure {
 
     /** 🟡 Hauteur au-dessus de laquelle une autre structure ne gêne plus la mine (sauf le long du puits). */
     public static final int HAUT_DU_VOLUME = 32;
+    /** 🟡 La roche rouge s'arrête à cette distance sous le terrain de chaque colonne. */
+    public static final int ROUGE_SOUS_LA_SURFACE = 8;
     /** Le long du puits principal, jusqu'à cette distance : ni structure ni décoration souterraine, jusqu'en haut. */
     static final int MARGE_PUITS = 32;
 
@@ -419,6 +421,7 @@ public final class MineLykos extends Structure {
         poserFilons(monde, plan, chunk);
         List<BoundingBox> proches = plan.boitesVers(colonne.inflatedBy(PlanDeMine.COQUE_PUITS));
         if (proches.isEmpty()) {
+            rougir(monde, plan, chunk);
             return;
         }
         BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
@@ -560,6 +563,47 @@ public final class MineLykos extends Structure {
             BlockPos.betweenClosed(bouchon.minX(), bouchon.minY(), bouchon.minZ(), bouchon.maxX(), bouchon.maxY(), bouchon.maxZ())
                     .forEach(bloc -> monde.setBlock(bloc, PaletteMine.BOUCHON, Block.UPDATE_CLIENTS));
         }
+        // En dernier : tout ce qui précède lit la roche d'origine
+        rougir(monde, plan, chunk);
+    }
+
+    /**
+     * La roche rouge (G7.2.5) : dans le volume de la mine, la pierre, la deepslate et les poches (gravier, terre) deviennent les
+     * strates de la palette. Jusqu'à {@value #HAUT_DU_VOLUME} au plus et {@value #ROUGE_SOUS_LA_SURFACE} blocs sous le terrain de
+     * chaque colonne : rien de rouge au fond d'une vallée, la surface reste terraformée. Le bord (en haut et autour de
+     * l'emprise) est irrégulier : pas de mur droit pour qui creuse. Les minerais gardent leur fond gris jusqu'à G17.3.
+     */
+    private static void rougir(WorldGenLevel monde, PlanDeMine plan, BoundingBox chunk) {
+        BlockPos centre = plan.centre();
+        int minX = ((centre.getX() >> 4) - PlanMars.EMPRISE_MINE) << 4;
+        int maxX = (((centre.getX() >> 4) + PlanMars.EMPRISE_MINE) << 4) + 15;
+        int minZ = ((centre.getZ() >> 4) - PlanMars.EMPRISE_MINE) << 4;
+        int maxZ = (((centre.getZ() >> 4) + PlanMars.EMPRISE_MINE) << 4) + 15;
+        BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
+        for (int x = chunk.minX(); x <= chunk.maxX(); x++) {
+            for (int z = chunk.minZ(); z <= chunk.maxZ(); z++) {
+                int alea = (x * 73 ^ z * 37) & 3;
+                int duBord = Math.min(Math.min(x - minX, maxX - x), Math.min(z - minZ, maxZ - z));
+                if (duBord < alea) {
+                    continue;
+                }
+                int haut = Math.min(HAUT_DU_VOLUME, monde.getHeight(Heightmap.Types.OCEAN_FLOOR_WG, x, z) - ROUGE_SOUS_LA_SURFACE) - alea;
+                double ondulation = PaletteMine.ondulation(x, z);
+                for (int y = monde.getMinY(); y <= haut; y++) {
+                    pos.set(x, y, z);
+                    BlockState etat = monde.getBlockState(pos);
+                    if (etat.is(BlockTags.BASE_STONE_OVERWORLD) || etat.is(Blocks.GRAVEL) || etat.is(Blocks.DIRT)) {
+                        monde.setBlock(pos, PaletteMine.strate(y, ondulation), Block.UPDATE_CLIENTS);
+                    }
+                }
+            }
+        }
+    }
+
+    /** La roche de ce bloc, pour ce qu'on construit après coup dans la mine (une cellule se fond dans la roche). */
+    public static BlockState rocheIci(ServerLevel niveau, BlockPos pos) {
+        PlanDeMine plan = planEnJeu(niveau);
+        return plan != null && plan.niveauA(pos) >= 0 ? PaletteMine.rocheRouge(pos.getX(), pos.getY(), pos.getZ()) : Blocks.STONE.defaultBlockState();
     }
 
     /**

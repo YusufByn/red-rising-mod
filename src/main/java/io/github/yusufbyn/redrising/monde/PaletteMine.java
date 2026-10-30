@@ -15,8 +15,8 @@ import net.minecraft.world.level.block.state.properties.RailShape;
 import java.util.List;
 
 /**
- * La palette de la mine : tous les blocs que la mine pose en plus du vide, des minerais et de la roche d'origine (étais,
- * échelles, butoirs, lanternes, bandes, bouchon, panneaux, voies, coffres, roche de la coque). Déclarés ici seulement :
+ * La palette de la mine : tous les blocs que la mine pose en plus du vide et des minerais (roche rouge, étais, échelles,
+ * butoirs, lanternes, bandes, bouchon, panneaux, voies, coffres, roche de la coque). Déclarés ici seulement :
  * la pose ({@link MineLykos}) et les tests en jeu les lisent ici.
  *
  * <p>L'architecture actuelle est fonctionnelle et provisoire (GDD section 7). L'allure finale viendra avec la direction
@@ -47,10 +47,49 @@ public final class PaletteMine {
     /** La chaîne qui tient les lanternes du milieu de l'axe, du plafond à la lanterne (non pleine, tenue à la verticale). */
     public static final BlockState CHAINE = Blocks.IRON_CHAIN.defaultBlockState();
 
+    /**
+     * 🟡 La roche rouge de la mine (palette A, « strates », G7.2.5) : des bandes ondulées de terres cuites, comme une falaise
+     * de Mars, qui remplacent la pierre et la deepslate dans le volume de la mine. Pleines, à la pioche ; dans les tags de
+     * pierre des outils et du four ({@code data/minecraft/tags/item}), sinon on ne fabrique rien avec ce qu'on mine.
+     */
+    private static final BlockState[] STRATES = {Blocks.DYED_TERRACOTTA.pick(DyeColor.RED).defaultBlockState(), Blocks.DYED_TERRACOTTA.pick(DyeColor.RED).defaultBlockState(),
+            Blocks.TERRACOTTA.defaultBlockState(), Blocks.DYED_TERRACOTTA.pick(DyeColor.ORANGE).defaultBlockState(), Blocks.DYED_TERRACOTTA.pick(DyeColor.RED).defaultBlockState(),
+            Blocks.DYED_TERRACOTTA.pick(DyeColor.BROWN).defaultBlockState(), Blocks.TERRACOTTA.defaultBlockState()};
+    /** Épaisseur d'une strate. */
+    private static final double EPAISSEUR_STRATE = 2.5;
+
     private PaletteMine() {
     }
 
-    /** Roche de la coque (à la place d'une grotte ou d'un fluide autour du vide) : pierre au-dessus de y = 0, ardoise dessous. */
+    /** L'ondulation des strates sur cette colonne (calculée une fois par colonne dans la pose). */
+    public static double ondulation(int x, int z) {
+        return 3 * Math.sin(x / 23.0) + 2 * Math.sin(z / 17.0);
+    }
+
+    /** La roche rouge à cette hauteur, sur une colonne d'ondulation donnée. */
+    public static BlockState strate(int y, double ondulation) {
+        return STRATES[Math.floorMod((int) Math.floor((y + ondulation) / EPAISSEUR_STRATE), STRATES.length)];
+    }
+
+    /** La roche rouge à cette position. */
+    public static BlockState rocheRouge(int x, int y, int z) {
+        return strate(y, ondulation(x, z));
+    }
+
+    /** Ce bloc est-il de la roche rouge ? */
+    public static boolean estRocheRouge(BlockState etat) {
+        for (BlockState strate : STRATES) {
+            if (etat.is(strate.getBlock())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Roche de la coque (à la place d'une grotte ou d'un fluide autour du vide) : pierre au-dessus de y = 0, ardoise dessous.
+     * Dans le volume rouge, la pose la change ensuite, comme le reste de la roche ; au-dessus (le haut du puits), elle reste.
+     */
     public static BlockState roche(int y) {
         return y < 0 ? Blocks.DEEPSLATE.defaultBlockState() : Blocks.STONE.defaultBlockState();
     }
