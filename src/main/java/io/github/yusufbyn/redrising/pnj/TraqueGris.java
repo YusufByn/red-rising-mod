@@ -140,6 +140,8 @@ public final class TraqueGris {
     private static final Map<UUID, Long> DERNIER_ETOURDISSEMENT = new HashMap<>();
     /** Joueur → tick depuis lequel aucun de ses chasseurs n'est sur son niveau de la mine (ou hors de la mine avec lui). */
     private static final Map<UUID, Long> SEUL_SUR_SON_NIVEAU = new HashMap<>();
+    /** Joueur → tick depuis lequel la traque attend que des points d'entrée se chargent autour de lui. */
+    private static final Map<UUID, Long> ATTENTE_DES_POINTS = new HashMap<>();
 
     /** Une fouille autour d'une position (la dernière où le joueur a été vu). */
     private record Fouille(BlockPos centre, Ronde ronde) {
@@ -462,7 +464,10 @@ public final class TraqueGris {
      * Place un Gris à un point d'entrée de la mine, hors de vue du joueur, sur une place dont les entités sont actives :
      * un des {@value Traque#CHOIX_ENTREES} plus proches qui conviennent, au hasard, à 24-64 blocs, sur le niveau du joueur,
      * sinon un voisin ({@link PlanDeMine#entreesPour}). Si aucun ne convient : le plus proche hors de vue, à n'importe quelle
-     * distance, sur le niveau du joueur d'abord ({@link PlanDeMine#entreesDeRepli}). Renvoie {@code false} (le Gris n'a pas bougé) si aucun point n'est hors de vue.
+     * distance, sur le niveau du joueur d'abord, puis un voisin ({@link PlanDeMine#entreesDeRepli}) ; si aucun n'est actif
+     * (petite distance de vue), un tunnel sombre actif de son niveau, à 24 blocs au moins. Si un point à 24-64 blocs n'est pas
+     * encore chargé, on réessaie aux passages suivants, {@value Traque#ATTENTE_POINTS} ticks au plus, avant le repli. Renvoie
+     * {@code false} (le Gris n'a pas bougé) si rien ne convient.
      */
     private static boolean placerDansLaMine(Villager gris, ServerPlayer joueur, PlanDeMine plan, int niveau) {
         Vec3 avant = gris.position();
@@ -477,11 +482,28 @@ public final class TraqueGris {
                 retenues.add(entree.pos());
             }
         }
-        // Un point pas encore chargé (le joueur vient d'arriver) n'est pas un point qui ne convient pas : on attend
-        if (retenues.isEmpty() && !pasEncoreCharge) {
+        // Un point pas encore chargé (le joueur vient d'arriver) n'est pas un point qui ne convient pas : on attend, un moment
+        long maintenant = joueur.level().getGameTime();
+        if (retenues.isEmpty() && pasEncoreCharge && maintenant - ATTENTE_DES_POINTS.computeIfAbsent(joueur.getUUID(), id -> maintenant) < Traque.ATTENTE_POINTS) {
+            gris.setPos(avant);
+            return false;
+        }
+        ATTENTE_DES_POINTS.remove(joueur.getUUID());
+        if (retenues.isEmpty()) {
             for (PlanDeMine.Entree entree : plan.entreesDeRepli(joueur.blockPosition(), niveau)) {
                 if (horsDeVue(gris, joueur, entree.pos())) {
                     retenues.add(entree.pos());
+                    break;
+                }
+            }
+        }
+        // Dernier recours : aucun point d'entrée n'est actif (petite distance de vue, joueur loin du réseau) : par un tunnel sombre actif
+        if (retenues.isEmpty()) {
+            List<BlockPos> tunnels = new ArrayList<>(plan.galeriesSombres(niveau, 0));
+            tunnels.sort((a, b) -> Double.compare(a.distSqr(joueur.blockPosition()), b.distSqr(joueur.blockPosition())));
+            for (BlockPos tunnel : tunnels) {
+                if (tunnel.distSqr(joueur.blockPosition()) >= Traque.APPARITION_MINE_MIN * Traque.APPARITION_MINE_MIN && horsDeVue(gris, joueur, tunnel)) {
+                    retenues.add(tunnel);
                     break;
                 }
             }
@@ -597,6 +619,7 @@ public final class TraqueGris {
         DERNIERE_POSITION_VUE.remove(joueur.getUUID());
         DERNIER_ETOURDISSEMENT.remove(joueur.getUUID());
         SEUL_SUR_SON_NIVEAU.remove(joueur.getUUID());
+        ATTENTE_DES_POINTS.remove(joueur.getUUID());
     }
 
     /**

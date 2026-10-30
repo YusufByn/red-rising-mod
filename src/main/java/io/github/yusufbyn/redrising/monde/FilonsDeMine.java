@@ -45,13 +45,13 @@ public final class FilonsDeMine {
     }
 
     static final List<Sorte> SORTES = List.of(
-            new Sorte(Minerai.CHARBON, 0, 3, 48, 20, 30),
-            new Sorte(Minerai.FER, 1, 3, 36, 14, 20),
-            new Sorte(Minerai.CUIVRE, 0, 1, 16, 15, 25),
-            new Sorte(Minerai.OR, 2, 3, 14, 8, 12),
-            new Sorte(Minerai.REDSTONE, 3, 3, 14, 10, 14),
+            new Sorte(Minerai.CHARBON, 0, 2, 48, 20, 30),
+            new Sorte(Minerai.FER, 0, 2, 36, 14, 20),
+            new Sorte(Minerai.CUIVRE, 0, 0, 16, 15, 25),
+            new Sorte(Minerai.OR, 1, 2, 14, 8, 12),
+            new Sorte(Minerai.REDSTONE, 2, 2, 14, 10, 14),
             // Poches d'hélium-3 dans les galeries lointaines
-            new Sorte(Minerai.HELIUM3, 2, 3, 16, 4, 6));
+            new Sorte(Minerai.HELIUM3, 1, 2, 16, 4, 6));
     /** 🟡 Hélium-3 des salles de forage : de 10 à 14 blocs chacune, au sol et sur les parois. */
     static final int HELIUM3_FORAGE_MIN = 10;
     static final int HELIUM3_FORAGE_MAX = 14;
@@ -139,17 +139,17 @@ public final class FilonsDeMine {
         int niveaux = plan.sols().size();
         List<Integer> permis = new ArrayList<>();
         for (int niveau = 0; niveau < niveaux; niveau++) {
-            if (PlanDeMine.NIVEAUX_MAX - niveaux + niveau >= 2) {
+            if (PlanDeMine.NIVEAUX_MAX - niveaux + niveau >= 1) {
                 permis.add(niveau);
             }
         }
         int poses = 0;
         BlockPos centre = plan.centre();
-        int demi = PlanDeMine.ESPACEMENT * PlanDeMine.DEMI_GRILLE + 10;
+        int demi = PlanDeMine.DEMI_MINE;
         for (int essai = 0; essai < 4000 && poses < HELIUM3_CACHE && !permis.isEmpty(); essai++) {
             int niveau = permis.get(essai % permis.size());
             int sol = plan.sols().get(niveau);
-            BlockPos depart = new BlockPos(centre.getX() - demi + hasard.nextInt(2 * demi + 1), sol - 5 + hasard.nextInt(14),
+            BlockPos depart = new BlockPos(centre.getX() - demi + hasard.nextInt(2 * demi + 1), sol - 10 + hasard.nextInt(21),
                     centre.getZ() - demi + hasard.nextInt(2 * demi + 1));
             if (permis(depart) && !touche(depart) && !epuise(depart)) {
                 poses += pousser(depart, Minerai.HELIUM3, 3 + hasard.nextInt(4), 0, niveau);
@@ -204,6 +204,13 @@ public final class FilonsDeMine {
                 galeries.add(plan.galeries().get(i));
             }
         }
+        List<PlanDeMine.Caverne> cavernes = plan.cavernes().stream().filter(caverne -> caverne.sol() == plan.sols().get(niveau)).toList();
+        // Les cavernes comptent comme les salles : ce sont leurs parois qu'on voit
+        if (!cavernes.isEmpty() && hasard.nextInt(3) == 0) {
+            PlanDeMine.Caverne caverne = cavernes.get(hasard.nextInt(cavernes.size()));
+            BlockPos depart = mur(new BlockPos(caverne.x(), plan.sols().get(niveau) + 1 + hasard.nextInt(Math.min(6, caverne.hauteur() - 2)), caverne.z()), horizontale());
+            return depart == null || !permis(depart) || epuise(depart) || !dansLaTranche(depart, niveau) ? null : depart;
+        }
         int poids = galeries.size() + POIDS_SALLE * salles.size();
         if (poids == 0) {
             return null;
@@ -239,13 +246,13 @@ public final class FilonsDeMine {
         return null;
     }
 
-    /** Depuis ce bloc du vide, le premier bloc de roche dans cette direction (à 24 blocs au plus), ou {@code null}. */
+    /** Depuis ce bloc du vide, le premier bloc de roche dans cette direction (à 64 blocs au plus), ou {@code null}. */
     private @Nullable BlockPos mur(@Nullable BlockPos dedans, Direction direction) {
         if (dedans == null) {
             return null;
         }
         BlockPos.MutableBlockPos pos = dedans.mutable();
-        for (int pas = 0; pas < 24; pas++) {
+        for (int pas = 0; pas < 64; pas++) {
             pos.move(direction);
             if (!vide(pos.getX(), pos.getY(), pos.getZ())) {
                 return pos.immutable();
@@ -266,8 +273,9 @@ public final class FilonsDeMine {
      */
     private boolean permis(BlockPos pos) {
         BlockPos centre = plan.centre();
-        if (Math.abs(pos.getX() - centre.getX()) > 120 || Math.abs(pos.getZ() - centre.getZ()) > 120 || pos.getY() < -62
-                || pos.getY() > plan.hautDesBoites() || plan.bouchon().isInside(pos) || vide(pos.getX(), pos.getY(), pos.getZ())) {
+        if (Math.abs(pos.getX() - centre.getX()) > PlanDeMine.DEMI_MINE || Math.abs(pos.getZ() - centre.getZ()) > PlanDeMine.DEMI_MINE || pos.getY() < -62
+                || pos.getY() > plan.hautDesBoites() || plan.bouchon().isInside(pos) || vide(pos.getX(), pos.getY(), pos.getZ())
+                || pos.getY() + PlanDeMine.MARGE_FILON > plan.surfaceMin(new BoundingBox(pos))) {
             return false;
         }
         for (PlanDeMine.EmplacementCellule cellule : plan.cellules()) {
@@ -279,12 +287,12 @@ public final class FilonsDeMine {
     }
 
     /**
-     * La tranche d'un niveau : de 8 blocs sous son sol à 9 au-dessus (la moitié de l'écart entre deux niveaux). Un filon y
+     * La tranche d'un niveau : de 13 blocs sous son sol à 13 au-dessus (la moitié de l'écart entre deux niveaux). Un filon y
      * reste : chaque minerai garde ses niveaux.
      */
     public static boolean dansLaTranche(BlockPos pos, int niveau, List<Integer> sols) {
         int sol = sols.get(niveau);
-        return pos.getY() >= sol - 8 && pos.getY() <= sol + 9;
+        return pos.getY() >= sol - 13 && pos.getY() <= sol + 13;
     }
 
     private boolean dansLaTranche(BlockPos pos, int niveau) {

@@ -33,7 +33,7 @@ class PlanDeMineTest {
             PlanDeMine plan = PlanDeMine.tirer(graine, CENTRE, 62, 66, 66);
             List<BoundingBox> boites = new ArrayList<>(plan.galeries());
             plan.puits().forEach(p -> boites.add(p.interieur()));
-            boites.add(plan.caverne().boite());
+            plan.cavernes().forEach(caverne -> boites.add(caverne.boite()));
             for (PlanDeMine.Salle salle : plan.salles()) {
                 boites.add(salle.boite());
                 boites.addAll(salle.ouvertures());
@@ -66,12 +66,12 @@ class PlanDeMineTest {
             PlanDeMine plan = PlanDeMine.tirer(graine, CENTRE, 62, 66, 94);
             assertEquals(PlanDeMine.NIVEAUX_MAX, plan.sols().size());
             for (BoundingBox galerie : plan.galeries()) {
-                assertTrue(Math.abs(galerie.minX() - CENTRE.getX()) <= 120 && Math.abs(galerie.maxX() - CENTRE.getX()) <= 120
-                        && Math.abs(galerie.minZ() - CENTRE.getZ()) <= 120 && Math.abs(galerie.maxZ() - CENTRE.getZ()) <= 120, galerie.toString());
-                assertTrue(galerie.minY() >= -50 && galerie.maxY() <= 20, galerie.toString());
+                assertTrue(dansLaMine(galerie), galerie.toString());
+                assertTrue(galerie.minY() >= -50 && galerie.maxY() <= 28, galerie.toString());
             }
-            BoundingBox caverne = plan.caverne().boite();
-            assertTrue(Math.abs(caverne.minX() - CENTRE.getX()) <= 120 && Math.abs(caverne.maxX() - CENTRE.getX()) <= 120, caverne.toString());
+            for (PlanDeMine.Caverne caverne : plan.cavernes()) {
+                assertTrue(dansLaMine(caverne.boite()), caverne.toString());
+            }
             // Le bouchon : 2 couches, sous 3 blocs du terrain d'origine de la colonne du puits (dernier bloc en 93)
             assertEquals(2, plan.bouchon().getYSpan());
             assertEquals(93 - PlanDeMine.ROCHE_SUR_BOUCHON, plan.bouchon().maxY());
@@ -81,19 +81,46 @@ class PlanDeMineTest {
         }
     }
 
+    private static boolean dansLaMine(BoundingBox boite) {
+        return Math.abs(boite.minX() - CENTRE.getX()) <= PlanDeMine.DEMI_MINE && Math.abs(boite.maxX() - CENTRE.getX()) <= PlanDeMine.DEMI_MINE
+                && Math.abs(boite.minZ() - CENTRE.getZ()) <= PlanDeMine.DEMI_MINE && Math.abs(boite.maxZ() - CENTRE.getZ()) <= PlanDeMine.DEMI_MINE;
+    }
+
     @Test
     void unNiveauDeMoinsSousUneVallee() {
-        // Terrain le plus bas à y = 25 : le niveau du haut (sol 8) serait trop près de la surface
+        // Terrain à y = 25 autour du puits : le niveau du haut (sol 6) serait trop près de la surface
         PlanDeMine plan = PlanDeMine.tirer(1, CENTRE, 25, 66, 66);
-        assertFalse(plan.sols().contains(8));
+        assertFalse(plan.sols().contains(6));
         assertTrue(plan.hautDesBoites() + 12 < 25);
+    }
+
+    @Test
+    void leVideResteSousLeTerrainLocal() {
+        // Une vallée profonde (y = 10) à l'est de la mine, à 60 blocs du puits ; ailleurs, y = 80
+        java.util.function.IntBinaryOperator terrain = (x, z) -> x > CENTRE.getX() + 60 ? 10 : 80;
+        for (long graine : GRAINES) {
+            PlanDeMine plan = PlanDeMine.tirer(graine, CENTRE, terrain, 80, 80);
+            assertEquals(PlanDeMine.NIVEAUX_MAX, plan.sols().size(), "graine " + graine);
+            // Aucun vide à moins de 18 blocs sous le terrain au-dessus de lui
+            for (BoundingBox galerie : plan.galeries()) {
+                int dessus = galerie.maxX() + 16 > CENTRE.getX() + 60 ? 10 : 80;
+                assertTrue(galerie.maxY() + 18 <= dessus, "graine " + graine + " : " + galerie);
+            }
+            for (PlanDeMine.Caverne caverne : plan.cavernes()) {
+                int dessus = caverne.boite().maxX() + 16 > CENTRE.getX() + 60 ? 10 : 80;
+                assertTrue(caverne.sol() + caverne.hauteur() + 18 <= dessus, "graine " + graine + " : " + caverne);
+            }
+            // Le niveau du haut reste, à l'ouest ; la colonie aussi, et elle reste la plus grande
+            assertTrue(plan.cavernes().stream().anyMatch(caverne -> caverne.sol() == 6), "graine " + graine);
+            assertTrue(plan.caverne().x() <= CENTRE.getX(), "graine " + graine + " : colonie sous la vallée");
+        }
     }
 
     @Test
     void puitsDansUnCreux() {
         // Colonne du puits plus basse que le haut de la mine : le puits monte au moins jusqu'au niveau du haut
         PlanDeMine plan = PlanDeMine.tirer(1, CENTRE, 62, 10, 10);
-        assertEquals(plan.sols().getFirst() + 4, plan.puitsPrincipal().haut());
+        assertEquals(plan.sols().getFirst() + 7, plan.puitsPrincipal().haut());
         assertEquals(plan.puitsPrincipal().haut() + 1, plan.bouchon().minY());
     }
 
@@ -128,28 +155,28 @@ class PlanDeMineTest {
         for (long graine : GRAINES) {
             PlanDeMine plan = PlanDeMine.tirer(graine, CENTRE, 62, 66, 66);
             List<PlanDeMine.Salle> salles = plan.salles();
-            assertTrue(salles.size() >= 30, "graine " + graine + " : " + salles.size() + " salles");
+            assertTrue(salles.size() >= 16, "graine " + graine + " : " + salles.size() + " salles");
             for (int niveau = 0; niveau < plan.sols().size(); niveau++) {
                 int n = niveau;
                 long parNiveau = salles.stream().filter(salle -> salle.niveau() == n).count();
-                assertTrue(parNiveau >= 6, "graine " + graine + " : " + parNiveau + " salles au niveau " + (niveau + 1));
+                assertTrue(parNiveau >= 3, "graine " + graine + " : " + parNiveau + " salles au niveau " + (niveau + 1));
             }
             for (PlanDeMine.Salle salle : salles) {
                 String nom = "graine " + graine + " : " + salle.type() + " en " + salle.x() + " " + salle.z();
-                // Forages aux niveaux 3 et 4 seulement
-                assertTrue(salle.type() != PlanDeMine.TypeSalle.FORAGE || salle.niveau() >= 2, nom);
-                // Toute la salle se parcourt depuis la galerie, par ses ouvertures
+                // Forages aux niveaux 2 et 3 seulement
+                assertTrue(salle.type() != PlanDeMine.TypeSalle.FORAGE || salle.niveau() >= 1, nom);
+                // Toute la salle se parcourt depuis sa caverne, par son ouverture
                 BlockPos depart = null;
                 List<BoundingBox> vides = new ArrayList<>(salle.ouvertures());
                 vides.add(salle.boite());
                 for (BoundingBox ouverture : salle.ouvertures()) {
                     for (BlockPos pos : BlockPos.betweenClosed(ouverture.minX(), ouverture.minY(), ouverture.minZ(), ouverture.maxX(), ouverture.maxY(), ouverture.maxZ())) {
-                        if (plan.galeries().stream().anyMatch(galerie -> galerie.isInside(pos))) {
+                        if (plan.cavernes().stream().anyMatch(caverne -> caverne.contient(pos.getX(), pos.getY(), pos.getZ()))) {
                             depart = pos.immutable();
                         }
                     }
                 }
-                assertTrue(depart != null, nom + " : ouverture qui ne touche pas de galerie");
+                assertTrue(depart != null, nom + " : ouverture qui ne touche pas de caverne");
                 Set<BlockPos> vus = new HashSet<>(Set.of(depart));
                 Deque<BlockPos> file = new ArrayDeque<>(List.of(depart));
                 while (!file.isEmpty()) {
@@ -168,15 +195,7 @@ class PlanDeMineTest {
                         assertTrue(vus.contains(pos), nom + " : " + pos + " pas atteint");
                     }
                 }
-                // Sur une ligne de la grille (la place d'une galerie), seulement dans une galerie : jamais au bout d'un cul-de-sac
                 for (BoundingBox vide : vides) {
-                    for (BlockPos pos : BlockPos.betweenClosed(vide.minX(), vide.minY(), vide.minZ(), vide.maxX(), vide.maxY(), vide.maxZ())) {
-                        int lx = Math.floorMod(pos.getX() - CENTRE.getX() + 1, PlanDeMine.ESPACEMENT);
-                        int lz = Math.floorMod(pos.getZ() - CENTRE.getZ() + 1, PlanDeMine.ESPACEMENT);
-                        if (lx <= 2 || lz <= 2) {
-                            assertTrue(plan.galeries().stream().anyMatch(galerie -> galerie.isInside(pos)), nom + " : sur une ligne hors galerie en " + pos);
-                        }
-                    }
                     for (PlanDeMine.Puits p : plan.puits()) {
                         assertFalse(p.interieur().inflatedBy(PlanDeMine.COQUE_PUITS).intersects(vide), nom + " : dans la coque d'un puits");
                     }
@@ -186,9 +205,14 @@ class PlanDeMineTest {
                     assertTrue(Math.hypot(c.getX() - salle.x(), c.getZ() - salle.z()) >= PlanDeMine.ECART_SALLE_CELLULE, nom + " : près d'une cellule");
                 }
             }
-            // Longueur des galeries
+            // Longueur des tunnels et des axes, et les cavernes
             long longueur = plan.galeries().stream().mapToLong(galerie -> Math.max(galerie.getXSpan(), galerie.getZSpan())).sum();
-            assertTrue(longueur >= 6000, "graine " + graine + " : " + longueur + " blocs de galeries");
+            assertTrue(longueur >= 3000, "graine " + graine + " : " + longueur + " blocs de galeries");
+            for (int niveau = 0; niveau < plan.sols().size(); niveau++) {
+                int sol = plan.sols().get(niveau);
+                long cavernes = plan.cavernes().stream().filter(caverne -> caverne.sol() == sol).count();
+                assertTrue(cavernes >= 4, "graine " + graine + " : " + cavernes + " cavernes au niveau " + (niveau + 1));
+            }
         }
     }
 
@@ -218,10 +242,9 @@ class PlanDeMineTest {
                 }
                 assertTrue(niveau >= 0, nom + " hors des tranches");
                 switch (bloc.minerai()) {
-                    case CUIVRE -> assertTrue(niveau <= 1, nom);
-                    case OR, HELIUM3 -> assertTrue(niveau >= 2, nom);
-                    case REDSTONE -> assertTrue(niveau == 3, nom);
-                    case FER -> assertTrue(niveau >= 1, nom);
+                    case CUIVRE -> assertTrue(niveau == 0, nom);
+                    case HELIUM3 -> assertTrue(niveau >= 1, nom);
+                    case REDSTONE -> assertTrue(niveau == 2, nom);
                     default -> {
                     }
                 }
@@ -248,7 +271,7 @@ class PlanDeMineTest {
         for (long graine : GRAINES) {
             PlanDeMine plan = PlanDeMine.tirer(graine, CENTRE, 62, 66, 66);
             List<PlanDeMine.Coffre> coffres = plan.coffres();
-            assertTrue(coffres.size() >= 12 && coffres.size() <= 20, "graine " + graine + " : " + coffres.size() + " coffres");
+            assertTrue(coffres.size() >= 6 && coffres.size() <= 20, "graine " + graine + " : " + coffres.size() + " coffres");
             int rares = 0;
             Set<PlanDeMine.Salle> salles = new HashSet<>();
             for (PlanDeMine.Coffre coffre : coffres) {
@@ -301,12 +324,12 @@ class PlanDeMineTest {
                 assertTrue(plan.interieur(pos.getX(), pos.getY(), pos.getZ()), nom + " hors du vide");
                 // Tenue : suspendue sous une poutre ou la roche, posée sur la roche
                 BlockPos appui = lanterne.suspendue() ? pos.above() : pos.below();
-                assertTrue(plan.poutres().contains(appui) || !plan.interieur(appui.getX(), appui.getY(), appui.getZ()), nom + " sans appui");
+                assertTrue(plan.poutres().contains(appui) || plan.chaines().contains(appui) || !plan.interieur(appui.getX(), appui.getY(), appui.getZ()), nom + " sans appui");
                 for (PlanDeMine.Puits p : plan.puits()) {
                     assertFalse(p.principal() && p.interieur().isInside(pos), nom + " au-dessus du puits principal");
                 }
             }
-            // Chaque bloc du sol du réseau à 14 blocs ou moins d'une lanterne (en suivant les axes) : lumière d'au moins 1
+            // Chaque bloc du sol du réseau à 9 blocs ou moins d'une lanterne : lumière d'au moins 6, on s'oriente sans torche
             List<BlockPos> sol = plan.reseauEclaire();
             assertTrue(sol.size() > 5000, "graine " + graine + " : " + sol.size() + " blocs de sol éclairé");
             for (BlockPos pos : sol) {
@@ -314,7 +337,7 @@ class PlanDeMineTest {
                 for (PlanDeMine.Lanterne lanterne : lanternes) {
                     plusProche = Math.min(plusProche, pos.distManhattan(lanterne.pos()));
                 }
-                assertTrue(plusProche <= 14, "graine " + graine + " : " + pos + " à " + plusProche + " blocs de la lanterne la plus proche");
+                assertTrue(plusProche <= 9, "graine " + graine + " : " + pos + " à " + plusProche + " blocs de la lanterne la plus proche");
             }
             System.out.println("Réseau éclairé, graine " + graine + " : " + lanternes.size() + " lanternes, " + sol.size() + " blocs de sol");
         }
@@ -324,10 +347,8 @@ class PlanDeMineTest {
     void voiesEtGarages() {
         for (long graine : GRAINES) {
             PlanDeMine plan = PlanDeMine.tirer(graine, CENTRE, 62, 66, 66);
-            assertTrue(plan.voies().size() >= 12, "graine " + graine + " : " + plan.voies().size() + " voies");
-            assertEquals(PlanDeMine.WAGONNETS, plan.garages().size(), "graine " + graine + " : voies de garage");
-            Set<BlockPos> filons = new HashSet<>();
-            plan.filons().forEach(bloc -> filons.add(bloc.pos()));
+            assertTrue(plan.voies().size() >= 10, "graine " + graine + " : " + plan.voies().size() + " voies");
+            assertTrue(plan.garages().size() >= 2 * plan.voies().size() - 2, "graine " + graine + " : " + plan.garages().size() + " voies de garage");
             for (PlanDeMine.Voie voie : plan.voies()) {
                 String nom = "graine " + graine + " : voie " + voie.sens() + " du niveau " + (voie.niveau() + 1);
                 // Le butoir côté puits juste après le quai, puis les rails d'affilée jusqu'au butoir du bout
@@ -342,117 +363,26 @@ class PlanDeMineTest {
                 }
                 assertEquals(attendu.relative(voie.sens()), voie.butoirBout(), nom + " : butoir du bout");
             }
+            Set<BlockPos> ouDesRails = new HashSet<>();
+            plan.voies().forEach(voie -> voie.rails().forEach(rail -> ouDesRails.add(rail.pos())));
             for (PlanDeMine.Garage garage : plan.garages()) {
-                BoundingBox niche = garage.niche();
-                String nom = "graine " + graine + " : garage " + niche;
-                for (PlanDeMine.EmplacementCellule cellule : plan.cellules()) {
-                    assertFalse(cellule.avecMurs().inflatedBy(1).intersects(niche), nom + " près d'une cellule");
+                String nom = "graine " + graine + " : garage du wagonnet en " + garage.wagonnet();
+                // La courbe part d'un bout de voie : le premier rail du garage touche un rail de la voie
+                BlockPos premier = garage.rails().getFirst().pos();
+                assertTrue(java.util.Arrays.stream(net.minecraft.core.Direction.values()).anyMatch(d -> ouDesRails.contains(premier.relative(d))), nom + " pas relié à la voie");
+                for (PlanDeMine.Rail rail : garage.rails()) {
+                    BlockPos pos = rail.pos();
+                    assertTrue(plan.interieur(pos.getX(), pos.getY(), pos.getZ()) && !plan.interieur(pos.getX(), pos.getY() - 1, pos.getZ()), nom + " : rail mal posé en " + pos);
                 }
-                for (BlockPos pos : BlockPos.betweenClosed(niche.minX(), niche.minY(), niche.minZ(), niche.maxX(), niche.maxY(), niche.maxZ())) {
-                    assertFalse(filons.contains(pos), nom + " sur un filon");
+                // Rails d'affilée, du premier au butoir
+                BlockPos avant = premier;
+                for (PlanDeMine.Rail rail : garage.rails().subList(1, garage.rails().size())) {
+                    assertEquals(1, avant.distManhattan(rail.pos()), nom + " : rails pas d'affilée");
+                    avant = rail.pos();
                 }
-                // Le wagonnet garé hors du passage : à 4 blocs de la ligne du milieu de l'axe
-                BlockPos wagonnet = garage.wagonnet();
-                int ecart = Math.min(Math.abs(wagonnet.getX() - CENTRE.getX()), Math.abs(wagonnet.getZ() - CENTRE.getZ()));
-                assertEquals(4, ecart, nom + " : wagonnet à " + ecart + " blocs de la ligne du milieu");
+                assertEquals(1, avant.distManhattan(garage.butoir()), nom + " : butoir");
+                assertFalse(plan.puits().stream().anyMatch(p -> p.interieur().isInside(garage.wagonnet())), nom);
             }
-        }
-    }
-
-    @Test
-    void reperesEtEntreesDesGris() {
-        for (long graine : GRAINES) {
-            PlanDeMine plan = PlanDeMine.tirer(graine, CENTRE, 62, 66, 66);
-            long niveaux = plan.panneaux().stream().filter(p -> p.texte() == PlanDeMine.Texte.NIVEAU).count();
-            long colonie = plan.panneaux().stream().filter(p -> p.texte() == PlanDeMine.Texte.COLONIE_DROITE || p.texte() == PlanDeMine.Texte.COLONIE_GAUCHE).count();
-            long puits = plan.panneaux().stream().filter(p -> p.texte() == PlanDeMine.Texte.PUITS_VERS).count();
-            assertEquals(plan.sols().size(), niveaux, "graine " + graine + " : panneaux de niveau");
-            assertEquals(1, colonie, "graine " + graine + " : panneau de la colonie");
-            assertEquals(2L * (plan.puits().size() - 1), puits, "graine " + graine + " : panneaux de puits secondaires (un à chaque bout)");
-            Set<BlockPos> places = new HashSet<>();
-            for (PlanDeMine.Panneau panneau : plan.panneaux()) {
-                BlockPos pos = panneau.pos();
-                BlockPos appui = pos.relative(panneau.face().getOpposite());
-                assertTrue(places.add(pos), "graine " + graine + " : deux panneaux en " + pos);
-                assertTrue(plan.interieur(pos.getX(), pos.getY(), pos.getZ()) && !plan.interieur(appui.getX(), appui.getY(), appui.getZ()),
-                        "graine " + graine + " : panneau sans mur en " + pos);
-            }
-            for (BlockPos mur : plan.bandes().keySet()) {
-                assertFalse(plan.interieur(mur.getX(), mur.getY(), mur.getZ()), "graine " + graine + " : bande dans le vide en " + mur);
-            }
-            Set<BlockPos> reseau = new HashSet<>(plan.reseauEclaire());
-            int[] parNiveau = new int[plan.sols().size()];
-            for (PlanDeMine.Entree entree : plan.entreesDesGris()) {
-                assertTrue(reseau.contains(entree.pos()), "graine " + graine + " : point d'entrée hors du réseau éclairé en " + entree.pos());
-                parNiveau[entree.niveau()]++;
-            }
-            for (int n : parNiveau) {
-                assertTrue(n >= 4, "graine " + graine + " : points d'entrée par niveau " + java.util.Arrays.toString(parNiveau));
-            }
-        }
-    }
-
-    @Test
-    void niveauxParTranchesEtEntreesDeLaTraque() {
-        for (long graine : GRAINES) {
-            PlanDeMine plan = PlanDeMine.tirer(graine, CENTRE, 62, 66, 66);
-            List<Integer> sols = plan.sols();
-            for (int niveau = 0; niveau < sols.size(); niveau++) {
-                int sol = sols.get(niveau);
-                assertEquals(niveau, plan.niveauA(CENTRE.atY(sol)), "graine " + graine);
-                assertEquals(niveau, plan.niveauA(CENTRE.atY(sol - PlanDeMine.DEMI_TRANCHE)), "graine " + graine);
-                assertEquals(niveau - 1, plan.niveauA(CENTRE.atY(sol + PlanDeMine.DEMI_TRANCHE)), "graine " + graine);
-            }
-            assertEquals(-1, plan.niveauA(CENTRE.atY(sols.getLast() - PlanDeMine.DEMI_TRANCHE - 1)), "graine " + graine);
-            assertEquals(-1, plan.niveauA(CENTRE.atY(sols.getFirst()).east((PlanMars.EMPRISE_MINE + 1) * 16)), "graine " + graine);
-            // Sur l'échelle du puits principal, de bas en haut : le niveau ne change qu'une fois entre deux sols
-            PlanDeMine.Puits principal = plan.puitsPrincipal();
-            int changements = 0;
-            int avant = plan.niveauA(PlanDeMine.echelle(principal, sols.getLast()));
-            for (int y = sols.getLast(); y <= sols.getFirst(); y++) {
-                int niveau = plan.niveauA(PlanDeMine.echelle(principal, y));
-                assertTrue(niveau == avant || niveau == avant - 1, "graine " + graine + " : saut de niveau à y = " + y);
-                changements += niveau != avant ? 1 : 0;
-                avant = niveau;
-            }
-            assertEquals(sols.size() - 1, changements, "graine " + graine);
-
-            // Points d'entrée de la traque : à 24-64 blocs, le niveau du joueur d'abord, du plus proche au plus loin
-            int bas = sols.size() - 1;
-            BlockPos quai = CENTRE.atY(sols.get(bas)).east(30);
-            List<PlanDeMine.Entree> choix = plan.entreesPour(quai, bas, 24, 64);
-            assertFalse(choix.isEmpty(), "graine " + graine);
-            boolean voisins = false;
-            double precedente = 0;
-            for (PlanDeMine.Entree entree : choix) {
-                double distance = Math.sqrt(entree.pos().distSqr(quai));
-                assertTrue(distance >= 24 && distance <= 64, "graine " + graine + " : " + distance);
-                assertTrue(Math.abs(entree.niveau() - bas) <= 1, "graine " + graine);
-                if (entree.niveau() != bas) {
-                    voisins = true;
-                    precedente = 0;
-                }
-                assertFalse(voisins && entree.niveau() == bas, "graine " + graine + " : niveau du joueur après un voisin");
-                assertTrue(distance >= precedente, "graine " + graine + " : pas dans l'ordre");
-                precedente = distance;
-            }
-            // Repli : les points du niveau du joueur et des voisins, le sien d'abord
-            List<PlanDeMine.Entree> repli = plan.entreesDeRepli(quai, bas);
-            assertEquals(plan.entreesDesGris().stream().filter(e -> e.niveau() >= bas - 1).count(), repli.size(), "graine " + graine);
-            for (int i = 1; i < repli.size(); i++) {
-                int avantEcart = Math.abs(repli.get(i - 1).niveau() - bas);
-                int ecart = Math.abs(repli.get(i).niveau() - bas);
-                assertTrue(ecart > avantEcart || ecart == avantEcart
-                        && repli.get(i).pos().distSqr(quai) >= repli.get(i - 1).pos().distSqr(quai), "graine " + graine + " : repli pas dans l'ordre");
-            }
-            // Des galeries sombres loin du puits, et, sur un niveau au moins, une sans point d'entrée à portée (le repli de la traque)
-            assertFalse(plan.galeriesSombres(bas, 60).isEmpty(), "graine " + graine);
-            boolean isolee = false;
-            for (int niveau = 0; niveau < sols.size(); niveau++) {
-                int n = niveau;
-                isolee |= plan.galeriesSombres(n, 0).stream().anyMatch(place -> plan.entreesPour(place, n, 24, 64).isEmpty());
-            }
-            assertTrue(isolee, "graine " + graine + " : aucune galerie sombre isolée");
         }
     }
 
@@ -465,8 +395,24 @@ class PlanDeMineTest {
         BlockPos apparition = colonie.apparition();
         assertTrue(caverne.contient(echafaud.getX(), echafaud.getY() + 1, echafaud.getZ()));
         assertTrue(caverne.contient(apparition.getX(), apparition.getY() + 1, apparition.getZ()));
-        assertTrue(colonie.parcelles().size() >= 15, colonie.parcelles().size() + " parcelles");
-        assertEquals(PlanDeMine.NIVEAUX_MAX > 2 ? plan.sols().get(2) : plan.sols().getLast(), caverne.sol());
+        // Sur le niveau 2 ; la plus grande caverne, au sol et en hauteur
+        assertEquals(plan.sols().get(1), caverne.sol());
+        assertEquals(PlanDeMine.HAUTEUR_COLONIE, caverne.hauteur());
+        for (PlanDeMine.Caverne autre : plan.cavernes().subList(1, plan.cavernes().size())) {
+            assertTrue(autre.demiX() * autre.demiZ() < caverne.demiX() * caverne.demiZ() && autre.hauteur() < caverne.hauteur(), autre.toString());
+        }
+        // De la roche pleine derrière ses parois : sur son niveau, seul l'axe qui y mène entre dans la réserve
+        for (long graine : GRAINES) {
+            PlanDeMine p = PlanDeMine.tirer(graine, CENTRE, 62, 66, 66);
+            BoundingBox reserve = p.colonie().reserve();
+            int sol = p.caverne().sol();
+            long entrant = p.galeries().stream().filter(g -> g.minY() == sol && g.intersects(reserve)).count();
+            assertEquals(1, entrant, "graine " + graine + " : galeries dans la réserve");
+            assertTrue(p.salles().stream().noneMatch(salle -> salle.boite().intersects(reserve)), "graine " + graine + " : salle dans la réserve");
+            assertTrue(p.cellules().stream().noneMatch(cellule -> cellule.avecMurs().intersects(reserve)), "graine " + graine + " : cellule dans la réserve");
+            assertTrue(p.filons().stream().noneMatch(bloc -> reserve.isInside(bloc.pos())), "graine " + graine + " : filon dans la réserve");
+            assertTrue(p.puits().stream().noneMatch(puits -> puits.interieur().intersects(reserve)), "graine " + graine + " : puits dans la réserve");
+        }
     }
 
     @Test

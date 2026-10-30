@@ -2,13 +2,12 @@ package io.github.yusufbyn.redrising.monde;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.world.level.block.state.properties.RailShape;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import org.jspecify.annotations.Nullable;
 
-import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
@@ -21,85 +20,111 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.IntBinaryOperator;
 
 /**
- * Le plan de la mine (G7.2.1, GDD section 7) : galeries, puits, caverne de la colonie, emplacements des cellules et bouchon,
- * tiré de la graine du monde et de la position de la mine. Logique pure (testée), sans bloc : la pose est faite chunk par
- * chunk par {@link MineLykos}. Valeurs en 🟡 dans le GDD, toutes ici.
+ * Le plan de la mine (G7.2.1, forme refaite en G7.2.5, GDD section 7) : cavernes, tunnels, puits, colonie, emplacements des
+ * cellules et bouchon, tiré de la graine du monde, de la position de la mine et du relief. Logique pure (testée), sans bloc :
+ * la pose est faite chunk par chunk par {@link MineLykos}. Valeurs en 🟡 dans le GDD, toutes ici.
  *
  * <ul>
- *     <li><b>Niveaux</b> : jusqu'à {@value #NIVEAUX_MAX}, sols à y = 8, −10, −28, −46 ; un niveau trop près de la surface
- *     (vallée, mer) est retiré.</li>
- *     <li><b>Galeries</b> : sur chaque niveau, une grille de nœuds tous les {@value #ESPACEMENT} blocs ; un arbre couvrant
- *     tiré au hasard (Kruskal), qui commence par l'axe principal (croix à travers le puits, plus large), puis des boucles,
- *     puis des culs-de-sac coupés au hasard, sans jamais couper un nœud obligatoire. Un arbre relie tous ses nœuds : tout est
- *     relié par construction (et vérifié par les tests).</li>
+ *     <li><b>Niveaux</b> : {@value #NIVEAUX_MAX}, sols à y = 6, −22, −50. Le vide reste à {@value #MARGE_SURFACE} blocs sous le
+ *     terrain <b>au-dessus de lui</b> (terrain local) : une caverne sous une vallée est abaissée ou retirée.</li>
+ *     <li><b>Axes</b> : une croix à travers le puits principal sur chaque niveau, 9 de large et 7 de haut, éclairée, avec des
+ *     rails.</li>
+ *     <li><b>Cavernes</b> : sur une grille de nœuds tous les {@value #ESPACEMENT} blocs, hors des axes, reliées par un arbre
+ *     couvrant (tout est relié par construction, et vérifié par les tests) de <b>tunnels</b> sombres de 5 × 5, plus des boucles.</li>
  *     <li><b>Puits</b> : le principal au centre, de bas en haut jusqu'au bouchon, sous la surface de sa propre colonne ; deux
- *     secondaires entre deux niveaux.</li>
- *     <li><b>Caverne de la colonie</b> (G7.3) sur le niveau 3, au bout de l'axe : parcelles, place et échafaud (G7.10),
- *     point d'apparition du Rouge (G7.8), notés ici pour leurs tickets.</li>
- *     <li><b>Cellules</b> (G7.5) : {@value #CELLULES} emplacements laissés en roche pleine, au bout d'un cul-de-sac ou sur
- *     la paroi d'une galerie ; au moins {@value #CULS_DE_SAC_PAR_CELLULE} culs-de-sac sans cellule pour un avec, tous fermés
- *     par la même roche : un cul-de-sac ne trahit pas une cellule.</li>
- *     <li><b>Salles d'extraction</b> (G7.2.2) : une par case libre de la grille, ouverte de côté sur une galerie ; chambres à
- *     piliers, fronts de taille, salles de forage (niveaux 3 et 4), {@value #SALLES_PAR_NIVEAU_4} par niveau.</li>
+ *     secondaires entre deux niveaux, sur le côté des axes.</li>
+ *     <li><b>Colonie</b> (G7.3) sur le niveau 2, la plus grande caverne, au bout d'une branche de l'axe : place et échafaud
+ *     (G7.10), point d'apparition du Rouge (G7.8), roche pleine réservée derrière ses parois pour les logements.</li>
+ *     <li><b>Culs-de-sac</b> : courts, fermés par la même roche ; un cul-de-sac ne trahit pas une cellule.</li>
+ *     <li><b>Cellules</b> (G7.5) : {@value #CELLULES} emplacements laissés en roche pleine, au bout d'un cul-de-sac ou sur la
+ *     paroi d'un tunnel ; au moins {@value #CULS_DE_SAC_PAR_CELLULE} culs-de-sac sans cellule pour un avec.</li>
+ *     <li><b>Salles d'extraction</b> : des baies dans les parois des cavernes, fronts de taille et salles de forage (niveaux
+ *     2 et 3).</li>
  *     <li><b>Filons</b> (G7.2.2) : minerais riches et hélium-3, tirés avec le plan ({@link FilonsDeMine}).</li>
- *     <li><b>Coffres d'outils</b> (G7.2.2) : dans une salle sur deux, contre un mur ; les restes des mineurs, sans camp.</li>
- *     <li><b>Réseau éclairé</b> (G7.2.3) : lanternes le long de l'axe de chaque niveau, aux paliers des puits secondaires, à
- *     l'entrée de la caverne et sous le cadre des salles de forage ; aucun monstre n'apparaît sur ce réseau.</li>
- *     <li><b>Voies</b> (G7.2.3) : des rails au milieu de chaque branche de l'axe, un butoir à chaque bout (avant le quai du
- *     puits principal), un rail de propulsion tous les {@value #PAS_PROPULSION} blocs ; deux voies de garage par branche, dans
- *     une niche à côté du passage, avec un wagonnet chacune.</li>
- *     <li><b>Repères</b> (G7.2.3) : panneaux aux paliers des puits (niveau, colonie, puits secondaires), une bande de couleur
- *     le long des murs de l'axe, une teinte par niveau ; et les <b>points d'entrée des Gris</b> pour la traque (G7.2.4).</li>
+ *     <li><b>Coffres d'outils</b> (G7.2.2) : les restes des mineurs, sans camp.</li>
+ *     <li><b>Réseau éclairé</b> (G7.2.3) : les axes (de quoi s'orienter sans torche), les paliers des puits secondaires,
+ *     l'entrée de la colonie, le cadre des salles de forage ; aucun monstre n'apparaît sur ce réseau.</li>
+ *     <li><b>Voies</b> (G7.2.3) : des rails au milieu de chaque branche de l'axe, un butoir à chaque bout, un rail de propulsion
+ *     tous les {@value #PAS_PROPULSION} blocs ; à chaque bout, une voie de garage reliée à la voie par une courbe, avec un wagonnet.</li>
+ *     <li><b>Repères</b> (G7.2.3) : panneaux aux paliers des puits et le long des axes, une bande de couleur le long de leurs
+ *     murs, une teinte par niveau ; et les <b>points d'entrée des Gris</b> pour la traque (G7.2.4).</li>
  * </ul>
  */
 public final class PlanDeMine {
     /** 🟡 Sols des niveaux, du haut vers le bas. */
-    static final int[] SOLS = {8, -10, -28, -46};
-    public static final int NIVEAUX_MAX = 4;
-    /** Le niveau d'une position (G7.2.4) : une tranche de 18 blocs centrée sur son sol (la moitié de l'écart entre deux sols). */
-    public static final int DEMI_TRANCHE = 9;
-    /** 🟡 Entre le haut de la mine (vide et coque) et le terrain le plus bas de l'emprise. */
+    static final int[] SOLS = {6, -22, -50};
+    public static final int NIVEAUX_MAX = 3;
+    /** Le niveau d'une position (G7.2.4) : une tranche de 28 blocs centrée sur son sol (la moitié de l'écart entre deux sols). */
+    public static final int DEMI_TRANCHE = 14;
+    /** 🟡 Entre le haut du vide et le terrain au-dessus de lui. */
     static final int MARGE_SURFACE = 18;
-    /** 🟡 Grille : un nœud tous les 20 blocs, de −100 à 100 autour du centre. */
-    public static final int ESPACEMENT = 20;
-    static final int DEMI_GRILLE = 5;
-    /** 🟡 Part des arêtes de l'arbre gardées après la coupe des culs-de-sac, et des boucles ajoutées. */
-    static final double PART_GARDEE = 0.6;
-    static final double PART_BOUCLES = 0.12;
-    /** Galerie : 3 de large, 3 de haut ; axe principal : 5 de large, 4 de haut. Coque d'un bloc. */
-    static final int DEMI_LARGEUR = 1;
-    static final int HAUTEUR = 3;
-    static final int DEMI_LARGEUR_AXE = 2;
-    static final int HAUTEUR_AXE = 4;
+    /** Un filon reste à cette distance sous le terrain. */
+    static final int MARGE_FILON = 8;
+    /** Le vide de la mine reste à cette distance du centre (l'emprise fait 216 blocs de part et d'autre). */
+    public static final int DEMI_MINE = 204;
+    /** 🟡 Grille des cavernes : un nœud tous les 72 blocs, à ±72 et ±144 du centre (hors des axes). */
+    public static final int ESPACEMENT = 72;
+    static final int[] NOEUDS = {-2, -1, 1, 2};
+    /** 🟡 Décalage des cavernes autour de leur nœud. */
+    static final int JEU_CAVERNE = 6;
+    /** 🟡 Cavernes par niveau, du haut vers le bas (la colonie en plus sur son niveau). */
+    static final int[] CAVERNES = {6, 5, 8};
+    /** 🟡 Cavernes : de 30 à 56 de large, de 12 à 20 de haut. Sous 10 de haut (terrain trop bas), pas de caverne. */
+    static final int DEMI_CAVERNE_MIN = 15;
+    static final int DEMI_CAVERNE_MAX = 28;
+    static final int HAUTEUR_CAVERNE_MIN = 12;
+    static final int HAUTEUR_CAVERNE_MAX = 20;
+    static final int HAUTEUR_CAVERNE_PLANCHER = 10;
+    /** 🟡 Part des liaisons restantes ajoutées en boucles, et leur longueur maximale. */
+    static final double PART_BOUCLES = 0.25;
+    static final int LONGUEUR_BOUCLE = 120;
+    /** Axe principal : 9 de large, 7 de haut, de 196 blocs de chaque côté du puits au plus. */
+    static final int DEMI_LARGEUR_AXE = 4;
+    static final int HAUTEUR_AXE = 7;
+    static final int LONGUEUR_AXE = 196;
+    /** Tunnel secondaire : 5 de large, 5 de haut. */
+    static final int DEMI_LARGEUR_TUNNEL = 2;
+    static final int HAUTEUR_TUNNEL = 5;
+    /** 🟡 Culs-de-sac : 3 de large, 4 de haut, de 12 à 20 de long ; 10 par niveau. */
+    static final int DEMI_LARGEUR_CUL = 1;
+    static final int HAUTEUR_CUL = 4;
+    static final int LONGUEUR_CUL_MIN = 12;
+    static final int LONGUEUR_CUL_MAX = 20;
+    static final int CULS_PAR_NIVEAU = 10;
     /** Puits : 3 × 3 de vide, coque de 2 blocs. */
     public static final int COQUE_PUITS = 2;
-    /** 🟡 Étais tous les 6 blocs. */
-    static final int PAS_ETAIS = 6;
-    /** 🟡 Caverne : à 48 blocs du puits, 72 × 56 au sol, 22 de haut, sur le niveau 3. */
-    static final int DISTANCE_CAVERNE = 48;
-    static final int DEMI_X_CAVERNE = 36;
-    static final int DEMI_Z_CAVERNE = 28;
-    static final int HAUTEUR_CAVERNE = 22;
-    static final int NIVEAU_CAVERNE = 2;
-    /** 🟡 Cellules : 12 emplacements (3 par niveau), salle de 5 × 3 × 5 et ses murs. */
+    /** Un puits secondaire ressort de 3 blocs dans le niveau du haut. */
+    static final int HAUTEUR_TROU = 3;
+    /** 🟡 Arches (étais) tous les 12 blocs. */
+    static final int PAS_ARCHES = 12;
+    /** 🟡 Colonie : au bout d'une branche de l'axe, centrée à 76 blocs du puits, 96 × 72 au sol, jusqu'à 34 de haut, sur le niveau 2. */
+    static final int DISTANCE_COLONIE = 76;
+    static final int DEMI_LONG_COLONIE = 48;
+    static final int DEMI_LARGE_COLONIE = 36;
+    public static final int HAUTEUR_COLONIE = 34;
+    /** Sous cette hauteur, la colonie ne serait plus la plus grande : le plan des régions évite ces terrains. */
+    static final int HAUTEUR_COLONIE_MIN = 22;
+    static final int NIVEAU_COLONIE = 1;
+    /** 🟡 Roche pleine réservée autour de la colonie, pour les logements creusés dans ses parois (G7.3). */
+    public static final int RESERVE_COLONIE = 12;
+    /** 🟡 Cellules : 12 emplacements (4 par niveau), salle de 5 × 3 × 5 et ses murs. */
     public static final int CELLULES = 12;
     public static final int CULS_DE_SAC_PAR_CELLULE = 3;
-    static final int DISTANCE_CAVERNE_CELLULE = 40;
+    static final int DISTANCE_COLONIE_CELLULE = 40;
     static final int ECART_CELLULES = 24;
-    /** 🟡 Puits secondaires : deux entre deux niveaux, à 40 blocs au moins du centre. */
+    /** 🟡 Puits secondaires : deux entre deux niveaux. */
     static final int PUITS_SECONDAIRES = 2;
-    /**
-     * 🟡 Salles d'extraction par niveau (chambres, fronts, forages), du haut vers le bas pour 4 niveaux ; avec moins de
-     * niveaux, les lignes du bas, agrandies pour garder le même total.
-     */
-    static final int[][] SALLES = {{5, 3, 0}, {4, 4, 0}, {3, 3, 2}, {2, 2, 4}};
-    public static final int SALLES_PAR_NIVEAU_4 = 8;
+    /** Distances au centre où un puits secondaire peut percer un axe (hors des arches et des panneaux). */
+    static final int[] DISTANCES_PUITS = {42, 66, 90, 114, 138};
+    /** 🟡 Baies par niveau, du haut vers le bas : fronts de taille, salles de forage. */
+    static final int[] FRONTS = {6, 4, 3};
+    static final int[] FORAGES = {0, 3, 5};
     /** 🟡 Entre le centre d'une salle et celui d'une cellule. */
     public static final int ECART_SALLE_CELLULE = 24;
-    /** Chambre : 15 ou 13 de côté, 5 de haut. Front : 5 de large, 4 de haut. Forage : 13 de diamètre, voûte de 8. */
-    static final int HAUTEUR_CHAMBRE = 5;
-    static final int LARGEUR_FRONT = 5;
-    static final int HAUTEUR_FRONT = 4;
+    /** Front : 13 de long, 7 de profondeur, 5 de haut. Forage : 13 de diamètre, voûte de 8. */
+    static final int DEMI_LONG_FRONT = 6;
+    static final int PROFONDEUR_FRONT = 7;
+    static final int HAUTEUR_FRONT = 5;
     static final double RAYON_FORAGE = 6.5;
     static final int HAUTEUR_FORAGE = 8;
     /**
@@ -108,15 +133,18 @@ public final class PlanDeMine {
      */
     public static final int COFFRES_RARES = 2;
     public static final int DISTANCE_COFFRE_RARE = 80;
-    /** 🟡 Lanternes de l'axe : une tous les 12 blocs le long de sa ligne du milieu. */
-    public static final int PAS_LANTERNES = 12;
+    /** 🟡 Éclairage de l'axe : tous les 6 blocs, une paire de lanternes sur les côtés ou une au milieu, à 3 blocs du sol. */
+    public static final int PAS_LANTERNES = 6;
+    static final int HAUTEUR_LANTERNE = 3;
+    /** Panneaux « Puits » le long de l'axe : tous les 24 blocs. */
+    static final int PAS_PANNEAUX = 24;
     /** 🟡 Voies : un rail de propulsion tous les 16 blocs ; le quai du puits principal (3 blocs) avant le butoir. */
     public static final int PAS_PROPULSION = 16;
     static final int QUAI = 3;
-    /** Voie de garage : une niche de 4 de long et 2 de haut, à 3 et 4 blocs de la ligne du milieu (hors du passage). */
-    static final int LONGUEUR_GARAGE = 4;
-    /** 🟡 Wagonnets posés à la génération, un par voie de garage : deux par voie, et le compte est complété sur les plus longues. */
-    public static final int WAGONNETS = 32;
+    /** Voie de garage : 6 rails, à 2 blocs de la ligne du milieu, reliés à la voie par une courbe à son bout. */
+    static final int LONGUEUR_GARAGE = 6;
+    /** Une voie assez longue a un garage à chaque bout ; sinon, un seul. */
+    static final int LONGUEUR_DEUX_GARAGES = 24;
     /** 🟡 Bouchon : deux couches, sous 3 blocs du terrain d'origine (au point le plus bas de la colonne du puits). */
     public static final int ROCHE_SUR_BOUCHON = 3;
     /**
@@ -129,22 +157,20 @@ public final class PlanDeMine {
     public enum TypeCellule {
         /** Au bout d'un cul-de-sac, dans son prolongement. */
         BOUT,
-        /** Sur la paroi d'une galerie, de côté. */
+        /** Sur la paroi d'un tunnel, de côté. */
         PAROI
     }
 
     public enum TypeSalle {
-        /** Chambre à piliers : un carré, quatre piliers de roche de 3 × 3 autour du centre. */
-        CHAMBRE,
-        /** Front de taille : une longue salle le long d'une galerie, derrière un mur d'un bloc, deux ouvertures. */
+        /** Front de taille : une salle droite, ouverte dans la paroi d'une caverne. */
         FRONT,
-        /** Salle de forage : ronde, en voûte, un cadre de bois au centre (l'hélium-3, niveaux 3 et 4). */
+        /** Salle de forage : ronde, en voûte, un cadre de bois au centre (l'hélium-3, niveaux 2 et 3). */
         FORAGE
     }
 
     /**
-     * Une salle d'extraction : sa boîte, son centre (x, z), et les ouvertures qui la relient à la galerie (vides en entier ;
-     * elles mordent d'un bloc sur la galerie).
+     * Une salle d'extraction : sa boîte, son centre (x, z), et les ouvertures qui la relient à sa caverne (vides en entier ;
+     * elles mordent sur la caverne).
      */
     public record Salle(int niveau, TypeSalle type, BoundingBox boite, int x, int z, List<BoundingBox> ouvertures) {
         public boolean contient(int bx, int by, int bz) {
@@ -153,12 +179,6 @@ public final class PlanDeMine {
             }
             return switch (type) {
                 case FRONT -> true;
-                // Piliers centrés à 3 blocs du centre, de 3 × 3 : une allée de 3 au milieu, d'autres contre les murs
-                case CHAMBRE -> {
-                    int dx = Math.abs(bx - x);
-                    int dz = Math.abs(bz - z);
-                    yield !(dx >= 2 && dx <= 4 && dz >= 2 && dz <= 4);
-                }
                 case FORAGE -> {
                     double r = Math.hypot(bx - x, bz - z);
                     if (r > RAYON_FORAGE) {
@@ -175,25 +195,28 @@ public final class PlanDeMine {
     public record Coffre(BlockPos pos, Direction face, boolean rare) {
     }
 
-    /** Une lanterne : suspendue (sous une poutre ou le plafond) ou posée au sol. */
+    /** Une lanterne : suspendue (sous une poutre ou au bout d'une chaîne) ou posée. */
     public record Lanterne(BlockPos pos, boolean suspendue) {
     }
 
-    /** Un rail : sa position, son sens (le long de x ou de z), de propulsion ou non. */
-    public record Rail(BlockPos pos, boolean surX, boolean propulsion) {
+    /** Un rail : sa position, sa forme, de propulsion ou non. */
+    public record Rail(BlockPos pos, RailShape forme, boolean propulsion) {
     }
 
     /** Une voie de l'axe : ses rails, ses deux butoirs (le premier côté puits), sa direction (vers l'extérieur) et son niveau. */
     public record Voie(int niveau, Direction sens, List<Rail> rails, BlockPos butoirPuits, BlockPos butoirBout) {
     }
 
-    /** Une voie de garage : sa niche, ses rails, et la place de son wagonnet. */
-    public record Garage(BoundingBox niche, List<Rail> rails, BlockPos wagonnet) {
+    /**
+     * Une voie de garage : ses rails (la courbe qui part de la voie d'abord, puis les rails parallèles à elle), la place de
+     * son wagonnet et le butoir à son bout.
+     */
+    public record Garage(List<Rail> rails, BlockPos wagonnet, BlockPos butoir) {
     }
 
-    /** Ce que dit un panneau : le niveau, la colonie (et de quel côté), ou le niveau où mène un puits secondaire. */
+    /** Ce que dit un panneau : le niveau, la colonie ou le puits (et de quel côté), ou le niveau où mène un puits secondaire. */
     public enum Texte {
-        NIVEAU, COLONIE_DROITE, COLONIE_GAUCHE, PUITS_VERS
+        NIVEAU, COLONIE_DROITE, COLONIE_GAUCHE, PUITS_DROITE, PUITS_GAUCHE, PUITS_VERS
     }
 
     /** Un panneau contre un mur : sa place, vers où il regarde, son texte et le numéro de niveau qu'il affiche (1 en haut). */
@@ -211,10 +234,13 @@ public final class PlanDeMine {
         }
     }
 
-    /** La caverne : une voûte sur un sol plat, au bord irrégulier (trois ondulations, phases tirées de la graine). */
+    /** Une caverne : une voûte sur un sol plat, au bord irrégulier (trois ondulations, phases tirées de la graine). */
     public record Caverne(int x, int z, int sol, int demiX, int demiZ, int hauteur, double phase1, double phase2, double phase3) {
+        /** Le bord fait jusqu'à 1,1 fois le demi-axe : la boîte contient tout le vide. */
         public BoundingBox boite() {
-            return new BoundingBox(x - demiX - 4, sol, z - demiZ - 4, x + demiX + 4, sol + hauteur, z + demiZ + 4);
+            int bordX = (int) Math.ceil(demiX * 1.1) + 1;
+            int bordZ = (int) Math.ceil(demiZ * 1.1) + 1;
+            return new BoundingBox(x - bordX, sol, z - bordZ, x + bordX, sol + hauteur, z + bordZ);
         }
 
         public boolean contient(int bx, int by, int bz) {
@@ -238,8 +264,8 @@ public final class PlanDeMine {
         }
     }
 
-    /** Ce que la caverne réserve aux tickets suivants. */
-    public record Colonie(BoundingBox place, BlockPos echafaud, BlockPos apparition, List<BoundingBox> parcelles) {
+    /** Ce que la colonie réserve aux tickets suivants : place et échafaud, apparition du Rouge, roche pleine pour les logements. */
+    public record Colonie(BoundingBox place, BlockPos echafaud, BlockPos apparition, BoundingBox reserve) {
     }
 
     /** Un emplacement de cellule : sa salle (5 × 3 × 5 de vide, à creuser en G7.5) et la galerie d'où on y entre. */
@@ -255,24 +281,26 @@ public final class PlanDeMine {
     private final List<BoundingBox> galeries;
     private final List<Integer> niveauxGaleries;
     private final List<Puits> puits;
-    private final Caverne caverne;
+    /** Toutes les cavernes ; la colonie d'abord. */
+    private final List<Caverne> cavernes;
     private final Colonie colonie;
     private final List<EmplacementCellule> cellules;
     private final List<BlockPos> culsDeSac;
     private final List<Salle> salles;
-    /** La salle de chaque boîte, par identité : ce sont les boîtes que rend {@link #boitesVers}. */
+    /** La salle ou la caverne de chaque boîte, par identité : ce sont les boîtes que rend {@link #boitesVers}. */
     private final Map<BoundingBox, Salle> sallesParBoite = new IdentityHashMap<>();
-    private final BoundingBox boiteCaverne;
+    private final Map<BoundingBox, Caverne> cavernesParBoite = new IdentityHashMap<>();
     private final List<FilonsDeMine.Bloc> filons;
     private final List<Coffre> coffres;
     private final List<BoundingBox> axes;
     private final List<Integer> niveauxAxes;
     private final List<Lanterne> lanternes;
+    /** Les chaînes qui tiennent les lanternes du milieu de l'axe. */
+    private final Set<BlockPos> chaines = new HashSet<>();
     private final List<Voie> voies = new ArrayList<>();
-    /** Les voies de garage ; vides tant qu'elles ne sont pas tirées (elles sont tirées en dernier, et creusent le vide). */
-    private List<Garage> garages = List.of();
+    private final List<Garage> garages = new ArrayList<>();
     private final List<Panneau> panneaux = new ArrayList<>();
-    /** La bande de couleur de l'axe : chaque bloc de mur, et la ligne de son niveau (0 à 3, comptée pour 4 niveaux). */
+    /** La bande de couleur de l'axe : chaque bloc de mur, et la ligne de son niveau (0 à 2, comptée pour 3 niveaux). */
     private final Map<BlockPos, Integer> bandes = new java.util.LinkedHashMap<>();
     private final List<Entree> entrees = new ArrayList<>();
     /** Les blocs de filon de chaque chunk, pour la pose. */
@@ -286,7 +314,7 @@ public final class PlanDeMine {
     private final Relief relief;
 
     private PlanDeMine(Relief relief, BlockPos centre, List<Integer> sols, List<BoundingBox> galeries, List<Integer> niveauxGaleries, List<Puits> puits,
-                       Caverne caverne, Colonie colonie, List<EmplacementCellule> cellules, List<BlockPos> culsDeSac, List<Salle> salles,
+                       List<Caverne> cavernes, Colonie colonie, List<EmplacementCellule> cellules, List<BlockPos> culsDeSac, List<Salle> salles,
                        Set<BlockPos> poteaux, Set<BlockPos> poutres, BoundingBox bouchon, int hautDesBoites, int hautBoitePuits, List<BoundingBox> axes,
                        List<Integer> niveauxAxes, Random hasard) {
         this.relief = relief;
@@ -295,15 +323,15 @@ public final class PlanDeMine {
         this.galeries = List.copyOf(galeries);
         this.niveauxGaleries = List.copyOf(niveauxGaleries);
         this.puits = List.copyOf(puits);
-        this.caverne = caverne;
+        this.cavernes = List.copyOf(cavernes);
         this.colonie = colonie;
         this.cellules = List.copyOf(cellules);
         this.culsDeSac = List.copyOf(culsDeSac);
         this.salles = List.copyOf(salles);
         this.salles.forEach(salle -> sallesParBoite.put(salle.boite(), salle));
-        this.boiteCaverne = caverne.boite();
-        this.poteaux = Set.copyOf(poteaux);
-        this.poutres = Set.copyOf(poutres);
+        this.cavernes.forEach(caverne -> cavernesParBoite.put(caverne.boite(), caverne));
+        this.poteaux = new HashSet<>(poteaux);
+        this.poutres = new HashSet<>(poutres);
         this.bouchon = bouchon;
         this.hautDesBoites = hautDesBoites;
         this.hautBoitePuits = hautBoitePuits;
@@ -316,7 +344,7 @@ public final class PlanDeMine {
         this.axes = List.copyOf(axes);
         this.niveauxAxes = List.copyOf(niveauxAxes);
         this.lanternes = placerLanternes();
-        this.garages = poserVoies();
+        poserVoies();
         poserReperes();
         choisirEntrees();
     }
@@ -325,18 +353,19 @@ public final class PlanDeMine {
 
     /**
      * Les panneaux : au quai du puits principal sur chaque niveau (« Niveau N »), au quai de la branche de la colonie sur son
-     * niveau (« Colonie → », la flèche du côté de la colonie pour qui lit), aux deux bouts de chaque puits secondaire
+     * niveau (« Colonie → », la flèche du côté de la colonie pour qui lit), le long de chaque branche de l'axe tous les
+     * {@value #PAS_PANNEAUX} blocs (« Puits → », pour s'orienter sans torche), aux deux bouts de chaque puits secondaire
      * (« Puits → niveau N »). La bande de couleur : le mur de chaque côté de l'axe, à hauteur d'yeux.
      */
     private void poserReperes() {
-        int niveauColonie = sols.indexOf(caverne.sol());
-        Direction versColonie = Direction.getApproximateNearest(caverne.x() - centre.getX(), 0, caverne.z() - centre.getZ());
+        int niveauColonie = sols.indexOf(caverne().sol());
+        Direction versColonie = Direction.getApproximateNearest(caverne().x() - centre.getX(), 0, caverne().z() - centre.getZ());
         for (int niveau = 0; niveau < sols.size(); niveau++) {
             int sol = sols.get(niveau);
             Panneau niveauPose = null;
             for (Direction sens : Direction.Plane.HORIZONTAL) {
                 for (Direction cote : List.of(sens.getClockWise(), sens.getCounterClockWise())) {
-                    BlockPos pos = centre.atY(sol + 1).relative(sens, 3).relative(cote, 2);
+                    BlockPos pos = centre.atY(sol + 1).relative(sens, QUAI + 3).relative(cote, DEMI_LARGEUR_AXE);
                     BlockPos appui = pos.relative(cote);
                     if (!interieur(pos.getX(), pos.getY(), pos.getZ()) || interieur(appui.getX(), appui.getY(), appui.getZ())
                             || (niveauPose != null && niveauPose.pos().equals(pos))) {
@@ -345,9 +374,22 @@ public final class PlanDeMine {
                     if (niveauPose == null && (niveau != niveauColonie || sens != versColonie)) {
                         niveauPose = new Panneau(pos, cote.getOpposite(), Texte.NIVEAU, niveau + 1);
                         panneaux.add(niveauPose);
-                    } else if (niveau == niveauColonie && sens == versColonie && panneaux.stream().noneMatch(p -> p.texte() != Texte.NIVEAU && p.texte() != Texte.PUITS_VERS)) {
+                    } else if (niveau == niveauColonie && sens == versColonie && panneaux.stream().noneMatch(p -> p.texte() == Texte.COLONIE_DROITE || p.texte() == Texte.COLONIE_GAUCHE)) {
                         // Pour qui regarde le mur (vers cote), sa droite est cote.getClockWise()
                         Texte texte = versColonie == cote.getClockWise() ? Texte.COLONIE_DROITE : Texte.COLONIE_GAUCHE;
+                        panneaux.add(new Panneau(pos, cote.getOpposite(), texte, niveau + 1));
+                    }
+                }
+            }
+            // Le long de l'axe : le chemin du puits, sur le mur de gauche en s'éloignant
+            for (Direction sens : Direction.Plane.HORIZONTAL) {
+                Direction cote = sens.getCounterClockWise();
+                for (int d = PAS_PANNEAUX + 3; d <= LONGUEUR_AXE; d += PAS_PANNEAUX) {
+                    BlockPos pos = centre.atY(sol + 1).relative(sens, d).relative(cote, DEMI_LARGEUR_AXE);
+                    BlockPos appui = pos.relative(cote);
+                    if (dansUnAxe(pos) && interieur(pos.getX(), pos.getY(), pos.getZ()) && !interieur(appui.getX(), appui.getY(), appui.getZ())
+                            && !dansUnPuits(puits, pos)) {
+                        Texte texte = sens.getOpposite() == cote.getClockWise() ? Texte.PUITS_DROITE : Texte.PUITS_GAUCHE;
                         panneaux.add(new Panneau(pos, cote.getOpposite(), texte, niveau + 1));
                     }
                 }
@@ -358,9 +400,9 @@ public final class PlanDeMine {
                 continue;
             }
             int bas = sols.indexOf(p.bas());
-            int haut = sols.indexOf(p.haut() - HAUTEUR + 1);
+            int haut = sols.indexOf(p.haut() - HAUTEUR_TROU + 1);
             panneauDePuits(p, p.bas() + 1, haut + 1);
-            panneauDePuits(p, p.haut() - HAUTEUR + 2, bas + 1);
+            panneauDePuits(p, p.haut() - HAUTEUR_TROU + 2, bas + 1);
         }
         // La bande : de chaque côté de l'axe, à un bloc au-dessus du sol, là où le mur est de la roche
         for (int i = 0; i < axes.size(); i++) {
@@ -371,7 +413,7 @@ public final class PlanDeMine {
             for (int t = surX ? axe.minX() : axe.minZ(); t <= (surX ? axe.maxX() : axe.maxZ()); t++) {
                 for (int travers : new int[]{(surX ? axe.minZ() : axe.minX()) - 1, (surX ? axe.maxZ() : axe.maxX()) + 1}) {
                     BlockPos pos = surX ? new BlockPos(t, y, travers) : new BlockPos(travers, y, t);
-                    if (!interieur(pos.getX(), pos.getY(), pos.getZ()) && !caverne.boite().isInside(pos)) {
+                    if (!interieur(pos.getX(), pos.getY(), pos.getZ()) && !caverne().boite().isInside(pos)) {
                         bandes.putIfAbsent(pos, ligne);
                     }
                 }
@@ -379,9 +421,13 @@ public final class PlanDeMine {
         }
     }
 
+    private boolean dansUnAxe(BlockPos pos) {
+        return axes.stream().anyMatch(axe -> axe.isInside(pos));
+    }
+
     /**
-     * Un panneau « Puits → niveau N » à cette hauteur : contre une paroi du puits (à côté de l'échelle, pas sur elle) ; à un
-     * carrefour, où des galeries traversent les parois, contre le mur d'une de ces galeries (ou de l'axe), à 3 à 5 blocs du puits.
+     * Un panneau « Puits → niveau N » à cette hauteur : contre une paroi du puits (à côté de l'échelle, pas sur elle) ; là où
+     * le puits s'ouvre sur l'axe, contre le mur de l'axe, à 3 à 5 blocs du puits.
      */
     private void panneauDePuits(Puits p, int y, int numero) {
         BlockPos milieu = new BlockPos(p.x(), y, p.z());
@@ -395,8 +441,8 @@ public final class PlanDeMine {
         for (int distance = 3; distance <= 5; distance++) {
             for (Direction galerie : Direction.Plane.HORIZONTAL) {
                 for (Direction cote : List.of(galerie.getClockWise(), galerie.getCounterClockWise())) {
-                    // Une galerie (3 de large) ou l'axe (5 de large)
-                    for (int ecart : new int[]{DEMI_LARGEUR, DEMI_LARGEUR_AXE}) {
+                    // Le puits est sur le côté de l'axe : son mur est à un bloc de la ligne du puits d'un côté, à 7 de l'autre
+                    for (int ecart : new int[]{1, 7}) {
                         BlockPos pos = milieu.relative(galerie, distance).relative(cote, ecart);
                         candidats.add(new BlockPos[]{pos, pos.relative(cote)});
                     }
@@ -418,8 +464,8 @@ public final class PlanDeMine {
 
     /**
      * Les points d'entrée des Gris, tous au sol du réseau éclairé, où un Gris tient debout : le quai du puits principal dans
-     * chaque direction, les nœuds de l'axe (sauf sur un butoir), le fond de chaque puits secondaire. La traque (G7.2.4)
-     * choisira le plus proche à 24 blocs au moins, hors de vue, sur le niveau du joueur ou un voisin.
+     * chaque direction, des points le long de l'axe (à côté des rails), le fond de chaque puits secondaire. La traque
+     * (G7.2.4) y fait apparaître ses chasseurs, hors de vue, sur le niveau du joueur ou un voisin.
      */
     private void choisirEntrees() {
         Set<BlockPos> sol = new HashSet<>(reseauEclaire());
@@ -427,8 +473,8 @@ public final class PlanDeMine {
             BlockPos milieu = centre.atY(sols.get(niveau));
             for (Direction sens : Direction.Plane.HORIZONTAL) {
                 ajouterEntree(sol, milieu.relative(sens, 3), niveau);
-                for (int k = 1; k <= DEMI_GRILLE; k++) {
-                    ajouterEntree(sol, milieu.relative(sens, k * ESPACEMENT), niveau);
+                for (int d = 24; d <= LONGUEUR_AXE; d += 24) {
+                    ajouterEntree(sol, milieu.relative(sens, d).relative(sens.getClockWise(), 2), niveau);
                 }
             }
         }
@@ -449,24 +495,20 @@ public final class PlanDeMine {
 
     /**
      * Les voies de l'axe : sur chaque niveau, dans chaque direction, de {@value #QUAI} blocs après le trou du puits principal
-     * (le quai) jusqu'au premier obstacle de la ligne du milieu (fin de l'axe, trou d'un puits secondaire, pilier d'une échelle,
-     * caverne). Un butoir à chaque bout ; un rail de propulsion tous les {@value #PAS_PROPULSION} blocs (une torche de redstone
-     * noyée deux blocs dessous). Puis deux voies de garage par voie, au tiers et aux deux tiers. Rend les garages.
+     * (le quai) jusqu'au premier obstacle de la ligne du milieu (fin de l'axe, colonie). Un butoir à chaque bout ; un rail de
+     * propulsion tous les {@value #PAS_PROPULSION} blocs (une torche de redstone noyée deux blocs dessous). À chaque bout
+     * (un seul si la voie est courte), une voie de garage.
      */
-    private List<Garage> poserVoies() {
-        List<Garage> liste = new ArrayList<>();
-        Set<BlockPos> blocsDeFilon = new HashSet<>();
-        filons.forEach(bloc -> blocsDeFilon.add(bloc.pos()));
+    private void poserVoies() {
         for (int niveau = 0; niveau < sols.size(); niveau++) {
             int sol = sols.get(niveau);
             for (Direction sens : Direction.Plane.HORIZONTAL) {
                 BlockPos depart = centre.atY(sol).relative(sens, 2 + QUAI);
                 BlockPos.MutableBlockPos pos = depart.mutable();
                 int longueur = 0;
-                // Jusqu'au premier obstacle : vide de l'axe au sol et au-dessus, sol plein dessous, pas de pilier ni de caverne
+                // Jusqu'au premier obstacle : vide de l'axe au sol et au-dessus, sol plein dessous, pas de colonie
                 while (interieur(pos.getX(), sol, pos.getZ()) && interieur(pos.getX(), sol + 1, pos.getZ()) && !interieur(pos.getX(), sol - 1, pos.getZ())
-                        && !caverne.contient(pos.getX(), sol, pos.getZ()) && puits.stream().noneMatch(p -> pilier(p, sol).equals(pos))
-                        && enLigne(pos, sol)) {
+                        && !caverne().contient(pos.getX(), sol, pos.getZ()) && enLigne(pos, sol)) {
                     longueur++;
                     pos.move(sens);
                 }
@@ -475,39 +517,32 @@ public final class PlanDeMine {
                     continue;
                 }
                 boolean surX = sens.getAxis() == Direction.Axis.X;
+                RailShape droit = surX ? RailShape.EAST_WEST : RailShape.NORTH_SOUTH;
                 List<Rail> rails = new ArrayList<>();
                 for (int t = 1; t < longueur - 1; t++) {
                     BlockPos rail = depart.relative(sens, t);
                     // Propulsion : la torche deux blocs dessous, posée sur la roche, sans vide autour
-                    boolean propulsion = (t - 1) % PAS_PROPULSION == PAS_PROPULSION / 2 && !interieur(rail.getX(), sol - 2, rail.getZ())
-                            && !interieur(rail.getX(), sol - 3, rail.getZ());
-                    rails.add(new Rail(rail, surX, propulsion));
+                    boolean propulsion = (t - 1) % PAS_PROPULSION == PAS_PROPULSION / 2 && t > LONGUEUR_GARAGE && t < longueur - 1 - LONGUEUR_GARAGE
+                            && !interieur(rail.getX(), sol - 2, rail.getZ()) && !interieur(rail.getX(), sol - 3, rail.getZ());
+                    rails.add(new Rail(rail, droit, propulsion));
                 }
-                Voie voie = new Voie(niveau, sens, rails, depart, depart.relative(sens, longueur - 1));
-                voies.add(voie);
-                for (int k = 1; k <= 2; k++) {
-                    Garage garage = garage(voie, rails.size() * k / 3, k == 1 ? 1 : -1, blocsDeFilon, liste);
-                    if (garage != null) {
-                        liste.add(garage);
+                // Un garage à chaque bout : le dernier rail de la voie devient la courbe qui y mène
+                Direction cote = niveau % 2 == 0 ? sens.getClockWise() : sens.getCounterClockWise();
+                Garage duPuits = garage(rails.getFirst().pos(), sens, cote);
+                if (duPuits != null) {
+                    rails.set(0, new Rail(rails.getFirst().pos(), courbe(sens, cote), false));
+                    garages.add(duPuits);
+                }
+                if (longueur >= LONGUEUR_DEUX_GARAGES) {
+                    Garage duBout = garage(rails.getLast().pos(), sens.getOpposite(), cote.getOpposite());
+                    if (duBout != null) {
+                        rails.set(rails.size() - 1, new Rail(rails.getLast().pos(), courbe(sens.getOpposite(), cote.getOpposite()), false));
+                        garages.add(duBout);
                     }
                 }
+                voies.add(new Voie(niveau, sens, List.copyOf(rails), depart, depart.relative(sens, longueur - 1)));
             }
         }
-        // Le compte complété sur les voies les plus longues (une branche peut ne pas avoir de voie : la caverne est proche du puits)
-        List<Voie> parLongueur = new ArrayList<>(voies);
-        parLongueur.sort((a, b) -> Integer.compare(b.rails().size(), a.rails().size()));
-        for (int tour = 0; tour < 4 && liste.size() < WAGONNETS; tour++) {
-            for (Voie voie : parLongueur) {
-                if (liste.size() == WAGONNETS) {
-                    break;
-                }
-                Garage garage = garage(voie, voie.rails().size() * (2 * tour + 1) / 8, tour % 2 == 0 ? 1 : -1, blocsDeFilon, liste);
-                if (garage != null) {
-                    liste.add(garage);
-                }
-            }
-        }
-        return List.copyOf(liste.subList(0, Math.min(WAGONNETS, liste.size())));
     }
 
     /** Ce bloc est-il sur la ligne du milieu de l'axe (la croix qui passe par le puits principal) ? */
@@ -515,82 +550,86 @@ public final class PlanDeMine {
         return axes.stream().anyMatch(axe -> axe.isInside(pos.getX(), sol, pos.getZ()));
     }
 
+    /** La forme d'un rail courbe qui relie ces deux directions. */
+    private static RailShape courbe(Direction a, Direction b) {
+        boolean nord = a == Direction.NORTH || b == Direction.NORTH;
+        boolean est = a == Direction.EAST || b == Direction.EAST;
+        return nord ? est ? RailShape.NORTH_EAST : RailShape.NORTH_WEST : est ? RailShape.SOUTH_EAST : RailShape.SOUTH_WEST;
+    }
+
     /**
-     * Une voie de garage à côté de la voie, vers le rail {@code indice} (décalée de quelques rails au besoin), du côté
-     * {@code cote} : une niche à 3 et 4 blocs de la ligne du milieu, qui ne touche rien d'autre que l'axe (ni galerie, ni
-     * salle, ni puits, ni caverne, ni cellule, ni filon, ni autre garage) ; ses rails à 4 blocs, le wagonnet au milieu.
+     * Une voie de garage au bout d'une voie, comme une boucle : le bout de la voie ({@code bout}) tourne vers {@code cote},
+     * un rail de travers, une courbe, puis {@value #LONGUEUR_GARAGE} rails parallèles à la voie, dans le sens {@code retour}
+     * (vers le reste de la voie), et un butoir. Un wagonnet n'y entre que s'il arrive au bout de la voie ; poussé, il en
+     * ressort par la courbe sur la voie. Rend {@code null} si le sol ne s'y prête pas.
      */
-    private @Nullable Garage garage(Voie voie, int indice, int cote, Set<BlockPos> blocsDeFilon, List<Garage> autres) {
-        Direction sens = voie.sens();
-        Direction travers = sens.getClockWise();
-        int sol = sols.get(voie.niveau());
-        for (int decalage : new int[]{0, 2, -2, 4, -4, 6, -6, 8, -8}) {
-            int i = indice + decalage;
-            if (i < 2 || i + LONGUEUR_GARAGE >= voie.rails().size() - 2) {
-                continue;
-            }
-            BlockPos debut = voie.rails().get(i).pos();
-            BlockPos fin = debut.relative(sens, LONGUEUR_GARAGE - 1);
-            BlockPos a = debut.relative(travers, 3 * cote);
-            BlockPos b = fin.relative(travers, 4 * cote).above();
-            BoundingBox niche = BoundingBox.fromCorners(a, b);
-            // La niche et un bloc de roche autour (sauf du côté de l'axe)
-            BoundingBox garde = BoundingBox.fromCorners(debut.relative(sens.getOpposite()).relative(travers, 3 * cote).below(),
-                    fin.relative(sens).relative(travers, 5 * cote).above(2));
-            boolean libre = galeries.stream().noneMatch(g -> g.intersects(garde))
-                    && puits.stream().noneMatch(p -> p.interieur().inflatedBy(COQUE_PUITS).intersects(garde))
-                    && salles.stream().noneMatch(salle -> salle.boite().intersects(garde) || salle.ouvertures().stream().anyMatch(o -> o.intersects(garde)))
-                    && !garde.intersects(caverne.boite())
-                    && cellules.stream().noneMatch(cellule -> cellule.avecMurs().inflatedBy(1).intersects(garde))
-                    && autres.stream().noneMatch(autre -> autre.niche().inflatedBy(1).intersects(garde))
-                    && blocsDeFilon.stream().noneMatch(niche::isInside)
-                    // Pas de poteau d'étai devant l'entrée de la niche
-                    && poteaux.stream().noneMatch(poteau -> poteau.getY() == sol && BoundingBox.fromCorners(debut.relative(travers, 2 * cote),
-                    fin.relative(travers, 2 * cote)).isInside(poteau));
-            if (!libre) {
-                continue;
-            }
-            List<Rail> rails = new ArrayList<>();
-            for (int t = 0; t < LONGUEUR_GARAGE; t++) {
-                rails.add(new Rail(debut.relative(sens, t).relative(travers, 4 * cote), sens.getAxis() == Direction.Axis.X, false));
-            }
-            return new Garage(niche, rails, rails.get(1).pos());
+    private @Nullable Garage garage(BlockPos bout, Direction retour, Direction cote) {
+        boolean retourSurX = retour.getAxis() == Direction.Axis.X;
+        RailShape parallele = retourSurX ? RailShape.EAST_WEST : RailShape.NORTH_SOUTH;
+        RailShape travers = retourSurX ? RailShape.NORTH_SOUTH : RailShape.EAST_WEST;
+        BlockPos milieu = bout.relative(cote);
+        BlockPos virage = bout.relative(cote, 2);
+        List<Rail> rails = new ArrayList<>(List.of(new Rail(milieu, travers, false), new Rail(virage, courbe(cote.getOpposite(), retour), false)));
+        for (int t = 1; t <= LONGUEUR_GARAGE; t++) {
+            rails.add(new Rail(virage.relative(retour, t), parallele, false));
         }
-        return null;
+        BlockPos butoir = virage.relative(retour, LONGUEUR_GARAGE + 1);
+        for (Rail rail : rails) {
+            if (!auSol(rail.pos())) {
+                return null;
+            }
+        }
+        if (!auSol(butoir)) {
+            return null;
+        }
+        return new Garage(List.copyOf(rails), virage.relative(retour, LONGUEUR_GARAGE / 2), butoir);
+    }
+
+    /** Du vide sur deux blocs, le sol plein dessous, hors des puits. */
+    private boolean auSol(BlockPos pos) {
+        return interieur(pos.getX(), pos.getY(), pos.getZ()) && interieur(pos.getX(), pos.getY() + 1, pos.getZ())
+                && !interieur(pos.getX(), pos.getY() - 1, pos.getZ()) && !dansUnPuits(puits, pos) && !poteaux.contains(pos)
+                && puits.stream().noneMatch(p -> pilier(p, pos.getY()).equals(pos));
     }
 
     // --- Réseau éclairé (G7.2.3) ---
 
     /**
-     * Les lanternes : le long de la ligne du milieu de chaque galerie de l'axe, tous les {@value #PAS_LANTERNES} blocs
-     * (suspendues sous la poutre d'un étai s'il y en a une, sinon sous le plafond de roche ; pas au-dessus d'un puits ni dans
-     * la caverne) ; au palier du bas de chaque puits secondaire (posée au sol, dans un coin) et en haut (sous le plafond) ; deux
-     * à l'entrée de la caverne ; une sous le cadre de chaque salle de forage.
+     * Les lanternes : le long de chaque branche de l'axe, tous les {@value #PAS_LANTERNES} blocs, tantôt une paire sur les
+     * côtés (sous une console fixée à l'arche), tantôt une au milieu (au bout d'une chaîne), à {@value #HAUTEUR_LANTERNE} blocs
+     * du sol : pas au-dessus d'un puits ni dans la colonie. Au palier du bas de chaque puits secondaire (posée au sol, dans un
+     * coin) et en haut (sous le plafond) ; deux à l'entrée de la colonie ; une sous le cadre de chaque salle de forage.
      */
     private List<Lanterne> placerLanternes() {
         Map<BlockPos, Lanterne> liste = new java.util.LinkedHashMap<>();
         for (int i = 0; i < axes.size(); i++) {
             BoundingBox axe = axes.get(i);
-            boolean surX = axe.getXSpan() > axe.getZSpan();
-            int debut = surX ? axe.minX() : axe.minZ();
-            int fin = surX ? axe.maxX() : axe.maxZ();
-            int milieu = surX ? (axe.minZ() + axe.maxZ()) / 2 : (axe.minX() + axe.maxX()) / 2;
-            for (int cible = debut + PAS_LANTERNES / 2; cible <= fin; cible += PAS_LANTERNES) {
-                // À la place prévue, sinon décalée de quelques blocs le long de l'axe (au-dessus d'un puits, sous un vide)
-                for (int decalage : new int[]{0, 1, -1, 2, -2, 3, -3, 4, -4, 5, -5}) {
-                    int t = cible + decalage;
-                    int x = surX ? t : milieu;
-                    int z = surX ? milieu : t;
-                    int haut = axe.maxY();
-                    BlockPos pos = poutres.contains(new BlockPos(x, haut, z)) ? new BlockPos(x, haut - 1, z) : new BlockPos(x, haut, z);
-                    if (t < debut || t > fin || caverne.contient(x, axe.minY(), z)) {
+            int sol = axe.minY();
+            for (Direction sens : Direction.Plane.HORIZONTAL) {
+                Direction cote = sens.getClockWise();
+                BlockPos milieu = centre.atY(sol + HAUTEUR_LANTERNE);
+                for (int d = PAS_LANTERNES; d <= LONGUEUR_AXE + DEMI_LARGEUR_AXE; d += PAS_LANTERNES) {
+                    BlockPos ligne = milieu.relative(sens, d);
+                    if (!axe.isInside(ligne) || caverne().contient(ligne.getX(), sol, ligne.getZ())) {
                         continue;
                     }
-                    if (dansUnPuits(puits, pos) || dansUnPuits(puits, pos.below()) || (pos.getY() == haut && interieur(x, haut + 1, z))) {
-                        continue;
+                    // Une paire à chaque arche, une au milieu entre deux ; au bout de la branche, les trois (il n'y a pas d'autre lanterne après)
+                    boolean auBout = !axe.isInside(milieu.relative(sens, d + PAS_LANTERNES));
+                    if (d % (2 * PAS_LANTERNES) == 0 || auBout) {
+                        for (int l : new int[]{DEMI_LARGEUR_AXE - 1, -(DEMI_LARGEUR_AXE - 1)}) {
+                            BlockPos lanterne = ligne.relative(cote, l);
+                            if (!dansUnPuits(puits, lanterne) && !dansUnPuits(puits, lanterne.below())) {
+                                liste.putIfAbsent(lanterne, new Lanterne(lanterne, true));
+                                poutres.add(lanterne.above());
+                            }
+                        }
                     }
-                    liste.putIfAbsent(pos, new Lanterne(pos, true));
-                    break;
+                    if ((d % (2 * PAS_LANTERNES) != 0 || auBout) && !dansUnPuits(puits, ligne)) {
+                        liste.putIfAbsent(ligne, new Lanterne(ligne, true));
+                        for (BlockPos chaine = ligne.above(); chaine.getY() <= axe.maxY(); chaine = chaine.above()) {
+                            chaines.add(chaine);
+                        }
+                    }
                 }
             }
         }
@@ -601,7 +640,7 @@ public final class PlanDeMine {
             // En bas : au sol, dans le coin opposé à l'échelle (paroi nord)
             BlockPos bas = new BlockPos(p.x() + 1, p.bas(), p.z() + 1);
             liste.putIfAbsent(bas, new Lanterne(bas, false));
-            // En haut : sous le plafond de la galerie, à côté du trou
+            // En haut : sous le plafond de l'axe, à côté du trou
             int y = p.haut();
             while (interieur(p.x() + 1, y + 1, p.z() + 1)) {
                 y++;
@@ -609,16 +648,17 @@ public final class PlanDeMine {
             BlockPos haut = new BlockPos(p.x() + 1, y, p.z() + 1);
             liste.putIfAbsent(haut, new Lanterne(haut, true));
         }
-        // Entrée de la caverne : au bout de l'axe qui y mène, deux lanternes au sol de part et d'autre
-        int sens = Integer.signum((caverne.x() - centre.getX()) + (caverne.z() - centre.getZ()));
-        boolean surX = caverne.x() != centre.getX();
-        for (int t = 0; t <= DISTANCE_CAVERNE; t++) {
+        // Entrée de la colonie : au bout de l'axe qui y mène, deux lanternes au sol de part et d'autre
+        Caverne colonieCaverne = caverne();
+        int sens = Integer.signum((colonieCaverne.x() - centre.getX()) + (colonieCaverne.z() - centre.getZ()));
+        boolean surX = colonieCaverne.x() != centre.getX();
+        for (int t = 0; t <= DISTANCE_COLONIE; t++) {
             int x = surX ? centre.getX() + sens * t : centre.getX();
             int z = surX ? centre.getZ() : centre.getZ() + sens * t;
-            if (caverne.contient(x, caverne.sol(), z)) {
+            if (colonieCaverne.contient(x, colonieCaverne.sol(), z)) {
                 for (int cote = -1; cote <= 1; cote += 2) {
-                    BlockPos pos = surX ? new BlockPos(x + 2 * sens, caverne.sol(), z + 3 * cote) : new BlockPos(x + 3 * cote, caverne.sol(), z + 2 * sens);
-                    if (caverne.contient(pos.getX(), pos.getY(), pos.getZ())) {
+                    BlockPos pos = surX ? new BlockPos(x + 2 * sens, colonieCaverne.sol(), z + 3 * cote) : new BlockPos(x + 3 * cote, colonieCaverne.sol(), z + 2 * sens);
+                    if (colonieCaverne.contient(pos.getX(), pos.getY(), pos.getZ())) {
                         liste.putIfAbsent(pos, new Lanterne(pos, false));
                     }
                 }
@@ -635,15 +675,15 @@ public final class PlanDeMine {
     }
 
     /**
-     * Le sol du réseau éclairé, où aucun monstre ne doit apparaître : chaque bloc de vide au ras du sol des galeries de l'axe
-     * (hors de la caverne, éclairée en G7.3, du trou des puits, des piliers qui tiennent leur échelle et des butoirs), et le
-     * fond de chaque puits secondaire.
+     * Le sol du réseau éclairé, où aucun monstre ne doit apparaître : chaque bloc de vide au ras du sol de l'axe (hors de la
+     * colonie, éclairée en G7.3, du trou des puits, des piliers qui tiennent leur échelle et des butoirs), et le fond de chaque
+     * puits secondaire.
      */
     public List<BlockPos> reseauEclaire() {
         Set<BlockPos> sol = new LinkedHashSet<>();
         for (BoundingBox axe : axes) {
             for (BlockPos pos : BlockPos.betweenClosed(axe.minX(), axe.minY(), axe.minZ(), axe.maxX(), axe.minY(), axe.maxZ())) {
-                if (!caverne.contient(pos.getX(), pos.getY(), pos.getZ()) && !dansUnPuits(puits, pos) && !dansUnPuits(puits, pos.below())
+                if (!caverne().contient(pos.getX(), pos.getY(), pos.getZ()) && !dansUnPuits(puits, pos) && !dansUnPuits(puits, pos.below())
                         && puits.stream().noneMatch(p -> pilier(p, pos.getY()).equals(pos) && pos.getY() >= p.bas() && pos.getY() <= p.haut())) {
                     sol.add(pos.immutable());
                 }
@@ -659,6 +699,9 @@ public final class PlanDeMine {
             sol.remove(voie.butoirPuits());
             sol.remove(voie.butoirBout());
         }
+        for (Garage garage : garages) {
+            sol.remove(garage.butoir());
+        }
         return List.copyOf(sol);
     }
 
@@ -669,7 +712,7 @@ public final class PlanDeMine {
      * plus éloignée. Puis les autres salles, dans un ordre tiré.
      */
     private List<Coffre> coffres(Random hasard) {
-        BoundingBox zoneCaverne = caverne.boite();
+        BoundingBox zoneCaverne = caverne().boite();
         List<Salle> ordre = new ArrayList<>(salles);
         Collections.shuffle(ordre, hasard);
         List<Salle> duBas = new ArrayList<>(ordre.stream().filter(salle -> salle.niveau() == sols.size() - 1).toList());
@@ -770,6 +813,11 @@ public final class PlanDeMine {
             }
             return min;
         }
+
+        /** Le vide de cette boîte reste-t-il assez loin sous le terrain ? */
+        boolean sousLeTerrain(BoundingBox boite) {
+            return boite.maxY() + MARGE_SURFACE <= min(boite);
+        }
     }
 
     /** Un plan est tiré une fois par mine, puis relu : la pose de chaque chunk le redemande (fils de génération). */
@@ -790,381 +838,477 @@ public final class PlanDeMine {
                 cle -> tirer(cle.graine(), cle.centre(), terrain, cle.solAuPuits(), cle.surfacePuits()));
     }
 
-    /** Un nœud de la grille d'un niveau. */
-    private record Noeud(int i, int j) {
-        int x(BlockPos centre) {
-            return centre.getX() + i * ESPACEMENT;
-        }
-
-        int z(BlockPos centre) {
-            return centre.getZ() + j * ESPACEMENT;
-        }
-    }
-
-    private record Arete(Noeud a, Noeud b, boolean axe) {
-    }
-
     /** Le plan sur un terrain plat (tests). */
     static PlanDeMine tirer(long graine, BlockPos centre, int terrain, int solAuPuits, int surfacePuits) {
         return tirer(graine, centre, (x, z) -> terrain, solAuPuits, surfacePuits);
     }
 
+    /** Une liaison possible entre deux cavernes ou une caverne et l'axe : ses tunnels et leur longueur. */
+    private record Liaison(int a, int b, List<BoundingBox> boites, int longueur) {
+    }
+
     static PlanDeMine tirer(long graine, BlockPos centre, IntBinaryOperator terrain, int solAuPuits, int surfacePuits) {
         Relief relief = new Relief(centre, terrain);
-        int solMinimum = relief.min(new BoundingBox(centre.getX() - 120, 0, centre.getZ() - 120, centre.getX() + 120, 0, centre.getZ() + 120));
         Random hasard = new Random(graine ^ centre.asLong() * 0x9E3779B97F4A7C15L);
-        // Niveaux sous la surface, avec leur marge
+        // Les niveaux que le terrain autour du puits permet (le plan des régions évite les sites trop bas)
+        BoundingBox autourDuPuits = new BoundingBox(centre.getX() - 16, 0, centre.getZ() - 16, centre.getX() + 16, 0, centre.getZ() + 16);
         List<Integer> sols = new ArrayList<>();
         for (int sol : SOLS) {
-            if (sol + HAUTEUR_AXE + MARGE_SURFACE <= solMinimum) {
+            if (sol + HAUTEUR_AXE + MARGE_SURFACE <= relief.min(autourDuPuits)) {
                 sols.add(sol);
             }
         }
         if (sols.isEmpty()) {
             sols.add(SOLS[SOLS.length - 1]);
         }
-        int niveauCaverne = Math.min(NIVEAU_CAVERNE, sols.size() - 1);
+        int niveauColonie = Math.max(0, sols.indexOf(SOLS[NIVEAU_COLONIE]));
 
-        // Caverne : au bout d'une branche de l'axe, dans une direction tirée
-        int direction = hasard.nextInt(4);
-        int dx = direction == 0 ? 1 : direction == 1 ? -1 : 0;
-        int dz = direction == 2 ? 1 : direction == 3 ? -1 : 0;
-        boolean caverneSurX = dx != 0;
-        Caverne caverne = new Caverne(centre.getX() + dx * DISTANCE_CAVERNE, centre.getZ() + dz * DISTANCE_CAVERNE, sols.get(niveauCaverne),
-                caverneSurX ? DEMI_X_CAVERNE : DEMI_Z_CAVERNE, caverneSurX ? DEMI_Z_CAVERNE : DEMI_X_CAVERNE, HAUTEUR_CAVERNE,
+        // La colonie : au bout de la branche où le terrain lui laisse le plus de hauteur
+        List<Direction> directions = new ArrayList<>(Direction.Plane.HORIZONTAL.stream().toList());
+        Collections.shuffle(directions, hasard);
+        int solColonie = sols.get(niveauColonie);
+        Direction versColonie = directions.getFirst();
+        int meilleurTerrain = Integer.MIN_VALUE;
+        for (Direction direction : directions) {
+            BoundingBox emprise = colonie(centre, direction, solColonie, HAUTEUR_COLONIE, 0, 0, 0).boite();
+            int terrainDessus = relief.min(emprise);
+            if (terrainDessus > meilleurTerrain) {
+                meilleurTerrain = terrainDessus;
+                versColonie = direction;
+            }
+        }
+        int hauteurColonie = Math.clamp(meilleurTerrain - MARGE_SURFACE - solColonie, HAUTEUR_COLONIE_MIN, HAUTEUR_COLONIE);
+        Caverne colonieCaverne = colonie(centre, versColonie, solColonie, hauteurColonie,
                 hasard.nextDouble() * 2 * Math.PI, hasard.nextDouble() * 2 * Math.PI, hasard.nextDouble() * 2 * Math.PI);
-        BoundingBox zoneCaverne = caverne.boite().inflatedBy(2);
+        BoundingBox reserve = colonieCaverne.boite().inflatedBy(RESERVE_COLONIE);
 
-        // Galeries de chaque niveau
-        List<Set<Arete>> aretesParNiveau = new ArrayList<>();
-        List<Set<Noeud>> noeudsParNiveau = new ArrayList<>();
+        List<BoundingBox> galeries = new ArrayList<>();
+        List<Integer> niveauxGaleries = new ArrayList<>();
+        List<BoundingBox> axes = new ArrayList<>();
+        List<Integer> niveauxAxes = new ArrayList<>();
+        List<BoundingBox> tunnels = new ArrayList<>();
+        List<Integer> niveauxTunnels = new ArrayList<>();
+        List<Caverne> cavernes = new ArrayList<>(List.of(colonieCaverne));
+        Map<Integer, Map<Direction, Integer>> longueursAxes = new HashMap<>();
+
         for (int niveau = 0; niveau < sols.size(); niveau++) {
             int sol = sols.get(niveau);
-            boolean niveauDeLaCaverne = niveau == niveauCaverne;
-            List<Arete> permises = new ArrayList<>();
-            for (int i = -DEMI_GRILLE; i <= DEMI_GRILLE; i++) {
-                for (int j = -DEMI_GRILLE; j <= DEMI_GRILLE; j++) {
-                    for (Noeud voisin : List.of(new Noeud(i + 1, j), new Noeud(i, j + 1))) {
-                        if (Math.abs(voisin.i()) > DEMI_GRILLE || Math.abs(voisin.j()) > DEMI_GRILLE) {
-                            continue;
-                        }
-                        Noeud noeud = new Noeud(i, j);
-                        boolean axe = (j == 0 && voisin.j() == 0) || (i == 0 && voisin.i() == 0);
-                        Arete arete = new Arete(noeud, voisin, axe);
-                        boolean versCaverne = niveauDeLaCaverne && axe && (caverneSurX ? j == 0 && Integer.signum(i + voisin.i()) == dx
-                                : i == 0 && Integer.signum(j + voisin.j()) == dz);
-                        // Rien ne croise la caverne, sauf l'axe qui y mène sur son niveau
-                        if (!versCaverne && galerie(arete, sol, centre).inflatedBy(1).intersects(zoneCaverne)) {
-                            continue;
-                        }
-                        permises.add(arete);
+            // Les branches de l'axe
+            Map<Direction, Integer> longueurs = new HashMap<>();
+            for (Direction sens : Direction.Plane.HORIZONTAL) {
+                int longueur = longueurAxe(centre, sens, sol, relief, colonieCaverne, sens == versColonie && niveau == niveauColonie);
+                if (longueur >= 8) {
+                    longueurs.put(sens, longueur);
+                    BoundingBox axe = branche(centre, sens, longueur, sol);
+                    axes.add(axe);
+                    niveauxAxes.add(niveau);
+                    galeries.add(axe);
+                    niveauxGaleries.add(niveau);
+                }
+            }
+            longueursAxes.put(niveau, longueurs);
+
+            // Les cavernes, sur les nœuds hors des axes
+            int voulues = CAVERNES[NIVEAUX_MAX - sols.size() + niveau];
+            List<int[]> noeuds = new ArrayList<>();
+            for (int i : NOEUDS) {
+                for (int j : NOEUDS) {
+                    noeuds.add(new int[]{i, j});
+                }
+            }
+            Collections.shuffle(noeuds, hasard);
+            List<Caverne> ici = new ArrayList<>();
+            for (int[] noeud : noeuds) {
+                if (ici.size() == voulues) {
+                    break;
+                }
+                Caverne caverne = caverne(centre, noeud, sol, relief, hasard);
+                if (caverne == null) {
+                    continue;
+                }
+                BoundingBox boite = caverne.boite();
+                if (boite.inflatedBy(4).intersects(reserve) || boite.intersects(colonieCaverne.boite().inflatedBy(3))
+                        || ici.stream().anyMatch(autre -> autre.boite().inflatedBy(4).intersects(boite))) {
+                    continue;
+                }
+                ici.add(caverne);
+            }
+
+            // Les tunnels : un arbre couvrant (Kruskal), les plus courts d'abord, avec du hasard ; puis des boucles
+            int axeId = ici.size();
+            List<Liaison> liaisons = new ArrayList<>();
+            for (int a = 0; a < ici.size(); a++) {
+                Caverne c = ici.get(a);
+                // Vers la branche de l'axe la plus proche, tout droit
+                Direction versAxeX = c.z() > centre.getZ() ? Direction.NORTH : Direction.SOUTH;
+                Direction brancheX = c.x() > centre.getX() ? Direction.EAST : Direction.WEST;
+                if (Math.abs(c.x() - centre.getX()) + 6 <= longueurs.getOrDefault(brancheX, 0)) {
+                    ajouterLiaison(liaisons, a, axeId, List.of(tunnel(c.x(), c.z(), c.x(), centre.getZ(), sol)), relief, reserve, colonieCaverne);
+                }
+                Direction brancheZ = c.z() > centre.getZ() ? Direction.SOUTH : Direction.NORTH;
+                if (Math.abs(c.z() - centre.getZ()) + 6 <= longueurs.getOrDefault(brancheZ, 0)) {
+                    ajouterLiaison(liaisons, a, axeId, List.of(tunnel(c.x(), c.z(), centre.getX(), c.z(), sol)), relief, reserve, colonieCaverne);
+                }
+                // Vers les cavernes voisines, en L
+                for (int b = a + 1; b < ici.size(); b++) {
+                    Caverne d = ici.get(b);
+                    if (Math.hypot(c.x() - d.x(), c.z() - d.z()) <= 2.2 * ESPACEMENT) {
+                        ajouterLiaison(liaisons, a, b, List.of(tunnel(c.x(), c.z(), d.x(), c.z(), sol), tunnel(d.x(), c.z(), d.x(), d.z(), sol)),
+                                relief, reserve, colonieCaverne);
                     }
                 }
             }
-            Set<Arete> arbre = arbre(permises, hasard);
-            Set<Noeud> relies = composante(arbre, new Noeud(0, 0));
-            arbre.removeIf(arete -> !relies.contains(arete.a()));
-            // Des boucles en plus, entre nœuds déjà reliés
-            List<Arete> autres = new ArrayList<>(permises);
-            autres.removeAll(arbre);
-            autres.removeIf(arete -> !relies.contains(arete.a()) || !relies.contains(arete.b()));
-            Collections.shuffle(autres, hasard);
-            Set<Arete> gardees = new LinkedHashSet<>(arbre);
-            gardees.addAll(autres.subList(0, (int) Math.round(autres.size() * PART_BOUCLES)));
-            aretesParNiveau.add(gardees);
-            noeudsParNiveau.add(relies);
+            Collections.shuffle(liaisons, hasard);
+            Map<Liaison, Integer> poids = new IdentityHashMap<>();
+            liaisons.forEach(liaison -> poids.put(liaison, liaison.longueur() + hasard.nextInt(40)));
+            liaisons.sort((x, y) -> Integer.compare(poids.get(x), poids.get(y)));
+            int[] parents = new int[ici.size() + 1];
+            for (int k = 0; k < parents.length; k++) {
+                parents[k] = k;
+            }
+            List<Liaison> gardees = new ArrayList<>();
+            List<Liaison> restes = new ArrayList<>();
+            for (Liaison liaison : liaisons) {
+                int ra = racine(parents, liaison.a());
+                int rb = racine(parents, liaison.b());
+                if (ra != rb) {
+                    parents[ra] = rb;
+                    gardees.add(liaison);
+                } else if (liaison.longueur() <= LONGUEUR_BOUCLE) {
+                    restes.add(liaison);
+                }
+            }
+            gardees.addAll(restes.subList(0, (int) Math.round(restes.size() * PART_BOUCLES)));
+            for (Liaison liaison : gardees) {
+                for (BoundingBox boite : liaison.boites()) {
+                    tunnels.add(boite);
+                    niveauxTunnels.add(niveau);
+                    galeries.add(boite);
+                    niveauxGaleries.add(niveau);
+                }
+            }
+            // Une caverne qu'aucune liaison ne relie à l'axe n'est pas gardée (et ses tunnels non plus : ils ne touchent que des cavernes retirées)
+            for (int a = 0; a < ici.size(); a++) {
+                if (racine(parents, a) == racine(parents, axeId)) {
+                    cavernes.add(ici.get(a));
+                }
+            }
+            int niveauCourant = niveau;
+            for (int k = galeries.size() - 1; k >= 0; k--) {
+                if (niveauxGaleries.get(k) == niveauCourant && !axes.contains(galeries.get(k))) {
+                    BoundingBox boite = galeries.get(k);
+                    boolean utile = axes.stream().anyMatch(axe -> axe.intersects(boite))
+                            || cavernes.stream().anyMatch(caverne -> caverne.sol() == sol && caverne.boite().intersects(boite));
+                    if (!utile) {
+                        tunnels.remove(boite);
+                        niveauxTunnels.removeLast();
+                        galeries.remove(k);
+                        niveauxGaleries.remove(k);
+                    }
+                }
+            }
         }
 
-        // Puits secondaires entre deux niveaux : nœuds obligatoires des deux
+        // Puits secondaires : sur le côté d'une branche de l'axe présente sur les deux niveaux, jamais dans une caverne
         List<Puits> puits = new ArrayList<>();
-        List<Set<Noeud>> obligatoires = new ArrayList<>();
-        for (int niveau = 0; niveau < sols.size(); niveau++) {
-            obligatoires.add(new HashSet<>(Set.of(new Noeud(0, 0))));
-        }
         for (int haut = 0; haut + 1 < sols.size(); haut++) {
-            List<Noeud> candidats = new ArrayList<>(noeudsParNiveau.get(haut));
-            candidats.retainAll(noeudsParNiveau.get(haut + 1));
-            candidats.sort((a, b) -> a.i() != b.i() ? Integer.compare(a.i(), b.i()) : Integer.compare(a.j(), b.j()));
+            List<Object[]> candidats = new ArrayList<>();
+            for (Direction sens : Direction.Plane.HORIZONTAL) {
+                for (int d : DISTANCES_PUITS) {
+                    candidats.add(new Object[]{sens, d});
+                }
+            }
             Collections.shuffle(candidats, hasard);
-            int poses = 0;
-            for (Noeud noeud : candidats) {
-                if (poses == PUITS_SECONDAIRES) {
+            Set<Direction> prises = new HashSet<>();
+            for (Object[] candidat : candidats) {
+                if (prises.size() == PUITS_SECONDAIRES) {
                     break;
                 }
-                int x = noeud.x(centre);
-                int z = noeud.z(centre);
-                boolean loin = Math.hypot(noeud.i(), noeud.j()) * ESPACEMENT >= 40;
-                boolean ecarte = puits.stream().noneMatch(autre -> Math.hypot(autre.x() - x, autre.z() - z) < 30);
-                BoundingBox interieur = new Puits(x, z, sols.get(haut + 1), sols.get(haut) + HAUTEUR - 1, false).interieur();
-                if (loin && ecarte && !interieur.inflatedBy(COQUE_PUITS).intersects(zoneCaverne)) {
-                    puits.add(new Puits(x, z, sols.get(haut + 1), sols.get(haut) + HAUTEUR - 1, false));
-                    obligatoires.get(haut).add(noeud);
-                    obligatoires.get(haut + 1).add(noeud);
-                    poses++;
+                Direction sens = (Direction) candidat[0];
+                int d = (Integer) candidat[1];
+                if (prises.contains(sens) || longueursAxes.get(haut).getOrDefault(sens, 0) < d + 8 || longueursAxes.get(haut + 1).getOrDefault(sens, 0) < d + 8) {
+                    continue;
+                }
+                int x = centre.getX() + sens.getStepX() * d + (sens.getAxis() == Direction.Axis.Z ? 3 : 0);
+                int z = centre.getZ() + sens.getStepZ() * d + (sens.getAxis() == Direction.Axis.X ? 3 : 0);
+                Puits p = new Puits(x, z, sols.get(haut + 1), sols.get(haut) + HAUTEUR_TROU - 1, false);
+                BoundingBox garde = p.interieur().inflatedBy(COQUE_PUITS);
+                boolean libre = cavernes.stream().noneMatch(caverne -> caverne.boite().intersects(garde)) && !garde.intersects(reserve)
+                        && tunnels.stream().noneMatch(tunnel -> tunnel.intersects(garde))
+                        && puits.stream().noneMatch(autre -> Math.hypot(autre.x() - x, autre.z() - z) < 30);
+                if (libre) {
+                    puits.add(p);
+                    prises.add(sens);
                 }
             }
         }
-
-        // Coupe des culs-de-sac, jamais d'un nœud obligatoire
-        for (int niveau = 0; niveau < sols.size(); niveau++) {
-            couper(aretesParNiveau.get(niveau), obligatoires.get(niveau), hasard);
-        }
-
-        // Géométrie des galeries
-        List<BoundingBox> galeries = new ArrayList<>();
-        List<Integer> niveauxGaleries = new ArrayList<>();
-        Set<BlockPos> poteaux = new HashSet<>();
-        Set<BlockPos> poutres = new HashSet<>();
-        List<BoundingBox> axes = new ArrayList<>();
-        List<Integer> niveauxAxes = new ArrayList<>();
-        for (int niveau = 0; niveau < sols.size(); niveau++) {
-            for (Arete arete : aretesParNiveau.get(niveau)) {
-                BoundingBox boite = galerie(arete, sols.get(niveau), centre);
-                galeries.add(boite);
-                niveauxGaleries.add(niveau);
-                etayer(boite, arete, centre, poteaux, poutres);
-                if (arete.axe()) {
-                    axes.add(boite);
-                    niveauxAxes.add(niveau);
-                }
-            }
-        }
-
         // Puits principal, jusqu'au bouchon : 3 blocs de roche, puis les 2 couches du bouchon, sous la surface de sa colonne
         int hautPuits = Math.max(surfacePuits - 1 - ROCHE_SUR_BOUCHON - 2, sols.getFirst() + HAUTEUR_AXE);
         puits.addFirst(new Puits(centre.getX(), centre.getZ(), sols.getLast(), hautPuits, true));
         BoundingBox bouchon = new BoundingBox(centre.getX() - 1, hautPuits + 1, centre.getZ() - 1, centre.getX() + 1, hautPuits + 2, centre.getZ() + 1);
 
-        Colonie colonie = colonie(caverne, caverneSurX, dx + dz);
+        // Culs-de-sac
+        List<BoundingBox> culs = new ArrayList<>();
         List<BlockPos> culsDeSac = new ArrayList<>();
-        List<EmplacementCellule> cellules = cellules(sols, aretesParNiveau, galeries, puits, caverne, centre, hasard, culsDeSac);
-        List<Salle> salles = salles(sols, aretesParNiveau, galeries, puits, zoneCaverne, cellules, centre, hasard, poteaux, poutres);
-        int hautDesBoites = sols.getFirst() + HAUTEUR_AXE + 2;
+        List<int[]> axesCulsDirection = new ArrayList<>();
+        for (int niveau = 0; niveau < sols.size(); niveau++) {
+            int sol = sols.get(niveau);
+            List<BoundingBox> sources = new ArrayList<>();
+            for (int k = 0; k < galeries.size(); k++) {
+                if (niveauxGaleries.get(k) == niveau) {
+                    sources.add(galeries.get(k));
+                }
+            }
+            int poses = 0;
+            for (int essai = 0; essai < 400 && poses < CULS_PAR_NIVEAU && !sources.isEmpty(); essai++) {
+                BoundingBox source = sources.get(hasard.nextInt(sources.size()));
+                boolean surX = source.getXSpan() > source.getZSpan();
+                int t = surX ? source.minX() + hasard.nextInt(source.getXSpan()) : source.minZ() + hasard.nextInt(source.getZSpan());
+                int cote = hasard.nextBoolean() ? 1 : -1;
+                int mur = surX ? (cote > 0 ? source.maxZ() : source.minZ()) : (cote > 0 ? source.maxX() : source.minX());
+                int longueur = LONGUEUR_CUL_MIN + hasard.nextInt(LONGUEUR_CUL_MAX - LONGUEUR_CUL_MIN + 1);
+                int bout = mur + cote * longueur;
+                BoundingBox cul = surX ? new BoundingBox(t - DEMI_LARGEUR_CUL, sol, Math.min(mur, bout), t + DEMI_LARGEUR_CUL, sol + HAUTEUR_CUL - 1, Math.max(mur, bout))
+                        : new BoundingBox(Math.min(mur, bout), sol, t - DEMI_LARGEUR_CUL, Math.max(mur, bout), sol + HAUTEUR_CUL - 1, t + DEMI_LARGEUR_CUL);
+                // Tout, sauf le bout qui part de la galerie, loin du reste du vide
+                BoundingBox loin = surX ? new BoundingBox(cul.minX(), sol, Math.min(mur + 3 * cote, bout), cul.maxX(), cul.maxY(), Math.max(mur + 3 * cote, bout))
+                        : new BoundingBox(Math.min(mur + 3 * cote, bout), sol, cul.minZ(), Math.max(mur + 3 * cote, bout), cul.maxY(), cul.maxZ());
+                BoundingBox garde = loin.inflatedBy(3);
+                boolean libre = dansLaMine(cul, centre) && relief.sousLeTerrain(cul) && !cul.intersects(reserve)
+                        && galeries.stream().noneMatch(g -> g.intersects(garde)) && culs.stream().noneMatch(c -> c.intersects(garde))
+                        && cavernes.stream().noneMatch(c -> c.boite().intersects(garde))
+                        && puits.stream().noneMatch(p -> p.interieur().inflatedBy(COQUE_PUITS).intersects(garde));
+                if (libre) {
+                    culs.add(cul);
+                    axesCulsDirection.add(new int[]{surX ? t : bout - cote * DEMI_LARGEUR_CUL, surX ? bout - cote * DEMI_LARGEUR_CUL : t, surX ? 0 : cote, surX ? cote : 0, niveau});
+                    culsDeSac.add(new BlockPos(surX ? t : bout - cote * DEMI_LARGEUR_CUL, sol, surX ? bout - cote * DEMI_LARGEUR_CUL : t));
+                    poses++;
+                }
+            }
+        }
+        for (int k = 0; k < culs.size(); k++) {
+            galeries.add(culs.get(k));
+            niveauxGaleries.add(axesCulsDirection.get(k)[4]);
+        }
+
+        // Arches : sur les axes et les tunnels, hors des croisements
+        Set<BlockPos> poteaux = new HashSet<>();
+        Set<BlockPos> poutres = new HashSet<>();
+        for (int k = 0; k < axes.size(); k++) {
+            etayer(axes.get(k), centre, galeries, cavernes, puits, poteaux, poutres);
+        }
+        for (BoundingBox tunnel : tunnels) {
+            etayer(tunnel, centre, galeries, cavernes, puits, poteaux, poutres);
+        }
+
+        Colonie colonie = colonie(colonieCaverne, versColonie, reserve);
+        List<EmplacementCellule> cellules = cellules(sols, culs, axesCulsDirection, tunnels, niveauxTunnels, galeries, puits, cavernes, reserve, relief, centre, hasard);
+        List<Salle> salles = salles(sols, cavernes, galeries, puits, reserve, cellules, relief, centre, hasard, poteaux, poutres);
+        // Le haut de tout le vide, avec un peu de marge
+        int hautDuVide = sols.getFirst() + HAUTEUR_AXE;
+        for (Caverne caverne : cavernes) {
+            hautDuVide = Math.max(hautDuVide, caverne.sol() + caverne.hauteur());
+        }
+        int hautDesBoites = hautDuVide + 2;
         int hautBoitePuits = Math.max(hautDesBoites, solAuPuits - BOITE_PUITS_SOUS_SURFACE);
-        // Les étais ne restent pas dans la caverne ni dans les puits
-        poteaux.removeIf(pos -> caverne.contient(pos.getX(), pos.getY(), pos.getZ()) || dansUnPuits(puits, pos));
-        poutres.removeIf(pos -> caverne.contient(pos.getX(), pos.getY(), pos.getZ()) || dansUnPuits(puits, pos));
-        return new PlanDeMine(relief, centre, sols, galeries, niveauxGaleries, puits, caverne, colonie, cellules, culsDeSac, salles, poteaux, poutres,
+        // Les étais ne restent ni dans les cavernes ni dans les puits
+        poteaux.removeIf(pos -> cavernes.stream().anyMatch(c -> c.contient(pos.getX(), pos.getY(), pos.getZ())) || dansUnPuits(puits, pos));
+        poutres.removeIf(pos -> cavernes.stream().anyMatch(c -> c.contient(pos.getX(), pos.getY(), pos.getZ())) || dansUnPuits(puits, pos));
+        return new PlanDeMine(relief, centre, sols, galeries, niveauxGaleries, puits, cavernes, colonie, cellules, culsDeSac, salles, poteaux, poutres,
                 bouchon, hautDesBoites, hautBoitePuits, axes, niveauxAxes, hasard);
+    }
+
+    private static boolean dansLaMine(BoundingBox boite, BlockPos centre) {
+        return boite.minX() >= centre.getX() - DEMI_MINE && boite.maxX() <= centre.getX() + DEMI_MINE
+                && boite.minZ() >= centre.getZ() - DEMI_MINE && boite.maxZ() <= centre.getZ() + DEMI_MINE;
     }
 
     private static boolean dansUnPuits(List<Puits> puits, BlockPos pos) {
         return puits.stream().anyMatch(p -> p.interieur().isInside(pos));
     }
 
-    /** La boîte de vide d'une galerie entre deux nœuds (axe : plus large et plus haute). */
-    private static BoundingBox galerie(Arete arete, int sol, BlockPos centre) {
-        int demi = arete.axe() ? DEMI_LARGEUR_AXE : DEMI_LARGEUR;
-        int hauteur = arete.axe() ? HAUTEUR_AXE : HAUTEUR;
-        int x1 = arete.a().x(centre);
-        int z1 = arete.a().z(centre);
-        int x2 = arete.b().x(centre);
-        int z2 = arete.b().z(centre);
-        return new BoundingBox(Math.min(x1, x2) - demi, sol, Math.min(z1, z2) - demi, Math.max(x1, x2) + demi, sol + hauteur - 1,
-                Math.max(z1, z2) + demi);
+    /** La colonie au bout de cette branche de l'axe, allongée dans son sens. */
+    private static Caverne colonie(BlockPos centre, Direction sens, int sol, int hauteur, double phase1, double phase2, double phase3) {
+        boolean surX = sens.getAxis() == Direction.Axis.X;
+        return new Caverne(centre.getX() + sens.getStepX() * DISTANCE_COLONIE, centre.getZ() + sens.getStepZ() * DISTANCE_COLONIE, sol,
+                surX ? DEMI_LONG_COLONIE : DEMI_LARGE_COLONIE, surX ? DEMI_LARGE_COLONIE : DEMI_LONG_COLONIE, hauteur, phase1, phase2, phase3);
     }
 
-    /** Étais tous les {@value #PAS_ETAIS} blocs : deux poteaux contre les parois, une poutre au plafond. */
-    private static void etayer(BoundingBox boite, Arete arete, BlockPos centre, Set<BlockPos> poteaux, Set<BlockPos> poutres) {
-        boolean surX = arete.a().j() == arete.b().j();
-        int debut = surX ? boite.minX() : boite.minZ();
-        int fin = surX ? boite.maxX() : boite.maxZ();
-        int origine = surX ? centre.getX() : centre.getZ();
-        for (int t = debut + 3; t <= fin - 3; t += PAS_ETAIS) {
-            // Pas d'étai dans un carrefour (près d'une ligne de la grille) : il boucherait la galerie qui croise
-            int versNoeud = Math.floorMod(t - origine, ESPACEMENT);
-            if (Math.min(versNoeud, ESPACEMENT - versNoeud) <= DEMI_LARGEUR_AXE + 1) {
-                continue;
+    /** La boîte d'une branche de l'axe : du centre (et sa croisée) jusqu'à {@code longueur} blocs dans ce sens. */
+    private static BoundingBox branche(BlockPos centre, Direction sens, int longueur, int sol) {
+        BlockPos bout = centre.relative(sens, longueur);
+        int d = DEMI_LARGEUR_AXE;
+        return new BoundingBox(Math.min(centre.getX(), bout.getX()) - d, sol, Math.min(centre.getZ(), bout.getZ()) - d,
+                Math.max(centre.getX(), bout.getX()) + d, sol + HAUTEUR_AXE - 1, Math.max(centre.getZ(), bout.getZ()) + d);
+    }
+
+    /**
+     * La longueur d'une branche de l'axe : jusqu'à {@value #LONGUEUR_AXE} blocs, tant que le terrain la laisse dessous et
+     * qu'elle ne perce pas la colonie (au-dessus de son dôme, elle s'arrête avant) ; la branche de la colonie entre dans la
+     * caverne de 6 blocs.
+     */
+    private static int longueurAxe(BlockPos centre, Direction sens, int sol, Relief relief, Caverne colonie, boolean versColonie) {
+        Direction cote = sens.getClockWise();
+        for (int t = 8; t <= LONGUEUR_AXE; t++) {
+            BlockPos bout = centre.relative(sens, t);
+            for (int l = -DEMI_LARGEUR_AXE - 1; l <= DEMI_LARGEUR_AXE + 1; l += DEMI_LARGEUR_AXE + 1) {
+                BlockPos pos = bout.relative(cote, l);
+                if (versColonie && l == 0 && colonie.contient(pos.getX(), sol, pos.getZ())) {
+                    return t + 6;
+                }
+                boolean dome = colonie.contient(pos.getX(), sol - 2, pos.getZ()) || colonie.contient(pos.getX(), sol + HAUTEUR_AXE + 1, pos.getZ())
+                        || colonie.contient(pos.getX(), sol, pos.getZ());
+                if (!versColonie && dome) {
+                    return t - 3;
+                }
             }
-            int bas = boite.minY();
-            int plafond = boite.maxY();
-            int cote1 = surX ? boite.minZ() : boite.minX();
-            int cote2 = surX ? boite.maxZ() : boite.maxX();
-            for (int y = bas; y < plafond; y++) {
-                poteaux.add(surX ? new BlockPos(t, y, cote1) : new BlockPos(cote1, y, t));
-                poteaux.add(surX ? new BlockPos(t, y, cote2) : new BlockPos(cote2, y, t));
-            }
-            for (int c = cote1; c <= cote2; c++) {
-                poutres.add(surX ? new BlockPos(t, plafond, c) : new BlockPos(c, plafond, t));
+            BoundingBox tranche = new BoundingBox(bout.getX(), sol, bout.getZ(), bout.getX(), sol + HAUTEUR_AXE - 1, bout.getZ());
+            if (t % 8 == 0 && !relief.sousLeTerrain(tranche)) {
+                return t - 8;
             }
         }
+        return LONGUEUR_AXE;
     }
 
-    /** Arbre couvrant (Kruskal) : l'axe d'abord, puis les autres arêtes dans un ordre tiré. */
-    private static Set<Arete> arbre(List<Arete> permises, Random hasard) {
-        List<Arete> ordre = new ArrayList<>(permises);
-        Collections.shuffle(ordre, hasard);
-        ordre.sort((a, b) -> Boolean.compare(b.axe(), a.axe()));
-        Map<Noeud, Noeud> parents = new HashMap<>();
-        Set<Arete> arbre = new LinkedHashSet<>();
-        for (Arete arete : ordre) {
-            Noeud ra = racine(parents, arete.a());
-            Noeud rb = racine(parents, arete.b());
-            if (!ra.equals(rb)) {
-                parents.put(ra, rb);
-                arbre.add(arete);
-            }
+    /** Une caverne autour de ce nœud, abaissée sous le terrain, ou {@code null} si elle n'y tient pas. */
+    private static @Nullable Caverne caverne(BlockPos centre, int[] noeud, int sol, Relief relief, Random hasard) {
+        int x = centre.getX() + noeud[0] * ESPACEMENT - JEU_CAVERNE + hasard.nextInt(2 * JEU_CAVERNE + 1);
+        int z = centre.getZ() + noeud[1] * ESPACEMENT - JEU_CAVERNE + hasard.nextInt(2 * JEU_CAVERNE + 1);
+        int demiX = DEMI_CAVERNE_MIN + hasard.nextInt(DEMI_CAVERNE_MAX - DEMI_CAVERNE_MIN + 1);
+        int demiZ = DEMI_CAVERNE_MIN + hasard.nextInt(DEMI_CAVERNE_MAX - DEMI_CAVERNE_MIN + 1);
+        int voulue = HAUTEUR_CAVERNE_MIN + hasard.nextInt(HAUTEUR_CAVERNE_MAX - HAUTEUR_CAVERNE_MIN + 1);
+        double phase1 = hasard.nextDouble() * 2 * Math.PI;
+        double phase2 = hasard.nextDouble() * 2 * Math.PI;
+        double phase3 = hasard.nextDouble() * 2 * Math.PI;
+        Caverne essai = new Caverne(x, z, sol, demiX, demiZ, voulue, phase1, phase2, phase3);
+        int hauteur = Math.min(voulue, relief.min(essai.boite()) - MARGE_SURFACE - sol);
+        if (hauteur < HAUTEUR_CAVERNE_PLANCHER) {
+            return null;
         }
-        return arbre;
+        return new Caverne(x, z, sol, demiX, demiZ, hauteur, phase1, phase2, phase3);
     }
 
-    private static Noeud racine(Map<Noeud, Noeud> parents, Noeud noeud) {
-        Noeud courant = noeud;
-        while (parents.containsKey(courant)) {
-            courant = parents.get(courant);
+    /** Un tunnel droit de (x1, z1) à (x2, z2). */
+    private static BoundingBox tunnel(int x1, int z1, int x2, int z2, int sol) {
+        int d = DEMI_LARGEUR_TUNNEL;
+        return new BoundingBox(Math.min(x1, x2) - d, sol, Math.min(z1, z2) - d, Math.max(x1, x2) + d, sol + HAUTEUR_TUNNEL - 1, Math.max(z1, z2) + d);
+    }
+
+    /** Une liaison possible : aucun de ses tunnels ne touche la colonie ni sa réserve, tous sous le terrain. */
+    private static void ajouterLiaison(List<Liaison> liaisons, int a, int b, List<BoundingBox> boites, Relief relief, BoundingBox reserve, Caverne colonie) {
+        int longueur = 0;
+        for (BoundingBox boite : boites) {
+            if (boite.intersects(reserve) || boite.intersects(colonie.boite().inflatedBy(3)) || !relief.sousLeTerrain(boite)) {
+                return;
+            }
+            longueur += Math.max(boite.getXSpan(), boite.getZSpan());
+        }
+        liaisons.add(new Liaison(a, b, boites, longueur));
+    }
+
+    private static int racine(int[] parents, int n) {
+        int courant = n;
+        while (parents[courant] != courant) {
+            courant = parents[courant];
         }
         return courant;
     }
 
-    private static Set<Noeud> composante(Set<Arete> aretes, Noeud depart) {
-        Map<Noeud, List<Noeud>> voisins = voisins(aretes);
-        Set<Noeud> vus = new HashSet<>(Set.of(depart));
-        Deque<Noeud> file = new ArrayDeque<>(List.of(depart));
-        while (!file.isEmpty()) {
-            for (Noeud voisin : voisins.getOrDefault(file.poll(), List.of())) {
-                if (vus.add(voisin)) {
-                    file.add(voisin);
-                }
+    /**
+     * Une arche tous les {@value #PAS_ARCHES} blocs (comptés depuis le centre de la mine) : deux poteaux contre les parois, une
+     * poutre au plafond. Pas d'arche là où un autre vide croise la galerie (elle le boucherait).
+     */
+    private static void etayer(BoundingBox boite, BlockPos centre, List<BoundingBox> galeries, List<Caverne> cavernes, List<Puits> puits,
+                               Set<BlockPos> poteaux, Set<BlockPos> poutres) {
+        boolean surX = boite.getXSpan() > boite.getZSpan();
+        int debut = surX ? boite.minX() : boite.minZ();
+        int fin = surX ? boite.maxX() : boite.maxZ();
+        int origine = surX ? centre.getX() : centre.getZ();
+        int cote1 = surX ? boite.minZ() : boite.minX();
+        int cote2 = surX ? boite.maxZ() : boite.maxX();
+        for (int t = debut + Math.floorMod(origine - debut, PAS_ARCHES); t <= fin; t += PAS_ARCHES) {
+            BoundingBox plan = surX ? new BoundingBox(t - 1, boite.minY(), cote1 - 1, t + 1, boite.maxY(), cote2 + 1)
+                    : new BoundingBox(cote1 - 1, boite.minY(), t - 1, cote2 + 1, boite.maxY(), t + 1);
+            boolean croise = galeries.stream().anyMatch(g -> g != boite && g.intersects(plan))
+                    || cavernes.stream().anyMatch(c -> c.boite().intersects(plan))
+                    || puits.stream().anyMatch(p -> p.interieur().intersects(plan));
+            if (croise) {
+                continue;
             }
-        }
-        return vus;
-    }
-
-    private static Map<Noeud, List<Noeud>> voisins(Set<Arete> aretes) {
-        Map<Noeud, List<Noeud>> voisins = new HashMap<>();
-        for (Arete arete : aretes) {
-            voisins.computeIfAbsent(arete.a(), n -> new ArrayList<>()).add(arete.b());
-            voisins.computeIfAbsent(arete.b(), n -> new ArrayList<>()).add(arete.a());
-        }
-        return voisins;
-    }
-
-    /** Coupe des culs-de-sac au hasard jusqu'à {@link #PART_GARDEE} des arêtes ; jamais un nœud obligatoire ni l'axe. */
-    private static void couper(Set<Arete> aretes, Set<Noeud> obligatoires, Random hasard) {
-        int cible = (int) Math.round(aretes.size() * PART_GARDEE);
-        while (aretes.size() > cible) {
-            Map<Noeud, List<Noeud>> voisins = voisins(aretes);
-            List<Arete> feuilles = new ArrayList<>();
-            for (Arete arete : aretes) {
-                if (arete.axe()) {
-                    continue;
-                }
-                boolean feuilleA = voisins.get(arete.a()).size() == 1 && !obligatoires.contains(arete.a());
-                boolean feuilleB = voisins.get(arete.b()).size() == 1 && !obligatoires.contains(arete.b());
-                if (feuilleA || feuilleB) {
-                    feuilles.add(arete);
-                }
+            for (int y = boite.minY(); y < boite.maxY(); y++) {
+                poteaux.add(surX ? new BlockPos(t, y, cote1) : new BlockPos(cote1, y, t));
+                poteaux.add(surX ? new BlockPos(t, y, cote2) : new BlockPos(cote2, y, t));
             }
-            if (feuilles.isEmpty()) {
-                return;
+            for (int c = cote1; c <= cote2; c++) {
+                poutres.add(surX ? new BlockPos(t, boite.maxY(), c) : new BlockPos(c, boite.maxY(), t));
             }
-            aretes.remove(feuilles.get(hasard.nextInt(feuilles.size())));
         }
     }
 
     // --- Colonie et cellules ---
 
-    private static Colonie colonie(Caverne caverne, boolean surX, int sens) {
+    private static Colonie colonie(Caverne caverne, Direction versColonie, BoundingBox reserve) {
         int sol = caverne.sol();
         BlockPos echafaud = new BlockPos(caverne.x(), sol, caverne.z());
         BoundingBox place = new BoundingBox(caverne.x() - 10, sol, caverne.z() - 10, caverne.x() + 9, sol, caverne.z() + 9);
         // Le Rouge apparaît près de l'entrée, côté puits, à 6 blocs du bord
-        int bord = (surX ? caverne.demiX() : caverne.demiZ()) - 6;
-        BlockPos apparition = surX ? new BlockPos(caverne.x() - sens * bord, sol, caverne.z()) : new BlockPos(caverne.x(), sol, caverne.z() - sens * bord);
-        // Parcelles de 7 × 7 sur une grille (allées de 2 blocs), entières sous la voûte, hors de la place et de l'entrée ;
-        // les plus proches des parois d'abord, jusqu'à 20
-        List<BoundingBox> candidates = new ArrayList<>();
-        for (int x = caverne.x() - caverne.demiX(); x <= caverne.x() + caverne.demiX(); x += 9) {
-            for (int z = caverne.z() - caverne.demiZ(); z <= caverne.z() + caverne.demiZ(); z += 9) {
-                BoundingBox parcelle = new BoundingBox(x - 3, sol, z - 3, x + 3, sol + 5, z + 3);
-                if (coinsDans(caverne, parcelle) && !parcelle.inflatedBy(2).intersects(place)
-                        && Math.hypot(x - apparition.getX(), z - apparition.getZ()) > 10) {
-                    candidates.add(parcelle);
-                }
-            }
-        }
-        candidates.sort((a, b) -> Double.compare(distance(b, caverne), distance(a, caverne)));
-        List<BoundingBox> parcelles = List.copyOf(candidates.subList(0, Math.min(20, candidates.size())));
-        return new Colonie(place, echafaud, apparition, parcelles);
-    }
-
-    private static double distance(BoundingBox parcelle, Caverne caverne) {
-        BlockPos milieu = parcelle.getCenter();
-        return Math.hypot((double) (milieu.getX() - caverne.x()) / caverne.demiX(), (double) (milieu.getZ() - caverne.z()) / caverne.demiZ());
-    }
-
-    private static boolean coinsDans(Caverne caverne, BoundingBox boite) {
-        return caverne.contient(boite.minX(), boite.minY(), boite.minZ()) && caverne.contient(boite.maxX(), boite.minY(), boite.minZ())
-                && caverne.contient(boite.minX(), boite.minY(), boite.maxZ()) && caverne.contient(boite.maxX(), boite.minY(), boite.maxZ())
-                && caverne.contient(boite.minX(), boite.maxY(), boite.minZ()) && caverne.contient(boite.maxX(), boite.maxY(), boite.maxZ());
+        int bord = (versColonie.getAxis() == Direction.Axis.X ? caverne.demiX() : caverne.demiZ()) - 6;
+        BlockPos apparition = new BlockPos(caverne.x(), sol, caverne.z()).relative(versColonie.getOpposite(), bord);
+        return new Colonie(place, echafaud, apparition, reserve);
     }
 
     /**
-     * Les emplacements des cellules, 3 par niveau : au bout d'un cul-de-sac (dans son prolongement) ou sur la paroi d'une
-     * galerie. Leur salle reste en roche pleine, loin de tout vide de la mine. Au plus un cul-de-sac sur
-     * {@value #CULS_DE_SAC_PAR_CELLULE} + 1 porte une cellule. Remplit {@code culsDeSac} (le bout de chaque cul-de-sac).
+     * Les emplacements des cellules, {@value #CELLULES} / 3 par niveau : au bout d'un cul-de-sac (dans son prolongement) ou sur
+     * la paroi d'un tunnel. Leur salle reste en roche pleine, loin de tout vide de la mine. Au plus un cul-de-sac sur
+     * {@value #CULS_DE_SAC_PAR_CELLULE} + 1 porte une cellule.
      */
-    private static List<EmplacementCellule> cellules(List<Integer> sols, List<Set<Arete>> aretesParNiveau, List<BoundingBox> galeries,
-                                                     List<Puits> puits, Caverne caverne, BlockPos centre, Random hasard, List<BlockPos> culsDeSac) {
+    private static List<EmplacementCellule> cellules(List<Integer> sols, List<BoundingBox> culs, List<int[]> bouts, List<BoundingBox> tunnels,
+                                                     List<Integer> niveauxTunnels, List<BoundingBox> galeries, List<Puits> puits, List<Caverne> cavernes,
+                                                     BoundingBox reserve, Relief relief, BlockPos centre, Random hasard) {
         List<EmplacementCellule> cellules = new ArrayList<>();
         int parNiveau = Math.ceilDiv(CELLULES, sols.size());
         for (int niveau = 0; niveau < sols.size(); niveau++) {
             int sol = sols.get(niveau);
-            Set<Arete> aretes = aretesParNiveau.get(niveau);
-            Map<Noeud, List<Noeud>> voisins = voisins(aretes);
-            List<Noeud> feuilles = new ArrayList<>();
-            voisins.forEach((noeud, liste) -> {
-                if (liste.size() == 1 && !(noeud.i() == 0 && noeud.j() == 0)) {
-                    feuilles.add(noeud);
+            List<int[]> feuilles = new ArrayList<>();
+            for (int[] bout : bouts) {
+                if (bout[4] == niveau) {
+                    feuilles.add(bout);
                 }
-            });
-            feuilles.sort((a, b) -> a.i() != b.i() ? Integer.compare(a.i(), b.i()) : Integer.compare(a.j(), b.j()));
-            for (Noeud feuille : feuilles) {
-                culsDeSac.add(new BlockPos(feuille.x(centre), sol, feuille.z(centre)));
+            }
+            Collections.shuffle(feuilles, hasard);
+            List<BoundingBox> parois = new ArrayList<>();
+            for (int k = 0; k < tunnels.size(); k++) {
+                if (niveauxTunnels.get(k) == niveau) {
+                    parois.add(tunnels.get(k));
+                }
             }
             int boutsPermis = feuilles.size() / (CULS_DE_SAC_PAR_CELLULE + 1);
-            Collections.shuffle(feuilles, hasard);
-            List<Arete> parois = new ArrayList<>(aretes);
-            parois.removeIf(Arete::axe);
-            parois.sort((a, b) -> a.a().i() != b.a().i() ? Integer.compare(a.a().i(), b.a().i())
-                    : a.a().j() != b.a().j() ? Integer.compare(a.a().j(), b.a().j()) : Integer.compare(a.b().i() * 100 + a.b().j(), b.b().i() * 100 + b.b().j()));
-            Collections.shuffle(parois, hasard);
             int poses = 0;
-            int bouts = 0;
+            int nbBouts = 0;
             int essaiFeuille = 0;
-            int essaiParoi = 0;
-            while (poses < parNiveau && cellules.size() < CELLULES && (essaiFeuille < feuilles.size() || essaiParoi < parois.size())) {
-                boolean auBout = hasard.nextBoolean() && bouts < boutsPermis && essaiFeuille < feuilles.size();
+            for (int essai = 0; essai < 600 && poses < parNiveau && cellules.size() < CELLULES; essai++) {
                 EmplacementCellule candidat = null;
-                if (auBout) {
-                    Noeud feuille = feuilles.get(essaiFeuille++);
-                    Noeud voisin = voisins.get(feuille).getFirst();
-                    int sx = Integer.signum(feuille.i() - voisin.i());
-                    int sz = Integer.signum(feuille.j() - voisin.j());
-                    // Bout de galerie (demi-largeur 1), 2 blocs de roche, puis la salle de 5 × 5
-                    int fx = feuille.x(centre);
-                    int fz = feuille.z(centre);
-                    int cx = fx + sx * (DEMI_LARGEUR + 2 + 3);
-                    int cz = fz + sz * (DEMI_LARGEUR + 2 + 3);
-                    candidat = new EmplacementCellule(niveau, TypeCellule.BOUT, new BoundingBox(cx - 2, sol, cz - 2, cx + 2, sol + 2, cz + 2), new BlockPos(fx, sol, fz));
-                } else if (essaiParoi < parois.size()) {
-                    Arete arete = parois.get(essaiParoi++);
-                    boolean surX = arete.a().j() == arete.b().j();
-                    int mx = (arete.a().x(centre) + arete.b().x(centre)) / 2;
-                    int mz = (arete.a().z(centre) + arete.b().z(centre)) / 2;
+                if (hasard.nextBoolean() && nbBouts < boutsPermis && essaiFeuille < feuilles.size()) {
+                    int[] bout = feuilles.get(essaiFeuille++);
+                    int cx = bout[0] + bout[2] * (DEMI_LARGEUR_CUL + 2 + 3);
+                    int cz = bout[1] + bout[3] * (DEMI_LARGEUR_CUL + 2 + 3);
+                    candidat = new EmplacementCellule(niveau, TypeCellule.BOUT, new BoundingBox(cx - 2, sol, cz - 2, cx + 2, sol + 2, cz + 2), new BlockPos(bout[0], sol, bout[1]));
+                } else if (!parois.isEmpty()) {
+                    BoundingBox tunnel = parois.get(hasard.nextInt(parois.size()));
+                    boolean surX = tunnel.getXSpan() > tunnel.getZSpan();
+                    int t = surX ? tunnel.minX() + hasard.nextInt(tunnel.getXSpan()) : tunnel.minZ() + hasard.nextInt(tunnel.getZSpan());
+                    int mx = surX ? t : (tunnel.minX() + tunnel.maxX()) / 2;
+                    int mz = surX ? (tunnel.minZ() + tunnel.maxZ()) / 2 : t;
                     int cote = hasard.nextBoolean() ? 1 : -1;
-                    int cx = surX ? mx : mx + cote * (DEMI_LARGEUR + 2 + 3);
-                    int cz = surX ? mz + cote * (DEMI_LARGEUR + 2 + 3) : mz;
+                    int cx = surX ? mx : mx + cote * (DEMI_LARGEUR_TUNNEL + 2 + 3);
+                    int cz = surX ? mz + cote * (DEMI_LARGEUR_TUNNEL + 2 + 3) : mz;
                     candidat = new EmplacementCellule(niveau, TypeCellule.PAROI, new BoundingBox(cx - 2, sol, cz - 2, cx + 2, sol + 2, cz + 2), new BlockPos(mx, sol, mz));
-                } else if (essaiFeuille < feuilles.size()) {
-                    essaiFeuille++;
-                    continue;
                 }
-                if (candidat != null && cellulePossible(candidat, galeries, puits, caverne, cellules, centre)) {
+                if (candidat != null && cellulePossible(candidat, galeries, puits, cavernes, reserve, cellules, relief, centre)) {
                     cellules.add(candidat);
                     poses++;
                     if (candidat.type() == TypeCellule.BOUT) {
-                        bouts++;
+                        nbBouts++;
                     }
                 }
             }
@@ -1172,23 +1316,19 @@ public final class PlanDeMine {
         return cellules;
     }
 
-    private static boolean cellulePossible(EmplacementCellule cellule, List<BoundingBox> galeries, List<Puits> puits, Caverne caverne,
-                                           List<EmplacementCellule> autres, BlockPos centre) {
+    private static boolean cellulePossible(EmplacementCellule cellule, List<BoundingBox> galeries, List<Puits> puits, List<Caverne> cavernes, BoundingBox reserve,
+                                           List<EmplacementCellule> autres, Relief relief, BlockPos centre) {
         BoundingBox murs = cellule.avecMurs();
         // Deux blocs de roche au moins entre la salle et tout vide de la mine (la galerie d'accès comprise)
         BoundingBox garde = murs.inflatedBy(1);
         if (galeries.stream().anyMatch(galerie -> galerie.intersects(garde)) || puits.stream().anyMatch(p -> p.interieur().inflatedBy(COQUE_PUITS).intersects(garde))
-                || garde.intersects(caverne.boite())) {
+                || cavernes.stream().anyMatch(caverne -> caverne.boite().intersects(garde)) || garde.intersects(reserve)
+                || !dansLaMine(murs, centre) || !relief.sousLeTerrain(murs)) {
             return false;
         }
         int x = cellule.salle().getCenter().getX();
         int z = cellule.salle().getCenter().getZ();
-        if (Math.abs(x - centre.getX()) > 118 || Math.abs(z - centre.getZ()) > 118) {
-            return false;
-        }
-        BoundingBox zone = caverne.boite();
-        double versCaverne = Math.hypot(Math.max(0, Math.max(zone.minX() - x, x - zone.maxX())), Math.max(0, Math.max(zone.minZ() - z, z - zone.maxZ())));
-        return versCaverne >= DISTANCE_CAVERNE_CELLULE && autres.stream().noneMatch(autre -> {
+        return distance(reserve, x, z) >= DISTANCE_COLONIE_CELLULE - RESERVE_COLONIE && autres.stream().noneMatch(autre -> {
             BlockPos c = autre.salle().getCenter();
             return Math.hypot(c.getX() - x, c.getZ() - z) < ECART_CELLULES;
         });
@@ -1196,89 +1336,43 @@ public final class PlanDeMine {
 
     // --- Salles d'extraction ---
 
-    /** Un côté d'une case de la grille : la galerie qui le longe, et la direction de la galerie vers l'intérieur de la case. */
-    private record Cote(BoundingBox galerie, int nx, int nz) {
-        /** Le pas vers l'intérieur de la case (+1 ou −1), le long de l'axe qui traverse le côté. */
-        int sens() {
-            return nx != 0 ? nx : nz;
-        }
-
-        /** Le bord de la galerie du côté de la case. */
-        int bord() {
-            return nx > 0 ? galerie.maxX() : nx < 0 ? galerie.minX() : nz > 0 ? galerie.maxZ() : galerie.minZ();
-        }
-
-        /** Une boîte de {@code a} à {@code b} en traversant le côté, de {@code long1} à {@code long2} le long du côté. */
-        BoundingBox bande(int a, int b, int long1, int long2, int bas, int haut) {
-            return nx != 0 ? new BoundingBox(Math.min(a, b), bas, long1, Math.max(a, b), haut, long2)
-                    : new BoundingBox(long1, bas, Math.min(a, b), long2, haut, Math.max(a, b));
-        }
-    }
-
     /**
-     * Les salles d'extraction de chaque niveau ({@link #SALLES}) : les cases de la grille dans un ordre tiré ; les forages
-     * d'abord (les plus grands), puis les chambres, puis les fronts. Une case prend une salle si une galerie la longe et que
-     * la salle reste loin de tout le reste ({@link #salleLibre}). Retire les étais des galeries devant les ouvertures, et
-     * ajoute ceux des fronts et le cadre des forages.
+     * Les baies de chaque niveau ({@link #FRONTS}, {@link #FORAGES}) : la paroi d'une caverne (autre que la colonie), dans une
+     * direction tirée ; la salle derrière, à condition qu'elle reste loin de tout le reste ({@link #salleLibre}). Ajoute les
+     * étais des fronts et le cadre des forages.
      */
-    private static List<Salle> salles(List<Integer> sols, List<Set<Arete>> aretesParNiveau, List<BoundingBox> galeries, List<Puits> puits,
-                                      BoundingBox zoneCaverne, List<EmplacementCellule> cellules, BlockPos centre, Random hasard,
-                                      Set<BlockPos> poteaux, Set<BlockPos> poutres) {
+    private static List<Salle> salles(List<Integer> sols, List<Caverne> cavernes, List<BoundingBox> galeries, List<Puits> puits, BoundingBox reserve,
+                                      List<EmplacementCellule> cellules, Relief relief, BlockPos centre, Random hasard, Set<BlockPos> poteaux, Set<BlockPos> poutres) {
         List<Salle> salles = new ArrayList<>();
         for (int niveau = 0; niveau < sols.size(); niveau++) {
             int sol = sols.get(niveau);
-            int[] ligne = SALLES[SALLES.length - sols.size() + niveau];
-            int voulu = Math.ceilDiv(SALLES_PAR_NIVEAU_4 * NIVEAUX_MAX, sols.size());
-            Map<List<Noeud>, Arete> aretes = new HashMap<>();
-            for (Arete arete : aretesParNiveau.get(niveau)) {
-                aretes.put(List.of(arete.a(), arete.b()), arete);
+            int ligne = NIVEAUX_MAX - sols.size() + niveau;
+            List<Caverne> ici = cavernes.stream().filter(caverne -> caverne.sol() == sol && caverne != cavernes.getFirst()).toList();
+            if (ici.isEmpty()) {
+                continue;
             }
-            List<Noeud> cases = new ArrayList<>();
-            for (int i = -DEMI_GRILLE; i < DEMI_GRILLE; i++) {
-                for (int j = -DEMI_GRILLE; j < DEMI_GRILLE; j++) {
-                    cases.add(new Noeud(i, j));
-                }
-            }
-            Collections.shuffle(cases, hasard);
-            Set<Noeud> prises = new HashSet<>();
-            for (TypeSalle type : List.of(TypeSalle.FORAGE, TypeSalle.CHAMBRE, TypeSalle.FRONT)) {
-                int nombre = (int) Math.round((double) ligne[type.ordinal()] * voulu / SALLES_PAR_NIVEAU_4);
+            for (TypeSalle type : List.of(TypeSalle.FORAGE, TypeSalle.FRONT)) {
+                int voulu = type == TypeSalle.FORAGE ? FORAGES[ligne] : FRONTS[ligne];
                 int poses = 0;
-                for (Noeud coin : cases) {
-                    if (poses == nombre) {
-                        break;
+                for (int essai = 0; essai < 200 && poses < voulu; essai++) {
+                    Caverne caverne = ici.get(hasard.nextInt(ici.size()));
+                    Direction sens = Direction.from2DDataValue(hasard.nextInt(4));
+                    // La paroi, au sol, depuis le centre de la caverne
+                    BlockPos pos = new BlockPos(caverne.x(), sol, caverne.z());
+                    while (caverne.contient(pos.getX(), sol, pos.getZ())) {
+                        pos = pos.relative(sens);
                     }
-                    if (prises.contains(coin)) {
-                        continue;
-                    }
-                    Salle salle = salleDansLaCase(niveau, type, coin, sol, aretes, centre, hasard, galeries, puits, zoneCaverne, cellules, salles);
-                    if (salle != null) {
+                    Salle salle = type == TypeSalle.FRONT ? front(niveau, pos, sens, sol) : forage(niveau, pos, sens, sol);
+                    if (salleLibre(salle, caverne, cavernes, galeries, puits, reserve, cellules, salles, relief, centre)) {
                         salles.add(salle);
-                        prises.add(coin);
                         poses++;
                     }
                 }
             }
         }
         for (Salle salle : salles) {
-            poteaux.removeIf(pos -> salle.ouvertures().stream().anyMatch(ouverture -> ouverture.isInside(pos)));
-            poutres.removeIf(pos -> salle.ouvertures().stream().anyMatch(ouverture -> ouverture.isInside(pos)));
             BoundingBox b = salle.boite();
-            if (salle.type() == TypeSalle.FRONT) {
-                // Étais tous les 6 blocs, comme dans les galeries
-                boolean surX = b.getXSpan() > b.getZSpan();
-                int debut = surX ? b.minX() : b.minZ();
-                int fin = surX ? b.maxX() : b.maxZ();
-                for (int t = debut + 3; t <= fin - 3; t += PAS_ETAIS) {
-                    for (int y = b.minY(); y < b.maxY(); y++) {
-                        poteaux.add(surX ? new BlockPos(t, y, b.minZ()) : new BlockPos(b.minX(), y, t));
-                        poteaux.add(surX ? new BlockPos(t, y, b.maxZ()) : new BlockPos(b.maxX(), y, t));
-                    }
-                    for (int c = surX ? b.minZ() : b.minX(); c <= (surX ? b.maxZ() : b.maxX()); c++) {
-                        poutres.add(surX ? new BlockPos(t, b.maxY(), c) : new BlockPos(c, b.maxY(), t));
-                    }
-                }
-            } else if (salle.type() == TypeSalle.FORAGE) {
+            if (salle.type() == TypeSalle.FORAGE) {
                 // Le cadre de bois du forage : quatre poteaux et un plateau de 3 × 3
                 for (int dx = -1; dx <= 1; dx++) {
                     for (int dz = -1; dz <= 1; dz++) {
@@ -1295,95 +1389,58 @@ public final class PlanDeMine {
         return salles;
     }
 
-    /** Une salle de ce type dans la case dont le coin est le nœud {@code coin}, ou {@code null} si elle n'y tient pas. */
-    private static @Nullable Salle salleDansLaCase(int niveau, TypeSalle type, Noeud coin, int sol, Map<List<Noeud>, Arete> aretes, BlockPos centre,
-                                                   Random hasard, List<BoundingBox> galeries, List<Puits> puits, BoundingBox zoneCaverne,
-                                                   List<EmplacementCellule> cellules, List<Salle> salles) {
-        int i = coin.i();
-        int j = coin.j();
-        // Les côtés de la case que longe une galerie
-        List<Cote> cotes = new ArrayList<>();
-        ajouterCote(cotes, aretes, new Noeud(i, j), new Noeud(i + 1, j), sol, centre, 0, 1);
-        ajouterCote(cotes, aretes, new Noeud(i, j + 1), new Noeud(i + 1, j + 1), sol, centre, 0, -1);
-        ajouterCote(cotes, aretes, new Noeud(i, j), new Noeud(i, j + 1), sol, centre, 1, 0);
-        ajouterCote(cotes, aretes, new Noeud(i + 1, j), new Noeud(i + 1, j + 1), sol, centre, -1, 0);
-        Collections.shuffle(cotes, hasard);
-        int cx = centre.getX() + i * ESPACEMENT + ESPACEMENT / 2;
-        int cz = centre.getZ() + j * ESPACEMENT + ESPACEMENT / 2;
-        for (Cote cote : cotes) {
-            // La plus grande d'abord ; plus petite le long de l'axe (5 de large) ou près d'un puits
-            List<Salle> essais = switch (type) {
-                case CHAMBRE -> List.of(chambre(niveau, cx, cz, sol, 7, cote), chambre(niveau, cx, cz, sol, 6, cote));
-                case FRONT -> List.of(front(niveau, cx, cz, sol, 7, cote), front(niveau, cx, cz, sol, 6, cote));
-                case FORAGE -> List.of(forage(niveau, cx, cz, sol, cote));
-            };
-            for (Salle salle : essais) {
-                if (salleLibre(salle, galeries, puits, zoneCaverne, cellules, salles)) {
-                    return salle;
-                }
+    /** Une boîte qui part de {@code depart} sur {@code longueur} blocs dans le sens {@code sens}, de ±{@code demi} en travers. */
+    private static BoundingBox bande(BlockPos depart, Direction sens, int longueur, int demi, int hauteur) {
+        BlockPos bout = depart.relative(sens, longueur);
+        Direction cote = sens.getClockWise();
+        BlockPos a = depart.relative(cote, demi);
+        BlockPos b = bout.relative(cote, -demi);
+        return new BoundingBox(Math.min(a.getX(), b.getX()), depart.getY(), Math.min(a.getZ(), b.getZ()), Math.max(a.getX(), b.getX()),
+                depart.getY() + hauteur - 1, Math.max(a.getZ(), b.getZ()));
+    }
+
+    /** Front de taille derrière la paroi : une salle droite, en travers du sens, et une ouverture de 5 de large. */
+    private static Salle front(int niveau, BlockPos paroi, Direction sens, int sol) {
+        BlockPos debut = paroi.relative(sens, 2);
+        BoundingBox boite = bande(debut, sens, PROFONDEUR_FRONT - 1, DEMI_LONG_FRONT, HAUTEUR_FRONT);
+        BoundingBox ouverture = bande(paroi.relative(sens, -2), sens, 4, 2, 4);
+        BlockPos milieu = boite.getCenter();
+        return new Salle(niveau, TypeSalle.FRONT, boite, milieu.getX(), milieu.getZ(), List.of(ouverture));
+    }
+
+    /** Salle de forage derrière la paroi, et son couloir de 5 de large. */
+    private static Salle forage(int niveau, BlockPos paroi, Direction sens, int sol) {
+        int r = (int) RAYON_FORAGE;
+        BlockPos milieu = paroi.relative(sens, r + 3);
+        BoundingBox boite = new BoundingBox(milieu.getX() - r, sol, milieu.getZ() - r, milieu.getX() + r, sol + HAUTEUR_FORAGE - 1, milieu.getZ() + r);
+        BoundingBox couloir = bande(paroi.relative(sens, -2), sens, 7, 2, 4);
+        return new Salle(niveau, TypeSalle.FORAGE, boite, milieu.getX(), milieu.getZ(), List.of(couloir));
+    }
+
+    /**
+     * Une salle loin de tout : sa boîte hors de sa caverne et à un bloc de roche au moins des galeries ; elle et son ouverture
+     * hors des coques des puits et de la réserve de la colonie, à 2 blocs de roche des cellules (et
+     * {@value #ECART_SALLE_CELLULE} blocs entre les centres), à 2 blocs d'une autre salle, sous le terrain.
+     */
+    private static boolean salleLibre(Salle salle, Caverne sa, List<Caverne> cavernes, List<BoundingBox> galeries, List<Puits> puits, BoundingBox reserve,
+                                      List<EmplacementCellule> cellules, List<Salle> salles, Relief relief, BlockPos centre) {
+        BoundingBox autour = salle.boite().inflatedBy(1);
+        if (!dansLaMine(salle.boite(), centre) || !relief.sousLeTerrain(salle.boite()) || galeries.stream().anyMatch(galerie -> galerie.intersects(autour))) {
+            return false;
+        }
+        // Hors de sa caverne (sa boîte n'est pas vide en entier), et des autres
+        for (BlockPos pos : BlockPos.betweenClosed(autour.minX(), autour.minY(), autour.minZ(), autour.maxX(), autour.minY(), autour.maxZ())) {
+            if (sa.contient(pos.getX(), pos.getY(), pos.getZ())) {
+                return false;
             }
         }
-        return null;
-    }
-
-    private static void ajouterCote(List<Cote> cotes, Map<List<Noeud>, Arete> aretes, Noeud a, Noeud b, int sol, BlockPos centre, int nx, int nz) {
-        Arete arete = aretes.get(List.of(a, b));
-        if (arete != null) {
-            cotes.add(new Cote(galerie(arete, sol, centre), nx, nz));
-        }
-    }
-
-    /** Chambre à piliers centrée dans la case, de demi-côté {@code demi}, et son couloir. */
-    private static Salle chambre(int niveau, int cx, int cz, int sol, int demi, Cote cote) {
-        BoundingBox boite = new BoundingBox(cx - demi, sol, cz - demi, cx + demi, sol + HAUTEUR_CHAMBRE - 1, cz + demi);
-        return new Salle(niveau, TypeSalle.CHAMBRE, boite, cx, cz, List.of(couloir(cote, cx, cz, sol)));
-    }
-
-    /** Salle de forage au centre de la case, et son couloir. */
-    private static Salle forage(int niveau, int cx, int cz, int sol, Cote cote) {
-        int r = (int) RAYON_FORAGE;
-        BoundingBox boite = new BoundingBox(cx - r, sol, cz - r, cx + r, sol + HAUTEUR_FORAGE - 1, cz + r);
-        return new Salle(niveau, TypeSalle.FORAGE, boite, cx, cz, List.of(couloir(cote, cx, cz, sol)));
-    }
-
-    /** Un couloir de 3 de large et 3 de haut, du bord de la galerie à 4 blocs du centre de la salle (par l'allée du milieu). */
-    private static BoundingBox couloir(Cote cote, int cx, int cz, int sol) {
-        int fin = (cote.nx() != 0 ? cx : cz) - cote.sens() * 4;
-        int milieu = cote.nx() != 0 ? cz : cx;
-        return cote.bande(cote.bord(), fin, milieu - DEMI_LARGEUR, milieu + DEMI_LARGEUR, sol, sol + HAUTEUR - 1);
-    }
-
-    /**
-     * Front de taille le long de la galerie : un mur d'un bloc, puis {@value #LARGEUR_FRONT} de large, sur 2 × {@code demi} + 1
-     * de long, centré sur la case ; deux ouvertures de 2 blocs aux bouts, à travers le mur.
-     */
-    private static Salle front(int niveau, int cx, int cz, int sol, int demi, Cote cote) {
-        int debut = cote.bord() + 2 * cote.sens();
-        int fond = debut + (LARGEUR_FRONT - 1) * cote.sens();
-        int milieu = cote.nx() != 0 ? cz : cx;
-        BoundingBox boite = cote.bande(debut, fond, milieu - demi, milieu + demi, sol, sol + HAUTEUR_FRONT - 1);
-        List<BoundingBox> ouvertures = List.of(
-                cote.bande(cote.bord(), debut, milieu - demi, milieu - demi + 1, sol, sol + HAUTEUR - 1),
-                cote.bande(cote.bord(), debut, milieu + demi - 1, milieu + demi, sol, sol + HAUTEUR - 1));
-        BlockPos milieuBoite = boite.getCenter();
-        return new Salle(niveau, TypeSalle.FRONT, boite, milieuBoite.getX(), milieuBoite.getZ(), ouvertures);
-    }
-
-    /**
-     * Une salle loin de tout : sa boîte à un bloc de roche au moins des galeries ; elle et ses ouvertures hors des coques des
-     * puits et à distance de la caverne, à 2 blocs de roche des cellules (et {@value #ECART_SALLE_CELLULE} blocs entre les
-     * centres), à 2 blocs d'une autre salle.
-     */
-    private static boolean salleLibre(Salle salle, List<BoundingBox> galeries, List<Puits> puits, BoundingBox zoneCaverne,
-                                      List<EmplacementCellule> cellules, List<Salle> salles) {
-        BoundingBox autour = salle.boite().inflatedBy(1);
-        if (galeries.stream().anyMatch(galerie -> galerie.intersects(autour))) {
+        if (cavernes.stream().anyMatch(autre -> autre != sa && autre.boite().intersects(autour))) {
             return false;
         }
         List<BoundingBox> vides = new ArrayList<>(salle.ouvertures());
         vides.add(salle.boite());
         for (BoundingBox vide : vides) {
-            if (vide.inflatedBy(1).intersects(zoneCaverne) || puits.stream().anyMatch(p -> p.interieur().inflatedBy(COQUE_PUITS).intersects(vide))
+            if (vide.intersects(reserve) || puits.stream().anyMatch(p -> p.interieur().inflatedBy(COQUE_PUITS).intersects(vide))
                     || cellules.stream().anyMatch(cellule -> cellule.avecMurs().inflatedBy(1).intersects(vide))
                     || salles.stream().anyMatch(autre -> autre.boite().inflatedBy(2).intersects(vide))) {
                 return false;
@@ -1418,8 +1475,14 @@ public final class PlanDeMine {
         return puits;
     }
 
+    /** La caverne de la colonie, la plus grande. */
     public Caverne caverne() {
-        return caverne;
+        return cavernes.getFirst();
+    }
+
+    /** Toutes les cavernes ; la colonie d'abord. */
+    public List<Caverne> cavernes() {
+        return cavernes;
     }
 
     public Colonie colonie() {
@@ -1462,6 +1525,10 @@ public final class PlanDeMine {
 
     public List<Garage> garages() {
         return garages;
+    }
+
+    public Set<BlockPos> chaines() {
+        return chaines;
     }
 
     public List<Panneau> panneaux() {
@@ -1521,18 +1588,23 @@ public final class PlanDeMine {
     /**
      * Le niveau (0 en haut) où se trouve cette position, ou −1 hors de la mine (G7.2.4). Par tranches de hauteur : un niveau
      * va de {@value #DEMI_TRANCHE} blocs sous son sol à {@value #DEMI_TRANCHE} blocs au-dessus (exclu), dans l'emprise. Les
-     * tranches se touchent (18 blocs entre deux sols) : sur l'échelle d'un puits, le niveau change une fois, à mi-hauteur,
-     * et ne dépend ni du bloc où l'on se tient ni d'une galerie voisine. Au-dessus de la tranche du haut (le haut du puits
-     * principal) et sous celle du bas : hors de la mine.
+     * tranches se touchent (28 blocs entre deux sols) : sur l'échelle d'un puits, le niveau change une fois, à mi-hauteur,
+     * et ne dépend ni du bloc où l'on se tient ni d'une galerie voisine. La tranche du haut monte jusqu'au haut des boîtes
+     * (les voûtes du niveau 1) ; toute la colonie, dont la voûte monte haut, est sur son niveau. Au-dessus (le haut du puits
+     * principal) et sous la tranche du bas : hors de la mine.
      */
     public int niveauA(BlockPos pos) {
         if (Math.abs((pos.getX() >> 4) - (centre.getX() >> 4)) > PlanMars.EMPRISE_MINE
                 || Math.abs((pos.getZ() >> 4) - (centre.getZ() >> 4)) > PlanMars.EMPRISE_MINE) {
             return -1;
         }
+        if (caverne().contient(pos.getX(), pos.getY(), pos.getZ())) {
+            return sols.indexOf(caverne().sol());
+        }
         for (int niveau = 0; niveau < sols.size(); niveau++) {
             int sol = sols.get(niveau);
-            if (pos.getY() >= sol - DEMI_TRANCHE && pos.getY() < sol + DEMI_TRANCHE) {
+            int haut = niveau == 0 ? Math.max(sol + DEMI_TRANCHE, hautDesBoites) : sol + DEMI_TRANCHE;
+            if (pos.getY() >= sol - DEMI_TRANCHE && pos.getY() < haut) {
                 return niveau;
             }
         }
@@ -1610,12 +1682,12 @@ public final class PlanDeMine {
                 return true;
             }
         }
-        for (Garage garage : garages) {
-            if (garage.niche().isInside(x, y, z)) {
+        for (Caverne caverne : cavernes) {
+            if (caverne.contient(x, y, z)) {
                 return true;
             }
         }
-        return caverne.contient(x, y, z);
+        return false;
     }
 
     /**
@@ -1628,7 +1700,8 @@ public final class PlanDeMine {
                 continue;
             }
             Salle salle = sallesParBoite.get(boite);
-            if (salle != null ? salle.contient(x, y, z) : boite != boiteCaverne || caverne.contient(x, y, z)) {
+            Caverne caverne = cavernesParBoite.get(boite);
+            if (salle != null ? salle.contient(x, y, z) : caverne == null || caverne.contient(x, y, z)) {
                 return true;
             }
         }
@@ -1658,14 +1731,11 @@ public final class PlanDeMine {
                 }
             }
         }
-        for (Garage garage : garages) {
-            if (garage.niche().intersects(zone)) {
-                boites.add(garage.niche());
+        cavernesParBoite.keySet().forEach(boite -> {
+            if (boite.intersects(zone)) {
+                boites.add(boite);
             }
-        }
-        if (boiteCaverne.intersects(zone)) {
-            boites.add(boiteCaverne);
-        }
+        });
         return boites;
     }
 

@@ -486,7 +486,12 @@ public final class MineLykos extends Structure {
                 }
             }
         }
-        // Lanternes du réseau éclairé (G7.2.3)
+        // Lanternes du réseau éclairé (G7.2.3), et les chaînes de celles du milieu de l'axe
+        for (BlockPos chaine : plan.chaines()) {
+            if (colonne.isInside(chaine) && plan.interieur(chaine.getX(), chaine.getY(), chaine.getZ())) {
+                monde.setBlock(chaine, PaletteMine.CHAINE, Block.UPDATE_CLIENTS);
+            }
+        }
         for (PlanDeMine.Lanterne lanterne : plan.lanternes()) {
             if (colonne.isInside(lanterne.pos())) {
                 monde.setBlock(lanterne.pos(), PaletteMine.lanterne(lanterne.suspendue()), Block.UPDATE_CLIENTS);
@@ -503,6 +508,9 @@ public final class MineLykos extends Structure {
         }
         for (PlanDeMine.Garage garage : plan.garages()) {
             garage.rails().forEach(rail -> poserRail(monde, colonne, rail));
+            if (colonne.isInside(garage.butoir())) {
+                monde.setBlock(garage.butoir(), PaletteMine.BUTOIR, Block.UPDATE_CLIENTS);
+            }
             BlockPos place = garage.wagonnet();
             if (colonne.isInside(place)) {
                 Minecart wagonnet = EntityTypes.MINECART.create(monde.getLevel(), EntitySpawnReason.STRUCTURE);
@@ -594,6 +602,8 @@ public final class MineLykos extends Structure {
             case NIVEAU -> texte.setMessage(1, Component.translatable("panneau.redrising.niveau", panneau.numero()));
             case COLONIE_DROITE -> texte.setMessage(1, Component.translatable("panneau.redrising.colonie_droite"));
             case COLONIE_GAUCHE -> texte.setMessage(1, Component.translatable("panneau.redrising.colonie_gauche"));
+            case PUITS_DROITE -> texte.setMessage(1, Component.translatable("panneau.redrising.puits_droite"));
+            case PUITS_GAUCHE -> texte.setMessage(1, Component.translatable("panneau.redrising.puits_gauche"));
             case PUITS_VERS -> texte.setMessage(1, Component.translatable("panneau.redrising.puits"))
                     .setMessage(2, Component.translatable("panneau.redrising.puits_vers", panneau.numero()));
         };
@@ -604,7 +614,7 @@ public final class MineLykos extends Structure {
         if (!colonne.isInside(rail.pos())) {
             return;
         }
-        monde.setBlock(rail.pos(), PaletteMine.rail(rail.surX(), rail.propulsion()), Block.UPDATE_CLIENTS);
+        monde.setBlock(rail.pos(), PaletteMine.rail(rail.forme(), rail.propulsion()), Block.UPDATE_CLIENTS);
         if (rail.propulsion()) {
             monde.setBlock(rail.pos().below(2), PaletteMine.TORCHE_PROPULSION, Block.UPDATE_CLIENTS);
         }

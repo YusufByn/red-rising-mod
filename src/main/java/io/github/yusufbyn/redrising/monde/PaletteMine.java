@@ -37,14 +37,15 @@ public final class PaletteMine {
     /** Bouchon en haut du puits principal : plein. */
     public static final BlockState BOUCHON = Blocks.POLISHED_ANDESITE.defaultBlockState();
     /**
-     * 🟡 Bande de couleur le long des murs de l'axe, une teinte par niveau (du haut vers le bas, comptés pour 4 niveaux).
-     * Elle ne remplace que la roche ; quatre blocs différents, pour qu'on lise le niveau à la couleur.
+     * 🟡 Bande de couleur le long des murs de l'axe, une teinte par niveau (du haut vers le bas, comptés pour 3 niveaux).
+     * Elle ne remplace que la roche ; trois blocs différents, pour qu'on lise le niveau à la couleur.
      */
     public static final List<BlockState> BANDES = List.of(Blocks.DYED_TERRACOTTA.pick(DyeColor.WHITE).defaultBlockState(),
-            Blocks.DYED_TERRACOTTA.pick(DyeColor.YELLOW).defaultBlockState(), Blocks.DYED_TERRACOTTA.pick(DyeColor.ORANGE).defaultBlockState(),
-            Blocks.DYED_TERRACOTTA.pick(DyeColor.RED).defaultBlockState());
+            Blocks.DYED_TERRACOTTA.pick(DyeColor.YELLOW).defaultBlockState(), Blocks.DYED_TERRACOTTA.pick(DyeColor.LIGHT_BLUE).defaultBlockState());
     /** Sous chaque rail de propulsion, deux blocs plus bas, noyée dans la roche : elle l'alimente à travers le bloc entre eux. */
     public static final BlockState TORCHE_PROPULSION = Blocks.REDSTONE_TORCH.defaultBlockState();
+    /** La chaîne qui tient les lanternes du milieu de l'axe, du plafond à la lanterne (non pleine, tenue à la verticale). */
+    public static final BlockState CHAINE = Blocks.IRON_CHAIN.defaultBlockState();
 
     private PaletteMine() {
     }
@@ -67,9 +68,8 @@ public final class PaletteMine {
         return Blocks.SPRUCE_WALL_SIGN.defaultBlockState().setValue(WallSignBlock.FACING, face);
     }
 
-    /** Rail d'une voie ; un rail de propulsion est posé allumé (sa torche, dessous, le garde allumé). */
-    public static BlockState rail(boolean surX, boolean propulsion) {
-        RailShape forme = surX ? RailShape.EAST_WEST : RailShape.NORTH_SOUTH;
+    /** Rail d'une voie (droit ou courbe) ; un rail de propulsion, toujours droit, est posé allumé (sa torche, dessous, le garde allumé). */
+    public static BlockState rail(RailShape forme, boolean propulsion) {
         return propulsion
                 ? Blocks.POWERED_RAIL.defaultBlockState().setValue(PoweredRailBlock.SHAPE, forme).setValue(PoweredRailBlock.POWERED, true)
                 : Blocks.RAIL.defaultBlockState().setValue(RailBlock.SHAPE, forme);
@@ -84,8 +84,8 @@ public final class PaletteMine {
     public static boolean poseDansLeVide(BlockState etat) {
         return etat.isAir() || etat.is(POTEAU.getBlock()) || etat.is(POUTRE.getBlock()) || etat.is(PILIER_ECHELLE.getBlock())
                 || etat.is(ECHELLE.getBlock()) || etat.is(BUTOIR.getBlock()) || etat.is(lanterne(true).getBlock())
-                || etat.is(panneau(Direction.NORTH).getBlock()) || etat.is(rail(true, false).getBlock())
-                || etat.is(rail(true, true).getBlock()) || etat.is(coffre(Direction.NORTH).getBlock());
+                || etat.is(panneau(Direction.NORTH).getBlock()) || etat.is(rail(RailShape.EAST_WEST, false).getBlock())
+                || etat.is(rail(RailShape.EAST_WEST, true).getBlock()) || etat.is(coffre(Direction.NORTH).getBlock()) || etat.is(CHAINE.getBlock());
     }
 
     /** Ce bloc est-il la bande de couleur d'un niveau ? */

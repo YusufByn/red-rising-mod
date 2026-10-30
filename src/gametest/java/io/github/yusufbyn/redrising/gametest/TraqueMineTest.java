@@ -37,7 +37,7 @@ import java.util.stream.Collectors;
  *     <li>Recalage : le joueur deux niveaux plus haut ; pas de Gris sur son niveau avant 20 secondes, puis les mêmes
  *     chasseurs le rejoignent, hors de vue (ni disparus, ni remplacés).</li>
  *     <li>Repli : le joueur dans une galerie sombre sans point d'entrée à 24-64 blocs ; les chasseurs apparaissent au plus
- *     proche hors de vue de son niveau.</li>
+ *     proche hors de vue de son niveau, ou, si aucun n'est actif, par un tunnel sombre.</li>
  *     <li>{@code /rr mine tp} (quai du puits) et {@code /rr mine cellule} (cellule de G5.4 sur un emplacement réservé).</li>
  * </ul>
  */
@@ -168,27 +168,68 @@ public class TraqueMineTest implements FabricClientGameTest {
 
     // --- Repli ---
 
-    /** Une galerie sombre sans point d'entrée à 24-64 blocs : les chasseurs apparaissent au plus proche hors de vue de son niveau. */
+    /**
+     * Une galerie sombre sans point d'entrée à 24-64 blocs. Les chasseurs y arrivent par le point d'entrée le plus proche s'il
+     * est actif, sinon (la distance de vue du test est petite) par un tunnel sombre actif de son niveau. Puis ce point forcé
+     * actif : ils y apparaissent.
+     */
     private static void repli(TestSingleplayerContext monde, ClientGameTestContext context, PlanDeMine plan) {
-        String place = monde.getServer().computeOnServer(server -> {
+        BlockPos[] isolee = new BlockPos[1];
+        int[] niveau = new int[1];
+        monde.getServer().runOnServer(server -> {
             ServerPlayer joueur = OutilsTest.joueur(server);
             BlockPos ici = joueur.blockPosition();
-            BlockPos isolee = null;
-            for (int niveau = plan.sols().size() - 1; niveau >= 0 && isolee == null; niveau--) {
-                int n = niveau;
-                isolee = plan.galeriesSombres(n, 0).stream().filter(p -> plan.entreesPour(p, n, Traque.APPARITION_MINE_MIN, Traque.APPARITION_MINE_MAX).isEmpty())
+            for (int n = plan.sols().size() - 1; n >= 0 && isolee[0] == null; n--) {
+                int n2 = n;
+                isolee[0] = plan.galeriesSombres(n, 0).stream().filter(p -> plan.entreesPour(p, n2, Traque.APPARITION_MINE_MIN, Traque.APPARITION_MINE_MAX).isEmpty())
                         .min(Comparator.comparingDouble(p -> Math.hypot(p.getX() - ici.getX(), p.getZ() - ici.getZ()))).orElse(null);
+                niveau[0] = n;
             }
-            Objects.requireNonNull(isolee, "aucune galerie sombre isolée");
-            joueur.teleportTo(isolee.getX() + 0.5, isolee.getY(), isolee.getZ() + 0.5);
-            return isolee.toShortString();
+            Objects.requireNonNull(isolee[0], "aucune galerie sombre isolée");
+            joueur.teleportTo(isolee[0].getX() + 0.5, isolee[0].getY(), isolee[0].getZ() + 0.5);
         });
         // Le temps que les chunks de là-bas soient actifs
         context.waitTicks(200);
         monde.getServer().runCommand("rr traque start @a[limit=1]");
-        String apparition = attendreApparition(monde, plan, Traque.CHASSEURS_DEPART);
-        RedRising.LOGGER.info("[G7.2.4] Repli depuis {} : {}", place, apparition);
+        String libre = attendreRepli(monde, plan, niveau[0], false);
+        RedRising.LOGGER.info("[G7.2.4] Repli depuis {} : {}", isolee[0].toShortString(), libre);
         monde.getServer().runCommand("rr traque stop @a[limit=1]");
+
+        BlockPos proche = plan.entreesDeRepli(isolee[0], niveau[0]).getFirst().pos();
+        monde.getServer().runOnServer(server -> server.overworld().setChunkForced(proche.getX() >> 4, proche.getZ() >> 4, true));
+        monde.getServer().waitFor(server -> server.overworld().isPositionEntityTicking(proche), 200);
+        monde.getServer().runCommand("rr traque start @a[limit=1]");
+        String force = attendreRepli(monde, plan, niveau[0], true);
+        RedRising.LOGGER.info("[G7.2.4] Repli depuis {}, point d'entrée le plus proche actif : {}", isolee[0].toShortString(), force);
+        monde.getServer().runCommand("rr traque stop @a[limit=1]");
+        monde.getServer().runOnServer(server -> server.overworld().setChunkForced(proche.getX() >> 4, proche.getZ() >> 4, false));
+    }
+
+    /** Attend les chasseurs : hors de vue, sur le niveau du joueur, à un point d'entrée ou sur un tunnel sombre. */
+    private static String attendreRepli(TestSingleplayerContext monde, PlanDeMine plan, int niveau, boolean aUnPoint) {
+        String[] rapport = {null};
+        monde.getServer().waitFor(server -> {
+            ServerPlayer joueur = OutilsTest.joueur(server);
+            if (TraqueGris.nombreDeChasseurs(joueur) < Traque.CHASSEURS_DEPART) {
+                return false;
+            }
+            List<String> lignes = new ArrayList<>();
+            for (Villager chasseur : chasseurs(server)) {
+                String ou = chasseur.blockPosition().toShortString() + " (" + Math.round(Math.sqrt(chasseur.blockPosition().distSqr(joueur.blockPosition()))) + " blocs)";
+                if (Vue.voit(chasseur, joueur) || plan.niveauA(chasseur.blockPosition()) != niveau) {
+                    throw new AssertionError("Repli : chasseur mal placé en " + ou);
+                }
+                boolean surUnPoint = plan.entreesDesGris().stream().anyMatch(e -> e.pos().distSqr(chasseur.blockPosition()) <= 2);
+                boolean surUnTunnel = plan.galeriesSombres(niveau, 0).stream().anyMatch(p -> p.distSqr(chasseur.blockPosition()) <= 2);
+                if (aUnPoint ? !surUnPoint : !surUnPoint && !surUnTunnel) {
+                    throw new AssertionError("Repli : chasseur ni à un point d'entrée ni sur un tunnel sombre, en " + ou);
+                }
+                lignes.add(ou);
+            }
+            rapport[0] = "chasseurs en " + String.join(" ; ", lignes);
+            return true;
+        }, ATTENTE_CHASSEURS);
+        return rapport[0];
     }
 
     // --- Commandes ---

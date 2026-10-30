@@ -258,5 +258,7 @@
   "commande.redrising.mine.tp": "Teleported %s to the level %s landing of the mine (%s)",
   "commande.redrising.mine.traque": "Hunt against %s on level %s of the mine, from a dark gallery at %s",
   "commande.redrising.mine.cellule": "Cell %s built on level %s of the mine: entrance at %s, facing %s",
-  "commande.redrising.mine.cellule_existe": "Cell %s of the mine is already built"
+  "commande.redrising.mine.cellule_existe": "Cell %s of the mine is already built",
+  "panneau.redrising.puits_droite": "Shaft →",
+  "panneau.redrising.puits_gauche": "← Shaft"
 }

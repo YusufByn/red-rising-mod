@@ -271,12 +271,11 @@ public class MineLykosTest implements FabricClientGameTest {
         LongSet interieur = new LongOpenHashSet();
         List<BoundingBox> boites = new ArrayList<>(plan.galeries());
         plan.puits().forEach(p -> boites.add(p.interieur()));
-        boites.add(plan.caverne().boite());
+        plan.cavernes().forEach(caverne -> boites.add(caverne.boite()));
         for (PlanDeMine.Salle salle : plan.salles()) {
             boites.add(salle.boite());
             boites.addAll(salle.ouvertures());
         }
-        plan.garages().forEach(garage -> boites.add(garage.niche()));
         for (BoundingBox boite : boites) {
             for (BlockPos pos : BlockPos.betweenClosed(boite.minX(), boite.minY(), boite.minZ(), boite.maxX(), boite.maxY(), boite.maxZ())) {
                 if (plan.interieur(pos.getX(), pos.getY(), pos.getZ())) {
@@ -386,14 +385,13 @@ public class MineLykosTest implements FabricClientGameTest {
         LongSet vide = new LongOpenHashSet();
         List<BoundingBox> boites = new ArrayList<>(plan.galeries());
         plan.puits().forEach(p -> boites.add(p.interieur()));
-        boites.add(plan.caverne().boite());
+        plan.cavernes().forEach(caverne -> boites.add(caverne.boite()));
         if (salles) {
             for (PlanDeMine.Salle salle : plan.salles()) {
                 boites.add(salle.boite());
                 boites.addAll(salle.ouvertures());
             }
-            plan.garages().forEach(garage -> boites.add(garage.niche()));
-        }
+            }
         for (BoundingBox boite : boites) {
             for (BlockPos pos : BlockPos.betweenClosed(boite.minX(), boite.minY(), boite.minZ(), boite.maxX(), boite.maxY(), boite.maxZ())) {
                 boolean dedans = salles ? plan.interieur(pos.getX(), pos.getY(), pos.getZ())
@@ -737,19 +735,46 @@ public class MineLykosTest implements FabricClientGameTest {
             throw new AssertionError(arret);
         }
 
-        // Un PNJ de Couleur longe l'axe devant une voie de garage
+        // Un wagonnet garé, poussé vers la courbe, ressort sur la voie (il ne reste plus coincé)
         PlanDeMine.Garage garage = monde.getServer().computeOnServer(server -> plan(server).garages().stream()
-                .filter(g -> voie.rails().stream().anyMatch(rail -> rail.pos().distManhattan(g.wagonnet()) <= 5)).findFirst()
-                .orElse(plan(server).garages().getFirst()));
+                .max(java.util.Comparator.comparingInt(g -> g.wagonnet().distManhattan(plan(server).centre().atY(g.wagonnet().getY())))).orElseThrow());
         PlanDeMine.Voie voieDuGarage = monde.getServer().computeOnServer(server -> plan(server).voies().stream()
-                .filter(v -> v.rails().stream().anyMatch(rail -> rail.pos().distManhattan(garage.wagonnet()) <= 5)).findFirst().orElseThrow());
+                .filter(v -> v.rails().stream().anyMatch(rail -> rail.pos().distManhattan(garage.wagonnet()) <= 8)).findFirst().orElseThrow());
+        BlockPos virage = garage.rails().get(1).pos();
+        // Le joueur à l'écart, de l'autre côté de la voie : il ne gêne pas le wagonnet
+        BlockPos cote = voieDuGarage.rails().getLast().pos().offset(2 * Integer.signum(voieDuGarage.rails().getLast().pos().getX() - virage.getX()), 0,
+                2 * Integer.signum(voieDuGarage.rails().getLast().pos().getZ() - virage.getZ())).relative(voieDuGarage.sens().getOpposite(), 4);
+        monde.getServer().runCommand("tp @a[limit=1] " + (cote.getX() + 0.5) + " " + cote.getY() + " " + (cote.getZ() + 0.5));
+        monde.getConnection().waitForChunksRender();
+        monde.getServer().waitFor(server -> server.overworld().areEntitiesLoaded(ChunkPos.pack(garage.wagonnet().getX() >> 4, garage.wagonnet().getZ() >> 4)), 400);
+        java.util.UUID pousse = monde.getServer().computeOnServer(server -> {
+            Minecart wagonnet = server.overworld().getEntitiesOfClass(Minecart.class, new AABB(garage.wagonnet()).inflate(8)).getFirst();
+            int dx = Integer.signum(virage.getX() - wagonnet.getBlockX());
+            int dz = Integer.signum(virage.getZ() - wagonnet.getBlockZ());
+            wagonnet.setDeltaMovement(dx * 0.4, 0, dz * 0.4);
+            return wagonnet.getUUID();
+        });
+        boolean[] surLaVoieDeRetour = {false};
+        int[] ticksPousse = {0};
+        monde.getServer().waitFor(server -> {
+            Minecart wagonnet = (Minecart) server.overworld().getEntity(pousse);
+            surLaVoieDeRetour[0] |= wagonnet != null && voieDuGarage.rails().stream().anyMatch(rail -> rail.pos().equals(wagonnet.blockPosition()));
+            return surLaVoieDeRetour[0] || ++ticksPousse[0] > 200;
+        }, 300);
+        if (!surLaVoieDeRetour[0]) {
+            throw new AssertionError("Un wagonnet garé, poussé vers la courbe, ne revient pas sur la voie (garage du wagonnet en " + garage.wagonnet().toShortString() + ")");
+        }
+        RedRising.LOGGER.info("[G7.2.5] Wagonnet garé poussé : de retour sur la voie en {} ticks", ticksPousse[0]);
+        monde.getServer().runOnServer(server -> Objects.requireNonNull(server.overworld().getEntity(pousse)).discard());
+
+        // Un PNJ de Couleur longe l'axe devant une voie de garage (à côté d'un wagonnet garé)
         Direction sens = voieDuGarage.sens();
         BlockPos surLaVoie = voieDuGarage.rails().stream().min(java.util.Comparator.comparingInt(rail -> rail.pos().distManhattan(garage.wagonnet()))).orElseThrow().pos();
-        // Le côté du garage : le passage à 2 blocs de la ligne du milieu, de ce côté
+        // Le passage entre la voie et le garage, à un bloc de la ligne du milieu, de ce côté
         int dx = Integer.signum(garage.wagonnet().getX() - surLaVoie.getX());
         int dz = Integer.signum(garage.wagonnet().getZ() - surLaVoie.getZ());
-        BlockPos depart = surLaVoie.offset(dx * 2, 0, dz * 2).relative(sens.getOpposite(), 8);
-        BlockPos arrivee = surLaVoie.offset(dx * 2, 0, dz * 2).relative(sens, 8);
+        BlockPos depart = surLaVoie.offset(dx, 0, dz).relative(sens.getOpposite(), 12);
+        BlockPos arrivee = surLaVoie.offset(dx, 0, dz);
         monde.getServer().runCommand("tp @a[limit=1] " + (arrivee.getX() + 0.5) + " " + arrivee.getY() + " " + (arrivee.getZ() + 0.5));
         java.util.UUID pnj = monde.getServer().computeOnServer(server -> Objects.requireNonNull(
                 io.github.yusufbyn.redrising.pnj.PnjCouleur.creer(server.overworld(), net.minecraft.world.phys.Vec3.atBottomCenterOf(depart), 0,
@@ -785,7 +810,7 @@ public class MineLykosTest implements FabricClientGameTest {
     }
 
     /**
-     * Toute l'emprise : les {@value PlanDeMine#WAGONNETS} wagonnets posés à la génération, les butoirs et les rails ; puis ce
+     * Toute l'emprise : les wagonnets posés à la génération, les butoirs et les rails ; puis ce
      * que coûtent les wagonnets et les chunks forcés (temps par tick moyen sur {@value #TICKS_MESURE} ticks, emprise forcée avec
      * puis sans les wagonnets, puis emprise libérée).
      */
@@ -811,7 +836,7 @@ public class MineLykosTest implements FabricClientGameTest {
             BlockPos centre = plan.centre();
             int r = PlanMars.EMPRISE_MINE * 16 + 16;
             List<Minecart> wagonnets = niveau.getEntitiesOfClass(Minecart.class, new AABB(centre).inflate(r, 400, r));
-            if (wagonnets.size() != PlanDeMine.WAGONNETS || plan.garages().size() != PlanDeMine.WAGONNETS) {
+            if (wagonnets.size() != plan.garages().size() || plan.garages().size() < 2 * plan.voies().size() - 2) {
                 liste.add(wagonnets.size() + " wagonnets dans le monde, " + plan.garages().size() + " voies de garage");
             }
             int rails = 0;
@@ -824,7 +849,7 @@ public class MineLykosTest implements FabricClientGameTest {
                 }
                 for (PlanDeMine.Rail rail : voie.rails()) {
                     BlockState etat = niveau.getBlockState(rail.pos());
-                    if (!etat.equals(PaletteMine.rail(rail.surX(), rail.propulsion()))) {
+                    if (!etat.equals(PaletteMine.rail(rail.forme(), rail.propulsion()))) {
                         liste.add("rail manquant en " + rail.pos().toShortString() + " (" + etat + ")");
                     }
                     rails++;
@@ -839,6 +864,7 @@ public class MineLykosTest implements FabricClientGameTest {
             throw new AssertionError("Voies : " + defauts);
         }
 
+        int nombre = monde.getServer().computeOnServer(server -> plan(server).garages().size());
         double avec = tickMoyen(monde, TICKS_MESURE);
         monde.getServer().runCommand("kill @e[type=minecart]");
         context.waitTicks(40);
@@ -854,9 +880,9 @@ public class MineLykosTest implements FabricClientGameTest {
         });
         context.waitTicks(200);
         double libre = tickMoyen(monde, TICKS_MESURE);
-        RedRising.LOGGER.info("[G7.2.3] Temps par tick ({} ticks) : emprise forcée (289 chunks) avec les {} wagonnets {} ms, sans eux {} ms, soit {} µs par wagonnet ; emprise libérée {} ms",
-                TICKS_MESURE, PlanDeMine.WAGONNETS, String.format(Locale.ROOT, "%.2f", avec), String.format(Locale.ROOT, "%.2f", sans),
-                String.format(Locale.ROOT, "%.1f", (avec - sans) * 1000 / PlanDeMine.WAGONNETS), String.format(Locale.ROOT, "%.2f", libre));
+        RedRising.LOGGER.info("[G7.2.3] Temps par tick ({} ticks) : emprise forcée (729 chunks) avec les {} wagonnets {} ms, sans eux {} ms, soit {} µs par wagonnet ; emprise libérée {} ms",
+                TICKS_MESURE, nombre, String.format(Locale.ROOT, "%.2f", avec), String.format(Locale.ROOT, "%.2f", sans),
+                String.format(Locale.ROOT, "%.1f", (avec - sans) * 1000 / nombre), String.format(Locale.ROOT, "%.2f", libre));
     }
 
     /** 🟡 Durée de chaque mesure du temps par tick. */
@@ -932,7 +958,7 @@ public class MineLykosTest implements FabricClientGameTest {
             int niveaux = 0;
             int colonie = 0;
             for (PlanDeMine.Panneau panneau : plan.panneaux()) {
-                if (panneau.texte() == PlanDeMine.Texte.PUITS_VERS) {
+                if (panneau.texte() == PlanDeMine.Texte.PUITS_VERS || panneau.texte() == PlanDeMine.Texte.PUITS_DROITE || panneau.texte() == PlanDeMine.Texte.PUITS_GAUCHE) {
                     continue;
                 }
                 if (!(niveau.getBlockEntity(panneau.pos()) instanceof net.minecraft.world.level.block.entity.SignBlockEntity bloc)
@@ -992,6 +1018,8 @@ public class MineLykosTest implements FabricClientGameTest {
                 switch (panneau.texte()) {
                     case NIVEAU -> niveaux++;
                     case COLONIE_DROITE, COLONIE_GAUCHE -> colonie++;
+                    case PUITS_DROITE, PUITS_GAUCHE -> {
+                    }
                     case PUITS_VERS -> puitsSecondaires++;
                 }
             }
@@ -999,13 +1027,13 @@ public class MineLykosTest implements FabricClientGameTest {
                 liste.add("panneaux : " + niveaux + " de niveau, " + colonie + " de la colonie, " + puitsSecondaires + " de puits secondaires");
             }
             // Bande de couleur, par niveau
-            int[] bandes = new int[4];
+            int[] bandes = new int[PlanDeMine.NIVEAUX_MAX];
             for (Map.Entry<BlockPos, Integer> bande : plan.bandes().entrySet()) {
                 if (niveau.getBlockState(bande.getKey()).equals(PaletteMine.BANDES.get(bande.getValue()))) {
                     bandes[bande.getValue()]++;
                 }
             }
-            for (int ligne = PlanDeMine.NIVEAUX_MAX - plan.sols().size(); ligne < 4; ligne++) {
+            for (int ligne = PlanDeMine.NIVEAUX_MAX - plan.sols().size(); ligne < PlanDeMine.NIVEAUX_MAX; ligne++) {
                 if (bandes[ligne] < 200) {
                     liste.add(bandes[ligne] + " blocs de bande à la ligne " + ligne);
                 }

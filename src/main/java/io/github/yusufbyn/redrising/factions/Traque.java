@@ -44,6 +44,8 @@ public record Traque(long duree, long horsDeVue, int tues) {
     public static final double APPARITION_MINE_MAX = 64;
     /** Parmi les points d'entrée qui conviennent, le chasseur prend un des 3 plus proches, au hasard. */
     public static final int CHOIX_ENTREES = 3;
+    /** Un point d'entrée pas encore chargé (le joueur vient d'arriver) : on l'attend au plus 5 secondes avant le repli. */
+    public static final int ATTENTE_POINTS = 100;
     /** Aucun chasseur sur le niveau du joueur pendant 20 secondes : ceux des autres niveaux le rejoignent (par les puits). */
     public static final int RECALAGE = 400;
     /** Arrestation : un chasseur à moins de 2,5 blocs pendant 3 secondes de suite. Ni fuite ni abandon. */

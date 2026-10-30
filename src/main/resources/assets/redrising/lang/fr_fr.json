@@ -258,5 +258,7 @@
   "commande.redrising.mine.tp": "Téléportation de %s au quai du niveau %s de la mine (%s)",
   "commande.redrising.mine.traque": "Traque de %s au niveau %s de la mine, depuis une galerie sombre en %s",
   "commande.redrising.mine.cellule": "Cellule %s construite au niveau %s de la mine : entrée en %s, vers %s",
-  "commande.redrising.mine.cellule_existe": "La cellule %s de la mine est déjà construite"
+  "commande.redrising.mine.cellule_existe": "La cellule %s de la mine est déjà construite",
+  "panneau.redrising.puits_droite": "Puits →",
+  "panneau.redrising.puits_gauche": "← Puits"
 }
