@@ -69,7 +69,7 @@ import java.util.concurrent.atomic.LongAccumulator;
  *     dans {@code data/redrising/worldgen/structure/mine.json}) : ni grotte de bruit ni aquifère dans le volume.</li>
  *     <li><b>Pose</b> : à la dernière étape de la génération ({@code top_layer_modification}), après les minerais, les
  *     géodes et les sources. Chaque morceau pose les blocs du plan qui touchent son chunk : coque de roche (seulement à
- *     la place du vide et des fluides), vide (galeries, puits, caverne, salles, niches de garage), étais, échelles, lanternes,
+ *     la place du vide et des fluides), vide (galeries, puits, cavernes, salles), étais, échelles, lanternes,
  *     voies et wagonnets, coffres, bouchon ; et avant tout, les
  *     filons de son chunk.</li>
  *     <li><b>Autour</b> : pas de carvers dans l'emprise, ni d'autre structure (sauf un fort), ni de décoration souterraine
@@ -530,7 +530,7 @@ public final class MineLykos extends Structure {
             BlockPos mur = bande.getKey();
             if (colonne.isInside(mur)) {
                 BlockState roche = monde.getBlockState(mur);
-                if (roche.is(BlockTags.STONE_ORE_REPLACEABLES) || roche.is(BlockTags.DEEPSLATE_ORE_REPLACEABLES)) {
+                if (PaletteMine.rocheNaturelle(roche)) {
                     monde.setBlock(mur, PaletteMine.BANDES.get(bande.getValue()), Block.UPDATE_CLIENTS);
                 }
             }
@@ -570,7 +570,7 @@ public final class MineLykos extends Structure {
     }
 
     /**
-     * La roche rouge (G7.2.5) : dans le volume de la mine, la pierre, la deepslate et les poches (gravier, terre) deviennent les
+     * La roche rouge (G7.2.5) : dans le volume de la mine, la roche naturelle ({@link PaletteMine#rocheNaturelle}) devient les
      * strates de la palette. Jusqu'à {@value #HAUT_DU_VOLUME} au plus et {@value #ROUGE_SOUS_LA_SURFACE} blocs sous le terrain de
      * chaque colonne : rien de rouge au fond d'une vallée, la surface reste terraformée. Le bord (en haut et autour de
      * l'emprise) est irrégulier : pas de mur droit pour qui creuse. Les minerais gardent leur fond gris jusqu'à G17.3.
@@ -594,7 +594,7 @@ public final class MineLykos extends Structure {
                 for (int y = monde.getMinY(); y <= haut; y++) {
                     pos.set(x, y, z);
                     BlockState etat = monde.getBlockState(pos);
-                    if (etat.is(BlockTags.BASE_STONE_OVERWORLD) || etat.is(Blocks.GRAVEL) || etat.is(Blocks.DIRT)) {
+                    if (PaletteMine.rocheNaturelle(etat)) {
                         monde.setBlock(pos, PaletteMine.strate(y, ondulation), Block.UPDATE_CLIENTS);
                     }
                 }
@@ -624,7 +624,8 @@ public final class MineLykos extends Structure {
 
     /** Le bloc de ce minerai qui remplace cette roche (variante pierre ou ardoise des profondeurs), ou {@code null} si ce n'est pas de la roche. */
     private static @Nullable BlockState minerai(FilonsDeMine.Minerai minerai, BlockState roche, int y) {
-        boolean poche = roche.is(Blocks.GRAVEL) || roche.is(Blocks.DIRT);
+        // Gravier, terre, soufre et cinabre (les grottes de soufre de 26.2) : pas de variante selon la roche, on suit la hauteur
+        boolean poche = PaletteMine.rocheNaturelle(roche) && !roche.is(BlockTags.DEEPSLATE_ORE_REPLACEABLES) && !roche.is(BlockTags.STONE_ORE_REPLACEABLES);
         if (!poche && !roche.is(BlockTags.DEEPSLATE_ORE_REPLACEABLES) && !roche.is(BlockTags.STONE_ORE_REPLACEABLES)) {
             return null;
         }

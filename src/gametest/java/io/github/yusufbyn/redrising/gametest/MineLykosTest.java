@@ -192,9 +192,23 @@ public class MineLykosTest implements FabricClientGameTest {
 
     // --- Toute l'emprise ---
 
+    /** 🟡 Plafonds (G7.2.5) : temps de tirage du plan, relief lu compris ; poids d'un monde avec l'emprise générée (729 chunks). */
+    private static final double TIRAGE_MAX_MS = 500;
+    static final double DISQUE_MAX_MO = 40;
+
+    /** Le poids des fichiers de région de ce monde (à lire une fois le monde fermé : tout est alors écrit). */
+    static long poidsDuMonde(java.nio.file.Path dossier) {
+        try (java.util.stream.Stream<java.nio.file.Path> fichiers = java.nio.file.Files.walk(dossier)) {
+            return fichiers.filter(f -> f.toString().endsWith(".mca")).mapToLong(f -> f.toFile().length()).sum();
+        } catch (java.io.IOException e) {
+            throw new java.io.UncheckedIOException(e);
+        }
+    }
+
     static void emprise(TestSingleplayerContext monde, long graine) {
         int rayon = PlanMars.EMPRISE_MINE;
         double tickMoyen = charger(monde, rayon);
+        double tirage = PlanDeMine.dernierTirageMs();
         String mesures = monde.getServer().computeOnServer(server -> MineLykos.mesures());
         RedRising.LOGGER.info("[G7.2.1] Emprise générée ({} chunks) : pose {} ; {} ms par tick en moyenne", (2 * rayon + 1) * (2 * rayon + 1), mesures,
                 String.format(Locale.ROOT, "%.1f", tickMoyen));
@@ -202,6 +216,10 @@ public class MineLykosTest implements FabricClientGameTest {
         double dedansUs = monde.getServer().computeOnServer(server -> MineLykos.DECORATIONS_DEDANS.moyenneUs());
         String dedans = monde.getServer().computeOnServer(server -> MineLykos.DECORATIONS_DEDANS.toString());
         charger(monde, 5, 40, false);
+        RedRising.LOGGER.info("[G7.2.5] Tirage du plan {} ms (plafond {})", String.format(Locale.ROOT, "%.0f", tirage), TIRAGE_MAX_MS);
+        if (tirage > TIRAGE_MAX_MS) {
+            throw new AssertionError("Coût : tirage du plan " + tirage + " ms");
+        }
         double horsUs = monde.getServer().computeOnServer(server -> MineLykos.DECORATIONS_HORS.moyenneUs());
         String hors = monde.getServer().computeOnServer(server -> MineLykos.DECORATIONS_HORS.toString() + " (pour 121 chunks)");
         RedRising.LOGGER.info("[G7.2.2] Règle des décorations : dans la mine {} ; hors de la mine {}", dedans, hors);
@@ -622,21 +640,30 @@ public class MineLykosTest implements FabricClientGameTest {
      * joueur, ni creeper ni slime dans la mine.
      */
     static void reseauEtMonstres(TestSingleplayerContext monde, ClientGameTestContext context) {
+        // Toute l'emprise chargée : un chunk déchargé se lit à une lumière de 0
+        charger(monde, PlanMars.EMPRISE_MINE);
         String sombres = monde.getServer().computeOnServer(server -> {
             ServerLevel niveau = server.overworld();
             List<String> liste = new ArrayList<>();
             List<BlockPos> sol = plan(server).reseauEclaire();
             for (BlockPos pos : sol) {
-                if (niveau.getBrightness(LightLayer.BLOCK, pos) < 1 && liste.size() < 10) {
+                // On s'oriente sans torche sur le réseau éclairé (G7.2.5)
+                if (niveau.getBrightness(LightLayer.BLOCK, pos) < LUMIERE_AXES_MIN && liste.size() < 10) {
                     liste.add(pos.toShortString());
                 }
             }
-            RedRising.LOGGER.info("[G7.2.3] Réseau éclairé : {} lanternes, {} blocs de sol, {} dans le noir", plan(server).lanternes().size(), sol.size(), liste.size());
+            int minimum = sol.stream().mapToInt(pos -> niveau.getBrightness(LightLayer.BLOCK, pos)).min().orElse(0);
+            long sombres2 = sol.stream().filter(pos -> niveau.getBrightness(LightLayer.BLOCK, pos) < LUMIERE_AXES_MIN).count();
+            RedRising.LOGGER.info("[G7.2.3] Réseau éclairé (centre {}) : {} lanternes, {} blocs de sol, lumière minimale {}, {} sous {}", plan(server).centre().toShortString(),
+                    plan(server).lanternes().size(), sol.size(), minimum, sombres2, LUMIERE_AXES_MIN);
             return String.join(" ; ", liste);
         });
         if (!sombres.isEmpty()) {
             throw new AssertionError("Sol du réseau éclairé dans le noir : " + sombres);
         }
+
+        libererEmprise(monde);
+        monstresEnCaverne(monde, context);
 
         // Une galerie sombre du niveau 2, loin du puits
         int[] lieu = monde.getServer().computeOnServer(server -> {
@@ -675,11 +702,12 @@ public class MineLykosTest implements FabricClientGameTest {
             }
             Map<String, Integer> sortes = new java.util.TreeMap<>();
             for (net.minecraft.world.entity.Mob mob : niveau.getEntitiesOfClass(net.minecraft.world.entity.Mob.class, new AABB(joueur.blockPosition()).inflate(160),
-                    mob -> mob instanceof net.minecraft.world.entity.monster.Enemy)) {
+                    mob -> mob instanceof net.minecraft.world.entity.monster.Enemy || mob.getType() == net.minecraft.world.entity.EntityTypes.SULFUR_CUBE)) {
                 BlockPos p = mob.blockPosition();
                 if (plan.interieur(p.getX(), p.getY(), p.getZ())) {
                     sortes.merge(mob.getType().toShortString(), 1, Integer::sum);
-                    if (mob.getType() == net.minecraft.world.entity.EntityTypes.CREEPER || mob.getType() == net.minecraft.world.entity.EntityTypes.SLIME) {
+                    if (mob.getType() == net.minecraft.world.entity.EntityTypes.CREEPER || mob.getType() == net.minecraft.world.entity.EntityTypes.SLIME
+                            || mob.getType() == net.minecraft.world.entity.EntityTypes.SULFUR_CUBE) {
                         liste.add(mob.getType().toShortString() + " dans la mine en " + p.toShortString());
                     }
                 }
@@ -905,10 +933,107 @@ public class MineLykosTest implements FabricClientGameTest {
                 String.format(Locale.ROOT, "%.1f", (avec - sans) * 1000 / nombre), String.format(Locale.ROOT, "%.2f", libre));
     }
 
+    private static void libererEmprise(TestSingleplayerContext monde) {
+        monde.getServer().runOnServer(server -> {
+            BlockPos centre = centre(server);
+            int r = PlanMars.EMPRISE_MINE;
+            for (int dx = -r; dx <= r; dx++) {
+                for (int dz = -r; dz <= r; dz++) {
+                    server.overworld().setChunkForced((centre.getX() >> 4) + dx, (centre.getZ() >> 4) + dz, false);
+                }
+            }
+        });
+    }
+
+    /** Des captures pour juger la forme à l'œil : un axe, une grande caverne, la colonie. */
+    static void captures(TestSingleplayerContext monde, ClientGameTestContext context) {
+        PlanDeMine plan = monde.getServer().computeOnServer(MineLykosTest::plan);
+        PlanDeMine.Voie voie = plan.voies().stream().max(java.util.Comparator.comparingInt(v -> v.rails().size())).orElseThrow();
+        BlockPos axe = voie.rails().get(voie.rails().size() / 2).pos();
+        PlanDeMine.Caverne grande = plan.cavernes().stream().skip(1).max(java.util.Comparator.comparingInt(c -> c.demiX() * c.demiZ())).orElseThrow();
+        PlanDeMine.Caverne colonie = plan.caverne();
+        Object[][] vues = {
+                {"mine-axe", axe, voie.sens().toYRot(), -5f},
+                {"mine-caverne", new BlockPos(grande.x() - grande.demiX() + 4, grande.sol() + 2, grande.z()), -90f, -10f},
+                {"mine-colonie", plan.colonie().apparition(), Direction.getApproximateNearest(colonie.x() - plan.colonie().apparition().getX(), 0, colonie.z() - plan.colonie().apparition().getZ()).toYRot(), -10f}};
+        monde.getServer().runCommand("gamemode spectator @a[limit=1]");
+        context.getInput().pressKey(options -> options.keyToggleGui);
+        // Le test tourne à 5 chunks de distance de vue : le fond d'une grande caverne ne s'afficherait pas
+        int distance = context.computeOnClient(client -> client.options.renderDistance().get());
+        context.runOnClient(client -> client.options.renderDistance().set(12));
+        // Les cavernes sont sombres : pour juger leur forme à l'œil, en vision de nuit (un Rouge l'aura en G7.6)
+        monde.getServer().runCommand("effect give @a[limit=1] minecraft:night_vision infinite 0 true");
+        for (Object[] vue : vues) {
+            BlockPos pos = (BlockPos) vue[1];
+            monde.getServer().runCommand("tp @a[limit=1] " + (pos.getX() + 0.5) + " " + (pos.getY() + 0.2) + " " + (pos.getZ() + 0.5) + " " + vue[2] + " " + vue[3]);
+            // Pas waitForChunksRender : à cette distance de vue, il ne rend pas la main dans le temps donné
+            context.waitTicks(240);
+            OutilsTest.garderCapture(context.takeScreenshot((String) vue[0]));
+        }
+        context.runOnClient(client -> client.options.renderDistance().set(distance));
+        monde.getServer().runCommand("effect clear @a[limit=1] minecraft:night_vision");
+        context.getInput().pressKey(options -> options.keyToggleGui);
+        monde.getServer().runCommand("gamemode creative @a[limit=1]");
+    }
+
+    /** 🟡 Lumière de bloc au sol du réseau éclairé : assez pour s'orienter sans torche. */
+    private static final int LUMIERE_AXES_MIN = 6;
+
     /** 🟡 Durée de chaque mesure du temps par tick. */
     static final int TICKS_MESURE = 600;
 
     /** Le temps par tick moyen sur ce nombre de ticks, relevé tick par tick (pas la moyenne glissante de Minecraft). */
+    /**
+     * Le plafond de monstres dans une grande caverne sombre (G7.2.5) : le joueur debout, sans armure, au milieu de la plus
+     * grande caverne du niveau du bas, pendant {@value #DUREE_MONSTRES} ticks. Combien de monstres l'attaquent à la fois, et
+     * les dégâts reçus (sa vie est remise à chaque tick, on compte ce qu'il perd).
+     */
+    static void monstresEnCaverne(TestSingleplayerContext monde, ClientGameTestContext context) {
+        BlockPos lieu = monde.getServer().computeOnServer(server -> {
+            PlanDeMine plan = plan(server);
+            PlanDeMine.Caverne caverne = plan.cavernes().stream().filter(c -> c.sol() == plan.sols().getLast())
+                    .max(java.util.Comparator.comparingInt(c -> c.demiX() * c.demiZ())).orElseThrow();
+            RedRising.LOGGER.info("[G7.2.5] Caverne de la mesure : {} × {}, {} de haut", 2 * caverne.demiX(), 2 * caverne.demiZ(), caverne.hauteur());
+            return new BlockPos(caverne.x(), caverne.sol(), caverne.z());
+        });
+        monde.getServer().runCommand("kill @e[type=!player,type=!minecart]");
+        monde.getServer().runCommand("tp @a[limit=1] " + (lieu.getX() + 0.5) + " " + lieu.getY() + " " + (lieu.getZ() + 0.5));
+        monde.getServer().runCommand("gamemode survival @a[limit=1]");
+        monde.getServer().runCommand("difficulty normal");
+        monde.getServer().runCommand("gamerule spawn_mobs true");
+        monde.getServer().runCommand("gamerule spawn_monsters true");
+        context.waitTicks(40);
+        double[] degats = {0};
+        int[] maxAttaquants = {0};
+        int[] maxProches = {0};
+        double[] degatsParMinute = new double[DUREE_MONSTRES / 1200 + 1];
+        int[] tick = {0};
+        monde.getServer().waitFor(server -> {
+            ServerPlayer joueur = OutilsTest.joueur(server);
+            float perdu = joueur.getMaxHealth() - joueur.getHealth();
+            degats[0] += perdu;
+            degatsParMinute[tick[0] / 1200] += perdu;
+            joueur.setHealth(joueur.getMaxHealth());
+            joueur.getFoodData().setFoodLevel(20);
+            if (tick[0] % 10 == 0) {
+                List<net.minecraft.world.entity.Mob> proches = server.overworld().getEntitiesOfClass(net.minecraft.world.entity.Mob.class, joueur.getBoundingBox().inflate(16),
+                        mob -> mob instanceof net.minecraft.world.entity.monster.Enemy);
+                maxProches[0] = Math.max(maxProches[0], proches.size());
+                maxAttaquants[0] = Math.max(maxAttaquants[0], (int) proches.stream().filter(mob -> mob.getTarget() == joueur).count());
+            }
+            return ++tick[0] >= DUREE_MONSTRES;
+        }, DUREE_MONSTRES + 100);
+        RedRising.LOGGER.info("[G7.2.5] Joueur immobile {} s dans une grande caverne sombre, plafond {} : jusqu'à {} monstres à 16 blocs, {} l'attaquent à la fois, {} points de dégâts ({} par minute) ; {} monstres dans la mine",
+                DUREE_MONSTRES / 20, MonstresDeLaMine.PLAFOND, maxProches[0], maxAttaquants[0], Math.round(degats[0]), java.util.Arrays.toString(degatsParMinute),
+                monde.getServer().computeOnServer(server -> MonstresDeLaMine.compter(server.overworld(), plan(server), OutilsTest.joueur(server))));
+        monde.getServer().runCommand("gamerule spawn_mobs false");
+        monde.getServer().runCommand("gamerule spawn_monsters false");
+        monde.getServer().runCommand("difficulty peaceful");
+        monde.getServer().runCommand("kill @e[type=!player,type=!minecart]");
+        monde.getServer().runCommand("gamemode creative @a[limit=1]");
+        context.waitTicks(20);
+    }
+
     static double tickMoyen(TestSingleplayerContext monde, int ticks) {
         double[] total = {0};
         int[] n = {0};
@@ -1272,7 +1397,7 @@ public class MineLykosTest implements FabricClientGameTest {
                     for (int y = niveau.getMinY() + 5; y <= limite; y++) {
                         BlockState etat = niveau.getBlockState(pos.set(x, y, z));
                         rouges += PaletteMine.estRocheRouge(etat) ? 1 : 0;
-                        gris += etat.is(BlockTags.BASE_STONE_OVERWORLD) ? 1 : 0;
+                        gris += PaletteMine.rocheNaturelle(etat) ? 1 : 0;
                     }
                     // Le bloc de surface n'est jamais une strate posée par la mine (les bandes colorées de surface ne viennent pas d'elle)
                     BlockState dessus = niveau.getBlockState(pos.set(x, surface - 1, z));

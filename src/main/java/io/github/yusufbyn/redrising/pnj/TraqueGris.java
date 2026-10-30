@@ -450,9 +450,8 @@ public final class TraqueGris {
     }
 
     private static @Nullable Villager apparaitreDansLaMine(ServerPlayer joueur, PlanDeMine plan, int niveau) {
-        BlockPos depart = plan.entreesDeRepli(joueur.blockPosition(), niveau).stream().map(PlanDeMine.Entree::pos)
-                .filter(joueur.level()::isPositionEntityTicking).findFirst().orElse(null);
-        Villager gris = depart == null ? null : PnjCouleur.creer(joueur.level(), Vec3.atBottomCenterOf(depart), 0, Couleur.GRIS);
+        // Créé sur le joueur, déplacé dans le même tick (aucun client ne le voit là), ou retiré s'il n'a pas de place
+        Villager gris = PnjCouleur.creer(joueur.level(), joueur.position(), 0, Couleur.GRIS);
         if (gris != null && !placerDansLaMine(gris, joueur, plan, niveau)) {
             gris.discard();
             return null;
@@ -465,7 +464,7 @@ public final class TraqueGris {
      * un des {@value Traque#CHOIX_ENTREES} plus proches qui conviennent, au hasard, à 24-64 blocs, sur le niveau du joueur,
      * sinon un voisin ({@link PlanDeMine#entreesPour}). Si aucun ne convient : le plus proche hors de vue, à n'importe quelle
      * distance, sur le niveau du joueur d'abord, puis un voisin ({@link PlanDeMine#entreesDeRepli}) ; si aucun n'est actif
-     * (petite distance de vue), un tunnel sombre actif de son niveau, à 24 blocs au moins. Si un point à 24-64 blocs n'est pas
+     * (petite distance de vue), une place au sol active d'une galerie ou d'une caverne de son niveau, à 24-64 blocs. Si un point à 24-64 blocs n'est pas
      * encore chargé, on réessaie aux passages suivants, {@value Traque#ATTENTE_POINTS} ticks au plus, avant le repli. Renvoie
      * {@code false} (le Gris n'a pas bougé) si rien ne convient.
      */
@@ -488,7 +487,6 @@ public final class TraqueGris {
             gris.setPos(avant);
             return false;
         }
-        ATTENTE_DES_POINTS.remove(joueur.getUUID());
         if (retenues.isEmpty()) {
             for (PlanDeMine.Entree entree : plan.entreesDeRepli(joueur.blockPosition(), niveau)) {
                 if (horsDeVue(gris, joueur, entree.pos())) {
@@ -497,13 +495,11 @@ public final class TraqueGris {
                 }
             }
         }
-        // Dernier recours : aucun point d'entrée n'est actif (petite distance de vue, joueur loin du réseau) : par un tunnel sombre actif
+        // Dernier recours : aucun point d'entrée n'est actif (petite distance de vue, joueur loin du réseau) : par une place au sol active
         if (retenues.isEmpty()) {
-            List<BlockPos> tunnels = new ArrayList<>(plan.galeriesSombres(niveau, 0));
-            tunnels.sort((a, b) -> Double.compare(a.distSqr(joueur.blockPosition()), b.distSqr(joueur.blockPosition())));
-            for (BlockPos tunnel : tunnels) {
-                if (tunnel.distSqr(joueur.blockPosition()) >= Traque.APPARITION_MINE_MIN * Traque.APPARITION_MINE_MIN && horsDeVue(gris, joueur, tunnel)) {
-                    retenues.add(tunnel);
+            for (BlockPos place : plan.placesAuSol(joueur.blockPosition(), niveau, Traque.APPARITION_MINE_MIN, Traque.APPARITION_MINE_MAX)) {
+                if (horsDeVue(gris, joueur, place)) {
+                    retenues.add(place);
                     break;
                 }
             }
@@ -512,6 +508,7 @@ public final class TraqueGris {
             gris.setPos(avant);
             return false;
         }
+        ATTENTE_DES_POINTS.remove(joueur.getUUID());
         BlockPos place = retenues.get(joueur.getRandom().nextInt(retenues.size()));
         gris.teleportTo(place.getX() + 0.5, place.getY(), place.getZ() + 0.5);
         return true;

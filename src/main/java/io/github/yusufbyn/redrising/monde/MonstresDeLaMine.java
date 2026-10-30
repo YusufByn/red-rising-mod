@@ -1,5 +1,6 @@
 package io.github.yusufbyn.redrising.monde;
 
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerEntityEvents;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EntityTypes;
@@ -22,7 +23,7 @@ import java.util.UUID;
  *
  * <ul>
  *     <li>Ni creeper (il ouvrirait les murs, et les cellules) ni slime (il apparaît sans condition de lumière dans un slime
- *     chunk sous y = 40).</li>
+ *     chunk sous y = 40), ni cube de soufre.</li>
  *     <li>🟡 {@value #PLAFOND} monstres par joueur, comptés dans le vide de la mine à {@value #RAYON} blocs ou moins de lui (le
  *     joueur le plus proche du monstre) : au-delà, l'apparition est refusée.</li>
  *     <li>Le réseau éclairé n'a besoin d'aucune règle : Minecraft ne fait apparaître un monstre qu'à une lumière de bloc de 0.</li>
@@ -46,10 +47,27 @@ public final class MonstresDeLaMine {
     private MonstresDeLaMine() {
     }
 
+    /**
+     * Appelé depuis {@link io.github.yusufbyn.redrising.RedRising#onInitialize()}. Les cubes de soufre viennent des grottes de
+     * soufre de 26.2, que la roche rouge remplace : ceux posés à la génération d'un chunk (ils ne passent pas par la règle des
+     * apparitions) sont retirés de la mine à leur chargement.
+     */
+    public static void init() {
+        ServerEntityEvents.ENTITY_LOAD.register((entite, monde) -> {
+            if (entite.getType() == EntityTypes.SULFUR_CUBE && MineLykos.centre() != null) {
+                PlanDeMine plan = MineLykos.planEnJeu(monde);
+                BlockPos pos = entite.blockPosition();
+                if (plan != null && plan.interieur(pos.getX(), pos.getY(), pos.getZ())) {
+                    entite.discard();
+                }
+            }
+        });
+    }
+
     /** L'apparition naturelle de ce monstre est-elle refusée ? */
     public static boolean refusee(ServerLevel niveau, Mob mob) {
         BlockPos centre = MineLykos.centre();
-        if (centre == null || !(mob instanceof Enemy) || !niveau.dimension().equals(Level.OVERWORLD)) {
+        if (centre == null || !(mob instanceof Enemy || mob.getType() == EntityTypes.SULFUR_CUBE) || !niveau.dimension().equals(Level.OVERWORLD)) {
             return false;
         }
         BlockPos pos = mob.blockPosition();
@@ -61,7 +79,7 @@ public final class MonstresDeLaMine {
         if (plan == null || !plan.interieur(pos.getX(), pos.getY(), pos.getZ())) {
             return false;
         }
-        if (mob.getType() == EntityTypes.CREEPER || mob.getType() == EntityTypes.SLIME) {
+        if (mob.getType() == EntityTypes.CREEPER || mob.getType() == EntityTypes.SLIME || mob.getType() == EntityTypes.SULFUR_CUBE) {
             return true;
         }
         Player joueur = niveau.getNearestPlayer(mob, RAYON);

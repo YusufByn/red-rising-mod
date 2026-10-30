@@ -1,6 +1,7 @@
 package io.github.yusufbyn.redrising.monde;
 
 import net.minecraft.core.Direction;
+import net.minecraft.tags.BlockTags;
 import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.ChestBlock;
@@ -74,6 +75,15 @@ public final class PaletteMine {
     /** La roche rouge à cette position. */
     public static BlockState rocheRouge(int x, int y, int z) {
         return strate(y, ondulation(x, z));
+    }
+
+    /**
+     * La roche naturelle que la roche rouge remplace : pierre, deepslate et leurs variantes, les poches de gravier et de terre,
+     * et le soufre et le cinabre des grottes de 26.2 (mesuré : des parois entières de jaune au milieu du rouge, sinon).
+     */
+    public static boolean rocheNaturelle(BlockState etat) {
+        return etat.is(BlockTags.BASE_STONE_OVERWORLD) || etat.is(Blocks.GRAVEL) || etat.is(Blocks.DIRT) || etat.is(Blocks.SULFUR)
+                || etat.is(Blocks.POTENT_SULFUR) || etat.is(Blocks.CINNABAR);
     }
 
     /** Ce bloc est-il de la roche rouge ? */

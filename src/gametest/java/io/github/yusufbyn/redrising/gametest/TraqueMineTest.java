@@ -37,7 +37,7 @@ import java.util.stream.Collectors;
  *     <li>Recalage : le joueur deux niveaux plus haut ; pas de Gris sur son niveau avant 20 secondes, puis les mêmes
  *     chasseurs le rejoignent, hors de vue (ni disparus, ni remplacés).</li>
  *     <li>Repli : le joueur dans une galerie sombre sans point d'entrée à 24-64 blocs ; les chasseurs apparaissent au plus
- *     proche hors de vue de son niveau, ou, si aucun n'est actif, par un tunnel sombre.</li>
+ *     proche hors de vue de son niveau, ou, si aucun n'est actif, par une place au sol de la mine.</li>
  *     <li>{@code /rr mine tp} (quai du puits) et {@code /rr mine cellule} (cellule de G5.4 sur un emplacement réservé).</li>
  * </ul>
  */
@@ -85,8 +85,8 @@ public class TraqueMineTest implements FabricClientGameTest {
 
     /**
      * Attend que le joueur ait ce nombre de chasseurs, et vérifie leur place dans le tick où on les voit (ils n'ont pas
-     * encore marché) : à un point d'entrée, hors de vue ; à 24-64 blocs sur son niveau ou un voisin si un point convient,
-     * sinon sur son niveau.
+     * encore marché) : hors de vue ; à un point d'entrée à 24-64 blocs sur son niveau ou un voisin, sinon le repli (un point de
+     * son niveau ou d'un voisin à n'importe quelle distance, ou une place au sol active de son niveau).
      */
     private static String attendreApparition(TestSingleplayerContext monde, PlanDeMine plan, int nombre) {
         String[] rapport = {null};
@@ -102,16 +102,18 @@ public class TraqueMineTest implements FabricClientGameTest {
             for (Villager chasseur : chasseurs(server)) {
                 PlanDeMine.Entree entree = plan.entreesDesGris().stream()
                         .min(Comparator.comparingDouble(e -> e.pos().distSqr(chasseur.blockPosition()))).orElseThrow();
-                double distance = Math.sqrt(entree.pos().distSqr(joueur.blockPosition()));
-                String ou = chasseur.blockPosition().toShortString() + " (niveau " + (entree.niveau() + 1) + ", " + Math.round(distance) + " blocs)";
-                if (entree.pos().distSqr(chasseur.blockPosition()) > 2) {
-                    throw new AssertionError("Chasseur hors d'un point d'entrée : " + ou);
-                }
+                double distance = Math.sqrt(chasseur.blockPosition().distSqr(joueur.blockPosition()));
+                String ou = chasseur.blockPosition().toShortString() + " (niveau " + (plan.niveauA(chasseur.blockPosition()) + 1) + ", " + Math.round(distance) + " blocs)";
                 if (Vue.voit(chasseur, joueur)) {
                     throw new AssertionError("Chasseur apparu sous les yeux du joueur : " + ou);
                 }
-                if (!plage.isEmpty() ? !plage.contains(entree.pos()) : entree.niveau() != niveau) {
-                    throw new AssertionError("Chasseur mal placé (" + (plage.isEmpty() ? "repli" : plage.size() + " points à 24-64 blocs") + ") : " + ou);
+                boolean aUnPoint = entree.pos().distSqr(chasseur.blockPosition()) <= 2;
+                boolean dansLaPlage = aUnPoint && plage.contains(entree.pos());
+                // Sinon, le repli : un point de son niveau ou d'un voisin, ou un tunnel sombre de son niveau si aucun point n'est actif
+                boolean repli = aUnPoint && Math.abs(entree.niveau() - niveau) <= 1;
+                boolean parUnTunnel = auSol(plan, chasseur.blockPosition(), niveau) && distance >= Traque.APPARITION_MINE_MIN;
+                if (!dansLaPlage && !repli && !parUnTunnel) {
+                    throw new AssertionError("Chasseur mal placé (" + plage.size() + " points à 24-64 blocs) : " + ou);
                 }
                 lignes.add(ou);
             }
@@ -133,6 +135,14 @@ public class TraqueMineTest implements FabricClientGameTest {
             BlockPos ici = joueur.blockPosition();
             BlockPos place = plan.galeriesSombres(haut, 0).stream()
                     .min(Comparator.comparingDouble(p -> Math.hypot(p.getX() - ici.getX(), p.getZ() - ici.getZ()))).orElseThrow();
+            // Leurs chunks restent actifs : à 5 chunks de distance de vue, ils seraient déchargés (et remplacés : ce n'est pas ce qu'on teste)
+            for (Villager chasseur : chasseurs(server)) {
+                for (int dx = -1; dx <= 1; dx++) {
+                    for (int dz = -1; dz <= 1; dz++) {
+                        server.overworld().setChunkForced((chasseur.getBlockX() >> 4) + dx, (chasseur.getBlockZ() >> 4) + dz, true);
+                    }
+                }
+            }
             joueur.teleportTo(place.getX() + 0.5, place.getY(), place.getZ() + 0.5);
             return uuids(server);
         });
@@ -170,7 +180,7 @@ public class TraqueMineTest implements FabricClientGameTest {
 
     /**
      * Une galerie sombre sans point d'entrée à 24-64 blocs. Les chasseurs y arrivent par le point d'entrée le plus proche s'il
-     * est actif, sinon (la distance de vue du test est petite) par un tunnel sombre actif de son niveau. Puis ce point forcé
+     * est actif, sinon (la distance de vue du test est petite) par une place au sol active de son niveau. Puis ce point forcé
      * actif : ils y apparaissent.
      */
     private static void repli(TestSingleplayerContext monde, ClientGameTestContext context, PlanDeMine plan) {
@@ -220,9 +230,9 @@ public class TraqueMineTest implements FabricClientGameTest {
                     throw new AssertionError("Repli : chasseur mal placé en " + ou);
                 }
                 boolean surUnPoint = plan.entreesDesGris().stream().anyMatch(e -> e.pos().distSqr(chasseur.blockPosition()) <= 2);
-                boolean surUnTunnel = plan.galeriesSombres(niveau, 0).stream().anyMatch(p -> p.distSqr(chasseur.blockPosition()) <= 2);
+                boolean surUnTunnel = auSol(plan, chasseur.blockPosition(), niveau);
                 if (aUnPoint ? !surUnPoint : !surUnPoint && !surUnTunnel) {
-                    throw new AssertionError("Repli : chasseur ni à un point d'entrée ni sur un tunnel sombre, en " + ou);
+                    throw new AssertionError("Repli : chasseur ni à un point d'entrée ni au sol de la mine, en " + ou);
                 }
                 lignes.add(ou);
             }
@@ -230,6 +240,11 @@ public class TraqueMineTest implements FabricClientGameTest {
             return true;
         }, ATTENTE_CHASSEURS);
         return rapport[0];
+    }
+
+    /** Au sol de la mine, sur ce niveau (à un bloc près : il vient d'apparaître et a pu faire un pas). */
+    private static boolean auSol(PlanDeMine plan, BlockPos pos, int niveau) {
+        return plan.niveauA(pos) == niveau && plan.interieur(pos.getX(), pos.getY(), pos.getZ());
     }
 
     // --- Commandes ---

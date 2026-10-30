@@ -314,7 +314,7 @@ public final class PlanDeMine {
     private final BoundingBox bouchon;
     private final int hautDesBoites;
     private final int hautBoitePuits;
-    /** Le terrain au-dessus de la mine, lu une fois tous les 16 blocs. */
+    /** Le terrain au-dessus de la mine, lu une fois tous les 32 blocs. */
     private final Relief relief;
 
     private PlanDeMine(Relief relief, BlockPos centre, List<Integer> sols, List<BoundingBox> galeries, List<Integer> niveauxGaleries, List<Puits> puits,
@@ -825,9 +825,12 @@ public final class PlanDeMine {
     private record Cle(long graine, BlockPos centre, int solAuPuits, int surfacePuits) {
     }
 
-    /** Le terrain sur l'emprise, lu une fois tous les 16 blocs (sans chunk généré). */
+    /**
+     * Le terrain sur l'emprise, lu une fois tous les 32 blocs, sans chunk généré. Mesuré : environ 1 ms par point lu, et le
+     * tirage bloque un fil de génération. Une boîte compte tous les points autour d'elle : on se trompe du côté prudent.
+     */
     private static final class Relief {
-        private static final int PAS = 16;
+        private static final int PAS = 32;
         private final int x0;
         private final int z0;
         private final int[][] hauteurs;
@@ -868,6 +871,7 @@ public final class PlanDeMine {
 
     /** Un plan est tiré une fois par mine, puis relu : la pose de chaque chunk le redemande (fils de génération). */
     private static final Map<Cle, PlanDeMine> CACHE = new ConcurrentHashMap<>();
+    private static volatile double dernierTirageMs;
 
     /**
      * Le plan de la mine centrée ici.
@@ -880,8 +884,17 @@ public final class PlanDeMine {
      *                     dernier bloc) : le bouchon est dessous, sous {@value #ROCHE_SUR_BOUCHON} blocs de roche d'origine
      */
     public static PlanDeMine de(long graine, BlockPos centre, IntBinaryOperator terrain, int solAuPuits, int surfacePuits) {
-        return CACHE.computeIfAbsent(new Cle(graine, centre.immutable(), solAuPuits, surfacePuits),
-                cle -> tirer(cle.graine(), cle.centre(), terrain, cle.solAuPuits(), cle.surfacePuits()));
+        return CACHE.computeIfAbsent(new Cle(graine, centre.immutable(), solAuPuits, surfacePuits), cle -> {
+            long debut = System.nanoTime();
+            PlanDeMine plan = tirer(cle.graine(), cle.centre(), terrain, cle.solAuPuits(), cle.surfacePuits());
+            dernierTirageMs = (System.nanoTime() - debut) / 1e6;
+            return plan;
+        });
+    }
+
+    /** Le temps du dernier tirage d'un plan, relief lu compris (tests du coût). */
+    public static double dernierTirageMs() {
+        return dernierTirageMs;
     }
 
     /** Le plan sur un terrain plat (tests). */
@@ -1694,6 +1707,26 @@ public final class PlanDeMine {
                 places.add(milieu);
             }
         }
+        return places;
+    }
+
+    /**
+     * Le dernier recours de la traque, quand aucun point d'entrée n'est actif (petite distance de vue) : des places au sol des
+     * galeries et des cavernes de ce niveau, tous les 6 blocs, entre {@code min} et {@code max} de cette position, de la plus
+     * proche à la plus loin.
+     */
+    public List<BlockPos> placesAuSol(BlockPos pos, int niveau, double min, double max) {
+        List<BlockPos> places = new ArrayList<>();
+        int sol = sols.get(niveau);
+        for (int x = Math.floorDiv(pos.getX() - (int) max, 6) * 6; x <= pos.getX() + max; x += 6) {
+            for (int z = Math.floorDiv(pos.getZ() - (int) max, 6) * 6; z <= pos.getZ() + max; z += 6) {
+                double distance = Math.hypot(x - pos.getX(), z - pos.getZ());
+                if (distance >= min && distance <= max && interieur(x, sol, z) && interieur(x, sol + 1, z) && !interieur(x, sol - 1, z)) {
+                    places.add(new BlockPos(x, sol, z));
+                }
+            }
+        }
+        places.sort((a, b) -> Double.compare(a.distSqr(pos), b.distSqr(pos)));
         return places;
     }
 
